@@ -229,11 +229,14 @@ namespace StiflingDark.Engine.Core
                 inv.CarriageRotationUsedThisRound = false;
             }
             State.Adversary.CarriageRotationUsedThisRound = false;
+            // Round modifiers expire here, before the new Event card gets a chance to set its own.
+            State.RoundModifiers.Clear();
             if (State.EventDeck.Count > 0)
             {
                 State.CurrentEvent = State.EventDeck[0];
                 State.EventDeck.RemoveAt(0);
-                Log("event", State.CurrentEvent!); // Effects are not auto-applied yet (card engine pending).
+                Log("event", State.CurrentEvent!);
+                EventsOnDrawn();
             }
         }
 
@@ -257,6 +260,7 @@ namespace StiflingDark.Engine.Core
             inv.MovementLocked = false;
             inv.WaterFloatUsedThisTurn = false;
             ApplyCarriageRotation(inv);
+            OnInvestigatorTurnStart(inv);
         }
 
         // ---------- Investigator actions ----------
@@ -297,6 +301,7 @@ namespace StiflingDark.Engine.Core
             {
                 throw new InvalidOperationException("Movement is over for this turn.");
             }
+            string from = inv.Space;
             var step = Graph.TryStep(FigureKind.Investigator, inv.Space, to, State.Overlay)
                 ?? throw new InvalidOperationException($"Cannot move {inv.Space} -> {to}.");
             if (step.Cost > inv.MpRemaining)
@@ -311,6 +316,7 @@ namespace StiflingDark.Engine.Core
             }
             ApplyCarriageRotation(inv);
             ApplyWaterFloat(inv);
+            OnInvestigatorMoveStep(inv, from, to);
         }
 
         /// <summary>Resolve a Window crossing: keep moving (face-down Wound) or stop for the turn (lose 1 Stamina if able).</summary>
@@ -525,6 +531,7 @@ namespace StiflingDark.Engine.Core
             State.Overlay.BrightSpaces.UnionWith(bright);
             Log("flashlight", $"{inv.DefId} lit {bright.Count} spaces");
             RevealOnBright(bright);
+            OnFlashlightPlaced(inv);
             EndTurn(inv);
         }
 
@@ -557,6 +564,7 @@ namespace StiflingDark.Engine.Core
             {
                 throw new InvalidOperationException("Cannot end the turn on another Investigator's space.");
             }
+            OnInvestigatorTurnEnd(inv);
             if (inv.Rested && inv.FinalAction != FinalActionKind.InvolvedAction)
             {
                 GainStamina(inv, 1);
@@ -667,6 +675,9 @@ namespace StiflingDark.Engine.Core
 
         private void EndRound()
         {
+            // Cards that expire or trigger "at the end of the round" run first, while this
+            // round's lights are still on and before the round counter moves.
+            OnRoundEnd();
             State.Overlay.BrightSpaces.Clear();
             State.Flashlights.Clear();
             // Zone lights burn out to Faltering after their round.
@@ -696,8 +707,13 @@ namespace StiflingDark.Engine.Core
 
         public void GainWound(InvestigatorState inv, bool faceUp)
         {
-            inv.Wounds.Add(new WoundInstance { CardId = Draw(State.WoundDeck, "wound"), FaceUp = faceUp });
+            var wound = new WoundInstance { CardId = Draw(State.WoundDeck, "wound"), FaceUp = faceUp };
+            inv.Wounds.Add(wound);
             Log("wound", $"{inv.DefId} now has {inv.Wounds.Count} wound(s)");
+            if (faceUp)
+            {
+                ResolveWoundFaceUp(inv, wound);
+            }
             if (inv.Wounds.Count >= Db.Config.WoundsToDie)
             {
                 inv.Dead = true;

@@ -24,8 +24,9 @@ namespace StiflingDark.Engine.Core
     ///   Counters["frayed-ropes-uses"]      Times Frayed Ropes has been used (max 3).
     ///   Counters["frayed-ropes-pending"]   1 while the Adversary owes a forced Shadow placement.
     ///   ShadowTokens["main"]               The Butcher's own Shadow token (existing convention).
-    ///   ShadowTokens["evil-eye-1"/"-2"]    Evil Eye token spaces (cleared by the blanket wipe in BeginButcherTurn).
     ///   ShadowTokens["frayed"]             The face-down Shadow token forced by Frayed Ropes.
+    ///   BoardTokens["evil-eye-1"/"-2"]     Evil Eye token spaces (shared card-token API, see
+    ///                                      Game.Effects.cs; removed in BeginButcherTurn).
     ///   Objective.Tokens["grave-actual"/"grave-decoy"]  The Grave banish tokens (explicitly requested in the brief).
     /// </summary>
     public sealed partial class Game
@@ -39,6 +40,8 @@ namespace StiflingDark.Engine.Core
             // adversaries.json startOfTurn: "Remove all Noise AND Shadow tokens from the board."
             adv.NoiseTokens.Clear();
             adv.ShadowTokens.Clear();
+            // Evil Eye: "Remove all Evil Eye tokens at the beginning of your next turn."
+            RemoveBoardTokens("evil-eye");
 
             // Spine Chill tokens last until the end of the NEXT round: a token given in round R
             // expires once a turn begins in round R+2 (the Investigator was not re-Stalked the
@@ -71,12 +74,17 @@ namespace StiflingDark.Engine.Core
                 adv.Counters["vengeful-darkness-supply"] = supply;
             }
 
-            // Decay: "Using a Flashlight costs 1 extra Charge next round." PlaceFlashlight lives
-            // in Game.cs (an existing file this task may not touch), so there is no hook to charge
-            // the surcharge from here; recorded as a todo instead of silently dropped.
+            // Decay: "Using a Flashlight costs 1 extra Charge next round." The surcharge itself
+            // now has a home and an enforcement point (RoundModifiers[FlashlightChargeSurchargeKey],
+            // spent in Game.EventEffects.EventsOnFlashlightPlaced), but round modifiers are wiped
+            // when the round begins and this hook only runs at the *end* of the affected round —
+            // after every Flashlight for it has already been placed. Writing the modifier needs an
+            // adversary sub-hook at round start, which Game.EffectDispatch.cs does not offer.
             if (adv.Counters.TryGetValue("decay-active-round", out int decayRound) && decayRound == State.Round)
             {
-                Log("todo", "Decay: Flashlight placements this round should cost 1 extra Charge (no hook exposed outside Game.cs)");
+                Log("todo", "Decay: this round's Flashlight placements should have cost 1 extra Charge; " +
+                            "BeginButcherTurn runs after them, so the Butcher needs a round-start sub-hook to set " +
+                            "RoundModifiers[\"" + FlashlightChargeSurchargeKey + "\"] in time.");
             }
         }
 
@@ -212,7 +220,10 @@ namespace StiflingDark.Engine.Core
         {
             SpendStalk(1);
             State.Adversary.Counters["decay-active-round"] = State.Round + 1;
-            Log("todo", "Decay: next round's Flashlight placements should cost 1 extra Charge (no hook exposed outside Game.cs)");
+            Log("todo", $"Decay: next round's Flashlight placements should cost 1 extra Charge. " +
+                        $"RoundModifiers[\"{FlashlightChargeSurchargeKey}\"] is the enforcement channel, but it is " +
+                        "cleared when the round begins, so it cannot be written from here — the Butcher needs a " +
+                        "round-start sub-hook.");
         }
 
         /// <summary>
@@ -257,10 +268,11 @@ namespace StiflingDark.Engine.Core
         /// <summary>
         /// "Place 2 Evil Eye tokens on any General spaces. If an Investigator Moves onto or ends
         /// their turn on one, gain 1 Stalk and remove it. Remove all Evil Eye tokens at the
-        /// beginning of your next turn." The trigger-on-move/end-turn half needs a hook inside
-        /// Game.cs's MoveStep/EndTurn (an existing file this task may not touch), so only the
-        /// placement/expiry half is wired here; ShadowTokens.Clear() in BeginButcherTurn already
-        /// removes these next turn, matching the card's own cleanup timing.
+        /// beginning of your next turn." The tokens live in the shared card-token map
+        /// (Game.PlaceBoardToken) and BeginButcherTurn removes them, matching the card's own
+        /// cleanup timing. The trigger-on-move/end-turn half still needs an adversary-owned
+        /// sub-hook off OnInvestigatorMoveStep/OnInvestigatorTurnEnd (Game.EffectDispatch.cs
+        /// only dispatches those to the Wound/Condition/Item/Event decks).
         /// </summary>
         private void ApplyEvilEye(List<string> targets)
         {
@@ -275,25 +287,48 @@ namespace StiflingDark.Engine.Core
                     throw new InvalidOperationException($"'{space}' is not a General space.");
                 }
             }
-            State.Adversary.ShadowTokens["evil-eye-1"] = targets[0];
-            State.Adversary.ShadowTokens["evil-eye-2"] = targets[1];
+            PlaceBoardToken("evil-eye-1", targets[0]);
+            PlaceBoardToken("evil-eye-2", targets[1]);
             Log("adversary", $"Evil Eye tokens placed on {targets[0]} and {targets[1]}");
-            Log("todo", "Evil Eye's move-onto/end-turn trigger is not wired into MoveStep/EndTurn (no hook exposed outside Game.cs)");
+            Log("todo", "Evil Eye's \"Moves onto or ends their turn on one\" trigger needs an adversary sub-hook " +
+                        "off OnInvestigatorMoveStep/OnInvestigatorTurnEnd; the tokens themselves are on the board " +
+                        "under BoardTokens[\"evil-eye-*\"].");
         }
 
-        /// <summary>"Give 2 different Investigators 1 of Choking Fear/Darkness each."</summary>
+        /// <summary>
+        /// "Give 2 different Investigators 1 of Choking Fear/Darkness each." Each target is
+        /// either a bare Investigator def id (Choking Fear, the default) or
+        /// "&lt;investigatorId&gt;:choking-fear" / "&lt;investigatorId&gt;:darkness" to name the
+        /// Condition the Adversary picks for that Investigator.
+        /// </summary>
         private void ApplySinisterGaze(List<string> targets)
         {
-            if (targets == null || targets.Count != 2 || targets[0] == targets[1])
+            if (targets == null || targets.Count != 2)
+            {
+                throw new InvalidOperationException("Sinister Gaze needs 2 different Investigators.");
+            }
+            var picks = targets.Select(SplitSinisterGazeTarget).ToList();
+            if (picks[0].Inv.DefId == picks[1].Inv.DefId)
             {
                 throw new InvalidOperationException("Sinister Gaze needs 2 different Investigators.");
             }
             SpendStalk(1);
-            foreach (string id in targets)
+            foreach (var (inv, conditionId) in picks)
             {
-                Investigator(id); // validates the id exists
-                Log("todo", $"{id} should gain a Choking Fear or Darkness Condition (condition tracking not implemented)");
+                GrantConditionWithSubstitution(inv, conditionId);
             }
+        }
+
+        private (InvestigatorState Inv, string ConditionId) SplitSinisterGazeTarget(string target)
+        {
+            int sep = target.IndexOf(':');
+            string invId = sep < 0 ? target : target.Substring(0, sep);
+            string conditionId = sep < 0 ? "choking-fear" : target.Substring(sep + 1);
+            if (conditionId != "choking-fear" && conditionId != "darkness")
+            {
+                throw new InvalidOperationException("Sinister Gaze gives Choking Fear or Darkness.");
+            }
+            return (Investigator(invId), conditionId);
         }
 
         /// <summary>
@@ -309,9 +344,9 @@ namespace StiflingDark.Engine.Core
 
         // ---------- Attacks ----------
 
-        /// <summary>"When adjacent, give Bleeding. If already Bleeding, give a face-up Wound instead."
-        /// Condition tracking does not exist in the engine yet, so the "already Bleeding" branch
-        /// (and therefore ever dealing a Wound) cannot be detected here — logged as a todo.</summary>
+        /// <summary>"When adjacent, give Bleeding. If already Bleeding, give a face-up Wound
+        /// instead." That is exactly Bleeding's printed duplicate rider, so the shared
+        /// GrantConditionWithSubstitution handles both branches.</summary>
         private void ApplyEviscerate(List<string> targets)
         {
             if (targets == null || targets.Count != 1)
@@ -322,7 +357,7 @@ namespace StiflingDark.Engine.Core
             RequireAdjacentToButcher(target);
             SpendStalk(1);
             State.Adversary.ShadowTokens["main"] = State.Adversary.Space;
-            Log("todo", $"{target.DefId} should gain the Bleeding Condition (or a face-up Wound if already Bleeding) — condition tracking not implemented");
+            GrantConditionWithSubstitution(target, "bleeding");
         }
 
         /// <summary>
@@ -356,7 +391,7 @@ namespace StiflingDark.Engine.Core
                 {
                     State.Adversary.MpRemaining += 2;
                     DealAttackWounds(inv.DefId, 1, faceUp: false);
-                    Log("todo", $"{inv.DefId} should gain the Mauled Condition — condition tracking not implemented");
+                    GrantConditionWithSubstitution(inv, "mauled");
                 }
                 else
                 {
@@ -379,7 +414,7 @@ namespace StiflingDark.Engine.Core
             GainWound(target, faceUp: true);
             Draw(State.WoundDeck, "wound"); // drawn only to be discarded
             Draw(State.WoundDeck, "wound"); // drawn only to be discarded
-            Log("todo", $"{target.DefId} should gain the Mauled Condition — condition tracking not implemented");
+            GrantConditionWithSubstitution(target, "mauled");
         }
 
         // ---------- Grave banish ----------

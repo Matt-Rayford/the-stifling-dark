@@ -42,6 +42,8 @@ namespace StiflingDark.Engine.Core
         public int MajorAbilityTokens { get; set; } = 1;
         public List<WoundInstance> Wounds { get; set; } = new List<WoundInstance>();
         public List<string> Items { get; set; } = new List<string>();
+        /// <summary>Condition card ids held by this Investigator; at most 1 copy of each (see Game.GainCondition).</summary>
+        public List<string> Conditions { get; set; } = new List<string>();
         /// <summary>Zones whose Evidence token this Investigator is carrying.</summary>
         public List<string> EvidenceCarried { get; set; } = new List<string>();
         /// <summary>Map tokens gained as rewards, awaiting placement: "open-window", "dim", "secret-passage".</summary>
@@ -204,6 +206,20 @@ namespace StiflingDark.Engine.Core
         public List<string> GeneralItemDeck { get; set; } = new List<string>();
         public List<string> CursedItemDeck { get; set; } = new List<string>();
         public List<string> WoundDeck { get; set; } = new List<string>();
+
+        /// <summary>
+        /// Card-placed board tokens: token instance id -> space id. Instance ids are
+        /// prefixed by kind so a card can find its own tokens ("hellfire-1", "mucus-2",
+        /// "desecrated-ground-1", "hatchling-1", "evil-eye-2"). See Game.PlaceBoardToken.
+        /// </summary>
+        public Dictionary<string, string> BoardTokens { get; set; } = new Dictionary<string, string>();
+
+        /// <summary>
+        /// Modifiers that live for exactly one round (Event cards, "next round" ability
+        /// riders). Cleared at the start of every round before the Event card is drawn,
+        /// so a value written while resolving round N's Event is gone in round N+1.
+        /// </summary>
+        public Dictionary<string, int> RoundModifiers { get; set; } = new Dictionary<string, int>();
 
         /// <summary>Set while an Investigator must resolve a Window crossing before doing anything else.</summary>
         public bool PendingWindowChoice { get; set; }

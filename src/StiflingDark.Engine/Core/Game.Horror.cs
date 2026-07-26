@@ -9,12 +9,14 @@ namespace StiflingDark.Engine.Core
     /// Attack/Ability cards from game-data/cards/adversary-cards.json, and the Eggs
     /// Banish objective from game-data/cards/escape-cards.json / player-aids.json.
     ///
-    /// Several card effects reference systems the engine does not have yet (Conditions,
-    /// Hatchling AI, movement-blocking Mucus/Tunnel tokens, per-turn Charge hooks). Those
-    /// are logged as "todo" events rather than silently dropped; see the accompanying
-    /// report for the full list. Everything the current state model *can* represent
-    /// (movement, Wounds, Shadow token, Revealed, distance/adjacency validation) is
-    /// applied for real.
+    /// Several card effects reference systems the engine does not have yet (Hatchling AI,
+    /// movement-blocking Mucus/Tunnel tokens, per-turn Charge hooks, an adversary-owned
+    /// move/turn-end sub-hook). Those are logged as "todo" events rather than silently
+    /// dropped; see the accompanying report for the full list. Everything the current state
+    /// model *can* represent (movement, Wounds, Conditions via
+    /// <see cref="GrantConditionWithSubstitution"/>, card tokens via
+    /// <see cref="PlaceBoardToken"/>, Shadow token, Revealed, distance/adjacency validation)
+    /// is applied for real.
     /// </summary>
     public sealed partial class Game
     {
@@ -44,10 +46,10 @@ namespace StiflingDark.Engine.Core
             switch (cardId)
             {
                 case "bufotoxin":
-                    ApplyMauledAttack(targets, "Bufotoxin");
+                    ApplyMauledAttack(targets, "bufotoxin");
                     break;
                 case "neurotoxin":
-                    ApplyMauledAttack(targets, "Neurotoxin");
+                    ApplyMauledAttack(targets, "neurotoxin");
                     break;
                 case "gastric-secretions":
                     ApplyGastricSecretions(targets);
@@ -223,13 +225,15 @@ namespace StiflingDark.Engine.Core
             }
         }
 
-        private void ApplyMauledAttack(List<string> targets, string conditionName)
+        /// <summary>The Bufotoxin/Neurotoxin Attack cards: 1 face-down Wound plus their own
+        /// named Condition and Mauled. <paramref name="conditionId"/> is the conditions.json id.</summary>
+        private void ApplyMauledAttack(List<string> targets, string conditionId)
         {
             ApplyAttack(targets, inv =>
             {
                 DealAttackWounds(inv.DefId, 1, faceUp: false);
-                Log("todo", $"condition {conditionName} not yet applied to {inv.DefId}");
-                Log("todo", $"condition Mauled not yet applied to {inv.DefId}");
+                GrantConditionWithSubstitution(inv, conditionId);
+                GrantConditionWithSubstitution(inv, "mauled");
             });
         }
 
@@ -242,7 +246,7 @@ namespace StiflingDark.Engine.Core
             ApplyAttack(invTargets, inv =>
             {
                 DealAttackWounds(inv.DefId, 1, faceUp: false);
-                Log("todo", $"condition Mauled not yet applied to {inv.DefId}");
+                GrantConditionWithSubstitution(inv, "mauled");
             });
 
             int hatchlingCount = State.Objective.Tokens.Keys.Count(k => k.StartsWith("hatchling-"));
@@ -288,7 +292,7 @@ namespace StiflingDark.Engine.Core
             {
                 var inv = Investigator(targets[0]);
                 string zone = targets[1];
-                Log("todo", $"condition Darkness not yet applied to {inv.DefId}");
+                GrantConditionWithSubstitution(inv, "darkness");
                 State.Objective.Tokens["occluded-lights"] = zone;
                 Log("adversary", $"Occluded Lights token placed on zone {zone}");
                 Log("todo", "Occluded Lights' Zone block (no Bright/Dim token next round) is not enforced " +
@@ -296,8 +300,8 @@ namespace StiflingDark.Engine.Core
             }
             else if (targets.Count == 2)
             {
-                Log("todo", $"condition Darkness not yet applied to {Investigator(targets[0]).DefId}");
-                Log("todo", $"condition Darkness not yet applied to {Investigator(targets[1]).DefId}");
+                GrantConditionWithSubstitution(Investigator(targets[0]), "darkness");
+                GrantConditionWithSubstitution(Investigator(targets[1]), "darkness");
             }
             else
             {
@@ -323,7 +327,7 @@ namespace StiflingDark.Engine.Core
             var affected = State.Investigators.Where(i => !i.Dead && !i.Escaped && dist.ContainsKey(i.Space)).ToList();
             foreach (var inv in affected)
             {
-                Log("todo", $"condition Gear Jam not yet applied to {inv.DefId}");
+                GrantConditionWithSubstitution(inv, "gear-jam");
             }
             Log("adversary", $"Projectile Adhesive: {affected.Count} investigator(s) within range");
         }
@@ -353,12 +357,13 @@ namespace StiflingDark.Engine.Core
                 }
             }
             adv.ShadowTokens["main"] = adv.Space;
-            State.Objective.Tokens["mucus-1"] = targets[0];
-            State.Objective.Tokens["mucus-2"] = targets[1];
+            PlaceBoardToken("mucus-1", targets[0]);
+            PlaceBoardToken("mucus-2", targets[1]);
             adv.Counters["mucus-placed-round"] = State.Round;
             Log("adversary", $"placed 2 Mucus tokens: {targets[0]}, {targets[1]}");
-            Log("todo", "Mucus tokens do not block Movement and are not auto-removed at the end of next round " +
-                         "(needs hooks in MapGraph movement and EndRound in Game.cs).");
+            Log("todo", "Mucus tokens are on the board under BoardTokens[\"mucus-*\"], but they do not block " +
+                         "Movement (MapGraph.TryStep takes no card tokens) and are not auto-removed at the end of " +
+                         "next round (OnRoundEnd has no adversary sub-hook).");
         }
 
         private void ApplyTunnel(List<string> targets)
@@ -368,11 +373,11 @@ namespace StiflingDark.Engine.Core
                 throw new InvalidOperationException("Tunnel needs exactly 1 space.");
             }
             string space = targets[0];
-            Graph.Space(space); // validates the space exists
+            PlaceBoardToken("tunnel-1", space); // validates the space exists
             State.Adversary.Counters["tunnel-placed-round"] = State.Round;
-            State.Objective.Tokens["tunnel"] = space;
             Log("adversary", $"Tunnel token placed at {space}");
-            Log("todo", "Tunnel's Move-on-or-adjacent-to-the-token bypass next turn is not enforced (needs an " +
+            Log("todo", "the Tunnel token is on the board under BoardTokens[\"tunnel-1\"], but its " +
+                         "Move-on-or-adjacent-to-the-token bypass next turn is not enforced (needs an " +
                          "AdversaryMoveStep hook), nor is the token's end-of-next-round removal.");
         }
 

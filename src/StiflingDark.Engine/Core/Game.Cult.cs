@@ -521,7 +521,7 @@ namespace StiflingDark.Engine.Core
                     {
                         var inv = AdjacentCardTarget(targets, 0, cardId);
                         DealAttackWounds(inv.DefId, 1, faceUp: true);
-                        Log("todo", "flagellate: the Bleeding Condition needs Condition state on InvestigatorState");
+                        GrantConditionWithSubstitution(inv, "bleeding");
                     }
                     break;
                 }
@@ -541,10 +541,14 @@ namespace StiflingDark.Engine.Core
                     var inv = CardTarget(targets, 0, cardId);
                     var wound = inv.Wounds.FirstOrDefault(w => w.FaceUp)
                         ?? throw new InvalidOperationException($"{inv.DefId} has no face-up Wound to flip.");
-                    ValidateTokenSpaces(targets.Skip(1).ToList(), 3, "hellfire");
+                    var hellfire = targets.Skip(1).ToList();
+                    ValidateTokenSpaces(hellfire, 3, "hellfire");
                     wound.FaceUp = false;
+                    PlaceCardTokens("hellfire", hellfire);
                     UpdateMorgonnodShadow();
-                    Log("todo", "cleft-hoof: Hellfire tokens (and the face-up Wound for Moving onto one) need board-token state");
+                    Log("todo", "cleft-hoof: the Hellfire tokens are on the board under BoardTokens[\"hellfire-*\"], " +
+                                "but the face-up Wound for Moving onto one needs an adversary sub-hook off " +
+                                "OnInvestigatorMoveStep (Game.EffectDispatch.cs dispatches it to the card decks only).");
                     break;
                 }
                 case "dried-tongue":
@@ -560,10 +564,9 @@ namespace StiflingDark.Engine.Core
                     var inv = AdjacentCardTarget(targets, 0, cardId);
                     var wound = inv.Wounds.FirstOrDefault(w => !w.FaceUp)
                         ?? throw new InvalidOperationException($"{inv.DefId} has no face-down Wound to flip.");
-                    wound.FaceUp = true;
                     UpdateMorgonnodShadow();
                     Log("adversary", $"Razor-like Talons flipped a Wound face-up on {inv.DefId}");
-                    Log("todo", "flipping a Wound face-up should immediately resolve that Wound card's text (Wound card engine pending)");
+                    FlipWoundFaceUp(inv, wound); // resolves the Wound card's own text
                     break;
                 }
                 case "severed-ear":
@@ -575,7 +578,13 @@ namespace StiflingDark.Engine.Core
                     }
                     var inv = AdjacentCardTarget(targets, 0, cardId);
                     UpdateMorgonnodShadow();
-                    Log("todo", $"severed-ear: the Possessed Condition for {inv.DefId} needs Condition state (only 1 Investigator Possessed at a time, and the card may be moved)");
+                    // There is only 1 Possessed card, so granting it to a new Investigator
+                    // moves it off whoever held it.
+                    foreach (var other in State.Investigators.Where(i => i != inv && HasCondition(i, "possessed")).ToList())
+                    {
+                        DiscardCondition(other, "possessed");
+                    }
+                    GrantConditionWithSubstitution(inv, "possessed");
                     break;
                 }
                 case "shriveled-hand":
@@ -596,14 +605,19 @@ namespace StiflingDark.Engine.Core
                 {
                     // "Place up to 3 Desecrated Ground tokens within 5 spaces on General spaces."
                     ValidateTokenSpaces(targets, 3, "desecrated-ground");
+                    PlaceCardTokens("desecrated-ground", targets);
                     UpdateMorgonnodShadow();
-                    Log("todo", "twisted-horn: Desecrated Ground tokens (and the end-of-turn D6 for Moving onto one) need board-token state");
+                    Log("todo", "twisted-horn: the Desecrated Ground tokens are on the board under " +
+                                "BoardTokens[\"desecrated-ground-*\"], but the end-of-turn D6 for Moving onto one " +
+                                "needs an adversary sub-hook off OnInvestigatorMoveStep/OnInvestigatorTurnEnd.");
                     break;
                 }
                 case "unblinking-eye":
                 {
                     // "Investigators who do not place a Flashlight next round gain Paranoid."
-                    Log("todo", "unblinking-eye: the Paranoid Condition and the next-round Flashlight check need Condition state");
+                    Log("todo", "unblinking-eye: Paranoid can be granted now, but deciding who to grant it to means " +
+                                "reading State.Flashlights at the end of next round, and OnRoundEnd has no adversary " +
+                                "sub-hook (Game.EffectDispatch.cs dispatches it to Items/Events only).");
                     break;
                 }
                 default:
@@ -646,6 +660,21 @@ namespace StiflingDark.Engine.Core
                 }
             }
             Log("adversary", $"{tokenName} tokens: {string.Join(", ", spaces)}");
+        }
+
+        /// <summary>Put a fresh batch of Hellfire / Desecrated Ground tokens on the board,
+        /// numbering the instance ids from 1 after clearing any earlier batch of that kind.</summary>
+        private void PlaceCardTokens(string tokenKind, List<string> spaces)
+        {
+            if (spaces.Count == 0)
+            {
+                return; // "up to N": placing none leaves any earlier batch where it is
+            }
+            RemoveBoardTokens(tokenKind + "-");
+            for (int i = 0; i < spaces.Count; i++)
+            {
+                PlaceBoardToken($"{tokenKind}-{i + 1}", spaces[i]);
+            }
         }
 
         private bool DriedTongueActive() => CultCounter("dried-tongue-round") == State.Round;
@@ -744,8 +773,7 @@ namespace StiflingDark.Engine.Core
             Log("objective", $"{inv.DefId} used the Ritual Knife: supply {supplies}/{BanishSupplySlots}");
             if (toFlip != null)
             {
-                toFlip.FaceUp = true;
-                Log("todo", "the flipped Wound's text should resolve immediately (Wound card engine pending)");
+                FlipWoundFaceUp(inv, toFlip); // resolves the Wound card's own text
             }
             else
             {

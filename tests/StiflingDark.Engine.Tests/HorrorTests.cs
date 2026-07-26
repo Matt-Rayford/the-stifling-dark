@@ -198,8 +198,11 @@ namespace StiflingDark.Engine.Tests
             Assert.Single(Inv(game, "aira").Wounds);
             Assert.Single(Inv(game, "lucy-belle").Wounds);
             Assert.False(Inv(game, "aira").Wounds[0].FaceUp);
-            Assert.Contains(game.State.Log, e => e.Type == "todo" && e.Detail.Contains("Bufotoxin"));
-            Assert.Contains(game.State.Log, e => e.Type == "todo" && e.Detail.Contains("Mauled"));
+            foreach (string id in new List<string> { "aira", "lucy-belle" })
+            {
+                Assert.True(game.HasCondition(Inv(game, id), "bufotoxin"));
+                Assert.True(game.HasCondition(Inv(game, id), "mauled"));
+            }
         }
 
         [Fact]
