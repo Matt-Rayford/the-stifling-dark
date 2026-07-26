@@ -1,0 +1,153 @@
+{
+  "format": 1,
+  "restore": {
+    "/Users/matt/Documents/GitHub/the-stifling-dark/tests/StiflingDark.Engine.Tests/StiflingDark.Engine.Tests.csproj": {}
+  },
+  "projects": {
+    "/Users/matt/Documents/GitHub/the-stifling-dark/src/StiflingDark.Engine/StiflingDark.Engine.csproj": {
+      "version": "1.0.0",
+      "restore": {
+        "projectUniqueName": "/Users/matt/Documents/GitHub/the-stifling-dark/src/StiflingDark.Engine/StiflingDark.Engine.csproj",
+        "projectName": "StiflingDark.Engine",
+        "projectPath": "/Users/matt/Documents/GitHub/the-stifling-dark/src/StiflingDark.Engine/StiflingDark.Engine.csproj",
+        "packagesPath": "/Users/matt/.nuget/packages/",
+        "outputPath": "/Users/matt/Documents/GitHub/the-stifling-dark/src/StiflingDark.Engine/obj/",
+        "projectStyle": "PackageReference",
+        "configFilePaths": [
+          "/Users/matt/.nuget/NuGet/NuGet.Config"
+        ],
+        "originalTargetFrameworks": [
+          "netstandard2.1"
+        ],
+        "sources": {
+          "https://api.nuget.org/v3/index.json": {}
+        },
+        "frameworks": {
+          "netstandard2.1": {
+            "targetAlias": "netstandard2.1",
+            "projectReferences": {}
+          }
+        },
+        "warningProperties": {
+          "allWarningsAsErrors": true,
+          "warnAsError": [
+            "NU1605"
+          ]
+        },
+        "restoreAuditProperties": {
+          "enableAudit": "true",
+          "auditLevel": "low",
+          "auditMode": "direct"
+        }
+      },
+      "frameworks": {
+        "netstandard2.1": {
+          "targetAlias": "netstandard2.1",
+          "dependencies": {
+            "Newtonsoft.Json": {
+              "target": "Package",
+              "version": "[13.0.4, )"
+            }
+          },
+          "imports": [
+            "net461",
+            "net462",
+            "net47",
+            "net471",
+            "net472",
+            "net48",
+            "net481"
+          ],
+          "assetTargetFallback": true,
+          "warn": true,
+          "frameworkReferences": {
+            "NETStandard.Library": {
+              "privateAssets": "all"
+            }
+          },
+          "runtimeIdentifierGraphPath": "/Users/matt/.dotnet/sdk/8.0.422/RuntimeIdentifierGraph.json"
+        }
+      }
+    },
+    "/Users/matt/Documents/GitHub/the-stifling-dark/tests/StiflingDark.Engine.Tests/StiflingDark.Engine.Tests.csproj": {
+      "version": "1.0.0",
+      "restore": {
+        "projectUniqueName": "/Users/matt/Documents/GitHub/the-stifling-dark/tests/StiflingDark.Engine.Tests/StiflingDark.Engine.Tests.csproj",
+        "projectName": "StiflingDark.Engine.Tests",
+        "projectPath": "/Users/matt/Documents/GitHub/the-stifling-dark/tests/StiflingDark.Engine.Tests/StiflingDark.Engine.Tests.csproj",
+        "packagesPath": "/Users/matt/.nuget/packages/",
+        "outputPath": "/Users/matt/Documents/GitHub/the-stifling-dark/tests/StiflingDark.Engine.Tests/obj/",
+        "projectStyle": "PackageReference",
+        "configFilePaths": [
+          "/Users/matt/.nuget/NuGet/NuGet.Config"
+        ],
+        "originalTargetFrameworks": [
+          "net8.0"
+        ],
+        "sources": {
+          "https://api.nuget.org/v3/index.json": {}
+        },
+        "frameworks": {
+          "net8.0": {
+            "targetAlias": "net8.0",
+            "projectReferences": {
+              "/Users/matt/Documents/GitHub/the-stifling-dark/src/StiflingDark.Engine/StiflingDark.Engine.csproj": {
+                "projectPath": "/Users/matt/Documents/GitHub/the-stifling-dark/src/StiflingDark.Engine/StiflingDark.Engine.csproj"
+              }
+            }
+          }
+        },
+        "warningProperties": {
+          "warnAsError": [
+            "NU1605"
+          ]
+        },
+        "restoreAuditProperties": {
+          "enableAudit": "true",
+          "auditLevel": "low",
+          "auditMode": "direct"
+        }
+      },
+      "frameworks": {
+        "net8.0": {
+          "targetAlias": "net8.0",
+          "dependencies": {
+            "Microsoft.NET.Test.Sdk": {
+              "target": "Package",
+              "version": "[17.8.0, )"
+            },
+            "coverlet.collector": {
+              "target": "Package",
+              "version": "[6.0.0, )"
+            },
+            "xunit": {
+              "target": "Package",
+              "version": "[2.5.3, )"
+            },
+            "xunit.runner.visualstudio": {
+              "target": "Package",
+              "version": "[2.5.3, )"
+            }
+          },
+          "imports": [
+            "net461",
+            "net462",
+            "net47",
+            "net471",
+            "net472",
+            "net48",
+            "net481"
+          ],
+          "assetTargetFallback": true,
+          "warn": true,
+          "frameworkReferences": {
+            "Microsoft.NETCore.App": {
+              "privateAssets": "all"
+            }
+          },
+          "runtimeIdentifierGraphPath": "/Users/matt/.dotnet/sdk/8.0.422/PortableRuntimeIdentifierGraph.json"
+        }
+      }
+    }
+  }
+}

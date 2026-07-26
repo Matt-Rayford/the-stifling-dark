@@ -1,145 +1,228 @@
 {
-  "_status": "Derived from Core Rules booklet. Fields with null or _todo need data not present in the rulebook (boards, cards, dice).",
-  "players": {
-    "min": 2,
-    "max": 5,
-    "_note": "Exactly 1 player is the Adversary; the rest are Investigator players."
-  },
-  "investigators": {
-    "min": 2,
-    "max": 4,
-    "_note": "In a 2-player game the lone Investigator player must control 2 Investigators. Any Investigator player may control 2+ Investigators to simulate a higher count; each controlled Investigator takes its own full turn."
-  },
-  "rounds": {
-    "total": 17,
-    "trackerSpaces": 18,
-    "_note": "Round tracker has 17 numbered spaces plus an 18th skull space (game end). Confirmed from round-tracker.pdf."
-  },
-  "dice": {
-    "sprintDieFaces": [2, 2, 3, 3, 3, 4],
-    "plainD6": true,
-    "_note": "Sprint die faces show footprint (MP) icons; confirmed from sprint-die-template.pdf. A plain D6 is also included for objective/booth rolls."
-  },
-  "carryLimits": {
-    "items": null,
-    "evidence": null,
-    "_note": "No limit on Items or Evidence carried (confirmed by designer)."
-  },
-  "byInvestigatorCount": {
-    "2": { "evidenceRequiredForObjective": 2, "startingPointsOfInterest": 2, "medicalItemsOnBoard": 0 },
-    "3": { "evidenceRequiredForObjective": 3, "startingPointsOfInterest": 1, "medicalItemsOnBoard": 1 },
-    "4": { "evidenceRequiredForObjective": 5, "startingPointsOfInterest": 0, "medicalItemsOnBoard": 2 },
-    "_notes": [
-      "The Adversary always places all 5 Evidence tokens (1 per Zone, on a General space, Hidden on the mini-map). Investigators may collect and turn in more than required for extra rewards.",
-      "Starting POIs: Investigators choose which POI(s), the Adversary removes those tokens from the mini-map, and the Investigators receive the corresponding General/Cursed Items, distributed as they see fit.",
-      "3-Investigator game: Investigators choose which Medical Item space gets the token. 4-Investigator game: the 2 tokens must go on different Medical Item spaces."
-    ]
-  },
-  "pointsOfInterest": {
-    "cursedFrontTokens": 1,
-    "_note": "During Adversary setup, 1 POI token per Point of Interest on the map, placed Hidden on a General space within 2 spaces of that POI. Exactly one token has a Cursed Item (purple) front; the rest have General Item (gray) fronts. POI count per map comes from board data."
-  },
-  "investigatorTurn": {
-    "actions": ["Move", "SprintOrRest", "Interact", "UseAbility"],
-    "sprintOrRestLimit": "oncePerTurn",
-    "sprint": { "cost": { "stamina": 1 }, "effect": "Roll the Sprint die; gain 1 MP this turn per MP icon rolled." },
-    "rest": { "effect": "Gain 1 Stamina at the end of your turn, unless you take an Involved Action.", "_note": "Resting still grants the Stamina if the turn ends with Charge or Place Flashlight, or with no Final Action at all." },
-    "finalActions": {
-      "chooseOne": ["Charge", "PlaceFlashlight", "InvolvedAction"],
-      "optional": true,
-      "charge": { "effect": "Gain 1 Charge (max 3)." },
-      "placeFlashlight": { "cost": { "charge": 1 }, "effect": "Place the Small Flashlight flush with your figure's base, swiveled in any direction. Remains until end of round." },
-      "involvedAction": { "effect": "Perform an Involved Action. Immediately ends your turn; you never gain Stamina this turn, even if you Rested." }
-    },
-    "interact": {
-      "onCurrentSpace": [
-        "Pick up a Point of Interest or Item token (draw the matching card(s): gray POI front = draw 2 General Item cards; purple POI front = draw 1 Cursed Item card; Objective/Medical icons = draw the matching card)",
-        "Pick up an Evidence token",
-        "Activate an Interaction space (e.g. Light Switch)"
-      ],
-      "adjacentToCurrentSpace": [
-        "Lock or Open Doors",
-        "Trade any Items or Evidence with adjacent Investigators"
-      ],
-      "anywhere": ["Use any number of Item cards"],
-      "_note": "Interacts are free, unlimited per turn, in any order, and may be interleaved with Movement."
-    },
-    "movement": {
-      "mpSource": "Printed on each Investigator's player board (e.g. Lucy Belle: 4 MP).",
-      "mayInterruptAndResume": true,
-      "mayMoveThroughOccupiedSpaces": true,
-      "mayEndOnOtherInvestigator": false,
-      "mayShareSpaceWithAdversary": true,
-      "_note": "The Adversary does not notify Investigators if an Investigator ends on or moves through the Adversary's (hidden) space."
-    }
-  },
-  "lightLevels": {
-    "bright": { "investigatorMoveCost": 1, "adversaryMoveCost": 1, "effect": "Hidden tokens and the Adversary on Bright spaces are immediately Revealed. Revealed tokens never return to the mini-map. No adverse effect on Investigators." },
-    "dim": { "investigatorMoveCost": 1, "adversaryMoveCost": 1, "representation": "solid-circle spaces" },
-    "dark": { "investigatorMoveCost": 2, "adversaryMoveCost": 1, "representation": "dashed-circle spaces" },
-    "precedence": ["FlashlightOrBrightToken", "DimTokenOrDimSpace", "DarkTokenOrDarkSpace"],
-    "_note": "Flashlights, Bright tokens, and Dim tokens always override printed light states. 'If you shine a light in a dark place, it lights up.'"
-  },
-  "flashlight": {
-    "placement": "Flush with figure base, swivel any direction",
-    "lineOfSightRequirements": [
-      "The space must be entirely covered by the Flashlight template",
-      "At least 1 uninterrupted white line of the Flashlight must connect from the Investigator to the space (Obstacles block lines)"
-    ],
-    "ownSpaceHasLineOfSight": true,
-    "partialCoverageByTwoFlashlightsCounts": false,
-    "removedAtEndOfRound": true,
-    "removedIfOwnerForcedToMove": true
-  },
-  "stamina": {
-    "typicalStartingSpace": 5,
-    "trackHasWoundIcons": true,
-    "_note": "If your Stamina token moves ONTO a face-down Wound icon on the track, immediately gain a face-down Wound card. Track layouts are per-Investigator (board data)."
-  },
-  "charge": { "typicalStartingSpace": 3, "max": 3 },
-  "wounds": {
-    "deathAt": 4,
-    "faceDown": "Do not look at or apply the text of a face-down Wound.",
-    "faceUp": "Immediately resolve its text.",
-    "placement": "Leftmost empty Wound slot; 4th slot is the Skull.",
-    "removal": "Wounds typically cannot be removed. Medical Items can flip a face-up Wound face-down (undo its negative effects first).",
-    "deathIsImmediate": true
-  },
-  "conditions": {
-    "maxCopiesOfSameCondition": 1,
-    "_note": "Gaining a duplicate Condition has no effect unless otherwise stated. Conditions are only discarded when specific text says so."
-  },
-  "spirits": {
-    "trigger": "When an Investigator dies and the Adversary's win condition is not yet satisfied, that player may choose an unused Spirit card (max 1 per Spirit; keeps Items, Evidence, standee; returns player board and its tokens).",
-    "movement": { "mp": 4, "sprintDie": true, "note": "No Stamina; may Sprint every round (once per round). Movement unaffected by Dark spaces, Map Hazards, Water, Mirror Maze spaces, etc." },
-    "majorAbilityTokens": 2,
-    "abilities": { "total": 4, "majors": 2, "minors": 2, "maxUsedPerTurn": 2, "majorCost": "spend 1 Major Ability token", "minorCost": "free" },
-    "trading": "May GIVE Items/Evidence to Investigators; may never take or receive."
-  },
-  "rules": {
-    "goldenRule": "If 2 or more rules conflict, the card always takes precedence over the rulebook.",
-    "rounding": "Always round down.",
-    "spendVsGain": "If you cannot spend what is required you cannot perform the Action; gains are capped by track ends.",
-    "withinXSpaces": "Count from your space (0) outward along Movement Lines. Light levels and Map Hazards (e.g. Windows) do not affect the count; movement-blocking Obstacles and Door tokens do.",
-    "tableTalk": "Investigators may talk freely but the Adversary hears everything. Item cards are hidden from the Adversary until played; Adversary cards are hidden from Investigators until played.",
-    "adversaryRevealedAttackRestriction": "An Adversary cannot Attack if they BEGIN their own turn Revealed (e.g. they were Revealed during the Investigators' turns). Likewise, if they become Revealed during their own turn, they cannot Attack for the remainder of that turn. (Designer-confirmed.)",
-    "endOfRound": "Remove all Flashlights, advance the round tracker 1 space, draw a new Event card.",
-    "unusableCards": "If a card is impossible to use when GAINED, draw a new one. If it becomes impossible later, no redraw.",
-    "unescapedInvestigatorsAtGameEnd": "Any Investigators still on the board after the final round count as being killed."
-  },
-  "roundStructure": [
-    "Draw 1 Event card (discard the previous one); resolve its text. Non-Major Event effects last only for the current round.",
-    "Investigator turns, in any order the Investigators choose. Each Investigator completes their full turn before the next begins.",
-    "Adversary turn: remove all Noise tokens from the main board, then perform any number of Actions.",
-    "End of Round: remove all Flashlights, advance the round tracker 1 space."
+ "_status": "Derived from Core Rules booklet. Fields with null or _todo need data not present in the rulebook (boards, cards, dice).",
+ "players": {
+  "min": 2,
+  "max": 5,
+  "_note": "Exactly 1 player is the Adversary; the rest are Investigator players."
+ },
+ "investigators": {
+  "min": 2,
+  "max": 4,
+  "_note": "In a 2-player game the lone Investigator player must control 2 Investigators. Any Investigator player may control 2+ Investigators to simulate a higher count; each controlled Investigator takes its own full turn."
+ },
+ "rounds": {
+  "total": 17,
+  "trackerSpaces": 18,
+  "_note": "Round tracker has 17 numbered spaces plus an 18th skull space (game end). Confirmed from round-tracker.pdf."
+ },
+ "dice": {
+  "sprintDieFaces": [
+   2,
+   2,
+   3,
+   3,
+   3,
+   4
   ],
-  "eventDeck": {
-    "assembly": "1 random Major Event face-down on the bottom (unseen; other Majors returned to the box), all Moderate Events shuffled on top of it, all Minor Events shuffled on top of those.",
-    "_note": "Skipped entirely for recommended first game."
+  "plainD6": true,
+  "_note": "Sprint die faces show footprint (MP) icons; confirmed from sprint-die-template.pdf. A plain D6 is also included for objective/booth rolls."
+ },
+ "carryLimits": {
+  "items": null,
+  "evidence": null,
+  "_note": "No limit on Items or Evidence carried (confirmed by designer)."
+ },
+ "byInvestigatorCount": {
+  "2": {
+   "evidenceRequiredForObjective": 2,
+   "startingPointsOfInterest": 2,
+   "medicalItemsOnBoard": 0
   },
-  "noiseTokens": {
-    "placedBy": "Adversary (Items, Abilities, moving through Windows, etc.)",
-    "meaning": "Marks where the Adversary WAS (moved through). Removed at the start of the Adversary's turn.",
-    "onePerWindowPerRound": true
+  "3": {
+   "evidenceRequiredForObjective": 3,
+   "startingPointsOfInterest": 1,
+   "medicalItemsOnBoard": 1
+  },
+  "4": {
+   "evidenceRequiredForObjective": 5,
+   "startingPointsOfInterest": 0,
+   "medicalItemsOnBoard": 2
+  },
+  "_notes": [
+   "The Adversary always places all 5 Evidence tokens (1 per Zone, on a General space, Hidden on the mini-map). Investigators may collect and turn in more than required for extra rewards.",
+   "Starting POIs: Investigators choose which POI(s), the Adversary removes those tokens from the mini-map, and the Investigators receive the corresponding General/Cursed Items, distributed as they see fit.",
+   "3-Investigator game: Investigators choose which Medical Item space gets the token. 4-Investigator game: the 2 tokens must go on different Medical Item spaces."
+  ]
+ },
+ "pointsOfInterest": {
+  "cursedFrontTokens": 1,
+  "_note": "During Adversary setup, 1 POI token per Point of Interest on the map, placed Hidden on a General space within 2 spaces of that POI. Exactly one token has a Cursed Item (purple) front; the rest have General Item (gray) fronts. POI count per map comes from board data."
+ },
+ "investigatorTurn": {
+  "actions": [
+   "Move",
+   "SprintOrRest",
+   "Interact",
+   "UseAbility"
+  ],
+  "sprintOrRestLimit": "oncePerTurn",
+  "sprint": {
+   "cost": {
+    "stamina": 1
+   },
+   "effect": "Roll the Sprint die; gain 1 MP this turn per MP icon rolled."
+  },
+  "rest": {
+   "effect": "Gain 1 Stamina at the end of your turn, unless you take an Involved Action.",
+   "_note": "Resting still grants the Stamina if the turn ends with Charge or Place Flashlight, or with no Final Action at all."
+  },
+  "finalActions": {
+   "chooseOne": [
+    "Charge",
+    "PlaceFlashlight",
+    "InvolvedAction"
+   ],
+   "optional": true,
+   "charge": {
+    "effect": "Gain 1 Charge (max 3)."
+   },
+   "placeFlashlight": {
+    "cost": {
+     "charge": 1
+    },
+    "effect": "Place the Small Flashlight flush with your figure's base, swiveled in any direction. Remains until end of round."
+   },
+   "involvedAction": {
+    "effect": "Perform an Involved Action. Immediately ends your turn; you never gain Stamina this turn, even if you Rested."
+   }
+  },
+  "interact": {
+   "onCurrentSpace": [
+    "Pick up a Point of Interest or Item token (draw the matching card(s): gray POI front = draw 2 General Item cards; purple POI front = draw 1 Cursed Item card; Objective/Medical icons = draw the matching card)",
+    "Pick up an Evidence token",
+    "Activate an Interaction space (e.g. Light Switch)"
+   ],
+   "adjacentToCurrentSpace": [
+    "Lock or Open Doors",
+    "Trade any Items or Evidence with adjacent Investigators"
+   ],
+   "anywhere": [
+    "Use any number of Item cards"
+   ],
+   "_note": "Interacts are free, unlimited per turn, in any order, and may be interleaved with Movement."
+  },
+  "movement": {
+   "mpSource": "Printed on each Investigator's player board (e.g. Lucy Belle: 4 MP).",
+   "mayInterruptAndResume": true,
+   "mayMoveThroughOccupiedSpaces": true,
+   "mayEndOnOtherInvestigator": false,
+   "mayShareSpaceWithAdversary": true,
+   "_note": "The Adversary does not notify Investigators if an Investigator ends on or moves through the Adversary's (hidden) space."
   }
+ },
+ "lightLevels": {
+  "bright": {
+   "investigatorMoveCost": 1,
+   "adversaryMoveCost": 1,
+   "effect": "Hidden tokens and the Adversary on Bright spaces are immediately Revealed. Revealed tokens never return to the mini-map. No adverse effect on Investigators."
+  },
+  "dim": {
+   "investigatorMoveCost": 1,
+   "adversaryMoveCost": 1,
+   "representation": "solid-circle spaces"
+  },
+  "dark": {
+   "investigatorMoveCost": 2,
+   "adversaryMoveCost": 1,
+   "representation": "dashed-circle spaces"
+  },
+  "precedence": [
+   "FlashlightOrBrightToken",
+   "DimTokenOrDimSpace",
+   "DarkTokenOrDarkSpace"
+  ],
+  "_note": "Flashlights, Bright tokens, and Dim tokens always override printed light states. 'If you shine a light in a dark place, it lights up.'"
+ },
+ "flashlight": {
+  "placement": "Flush with figure base, swivel any direction",
+  "lineOfSightRequirements": [
+   "The space must be entirely covered by the Flashlight template",
+   "At least 1 uninterrupted white line of the Flashlight must connect from the Investigator to the space (Obstacles block lines)"
+  ],
+  "ownSpaceHasLineOfSight": true,
+  "partialCoverageByTwoFlashlightsCounts": false,
+  "removedAtEndOfRound": true,
+  "removedIfOwnerForcedToMove": true
+ },
+ "stamina": {
+  "typicalStartingSpace": 5,
+  "trackHasWoundIcons": true,
+  "_note": "If your Stamina token moves ONTO a face-down Wound icon on the track, immediately gain a face-down Wound card. Track layouts are per-Investigator (board data)."
+ },
+ "charge": {
+  "typicalStartingSpace": 3,
+  "max": 3
+ },
+ "wounds": {
+  "deathAt": 4,
+  "faceDown": "Do not look at or apply the text of a face-down Wound.",
+  "faceUp": "Immediately resolve its text.",
+  "placement": "Leftmost empty Wound slot; 4th slot is the Skull.",
+  "removal": "Wounds typically cannot be removed. Medical Items can flip a face-up Wound face-down (undo its negative effects first).",
+  "deathIsImmediate": true
+ },
+ "conditions": {
+  "maxCopiesOfSameCondition": 1,
+  "_note": "Gaining a duplicate Condition has no effect unless otherwise stated. Conditions are only discarded when specific text says so."
+ },
+ "spirits": {
+  "trigger": "When an Investigator dies and the Adversary's win condition is not yet satisfied, that player may choose an unused Spirit card (max 1 per Spirit; keeps Items, Evidence, standee; returns player board and its tokens).",
+  "movement": {
+   "mp": 4,
+   "sprintDie": true,
+   "note": "No Stamina; may Sprint every round (once per round). Movement unaffected by Dark spaces, Map Hazards, Water, Mirror Maze spaces, etc."
+  },
+  "majorAbilityTokens": 2,
+  "abilities": {
+   "total": 4,
+   "majors": 2,
+   "minors": 2,
+   "maxUsedPerTurn": 2,
+   "majorCost": "spend 1 Major Ability token",
+   "minorCost": "free"
+  },
+  "trading": "May GIVE Items/Evidence to Investigators; may never take or receive."
+ },
+ "rules": {
+  "goldenRule": "If 2 or more rules conflict, the card always takes precedence over the rulebook.",
+  "rounding": "Always round down.",
+  "spendVsGain": "If you cannot spend what is required you cannot perform the Action; gains are capped by track ends.",
+  "withinXSpaces": "Count from your space (0) outward along Movement Lines. Light levels and Map Hazards (e.g. Windows) do not affect the count; movement-blocking Obstacles and Door tokens do.",
+  "tableTalk": "Investigators may talk freely but the Adversary hears everything. Item cards are hidden from the Adversary until played; Adversary cards are hidden from Investigators until played.",
+  "adversaryRevealedAttackRestriction": "An Adversary cannot Attack if they BEGIN their own turn Revealed (e.g. they were Revealed during the Investigators' turns). Likewise, if they become Revealed during their own turn, they cannot Attack for the remainder of that turn. (Designer-confirmed.)",
+  "endOfRound": "Remove all Flashlights, advance the round tracker 1 space, draw a new Event card.",
+  "unusableCards": "If a card is impossible to use when GAINED, draw a new one. If it becomes impossible later, no redraw.",
+  "unescapedInvestigatorsAtGameEnd": "Any Investigators still on the board after the final round count as being killed."
+ },
+ "roundStructure": [
+  "Draw 1 Event card (discard the previous one); resolve its text. Non-Major Event effects last only for the current round.",
+  "Investigator turns, in any order the Investigators choose. Each Investigator completes their full turn before the next begins.",
+  "Adversary turn: remove all Noise tokens from the main board, then perform any number of Actions.",
+  "End of Round: remove all Flashlights, advance the round tracker 1 space."
+ ],
+ "eventDeck": {
+  "assembly": "1 random Major Event face-down on the bottom (unseen; other Majors returned to the box), all Moderate Events shuffled on top of it, all Minor Events shuffled on top of those.",
+  "_note": "Skipped entirely for recommended first game."
+ },
+ "noiseTokens": {
+  "placedBy": "Adversary (Items, Abilities, moving through Windows, etc.)",
+  "meaning": "Marks where the Adversary WAS (moved through). Removed at the start of the Adversary's turn.",
+  "onePerWindowPerRound": true
+ },
+ "settings": {
+  "useMiniExpansionCards": {
+   "default": false,
+   "effect": "When enabled, each MI-set item card replaces its same-named base card in the General Item deck (see cards/general-items.json 'replaces' fields)."
+  }
+ }
 }

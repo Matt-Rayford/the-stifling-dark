@@ -25,11 +25,11 @@ JSON game data for the digital version, following the same pattern as `lemonade-
 | `cards/spirits.json` | 3 Spirits, 4 abilities each | Complete |
 | `cards/adversary-cards.json` | All 35 adversary cards: 9 Attacks, 21 Abilities, Enraged, Hatchling, 3 Revealed | Complete |
 | `maps/sawmill.json` | Sawmill space graph: 426 spaces, 893 edges, verified | Complete |
-| `maps/amusement-park.json` | Park space graph incl. mirror doors, rides, water loop | Final QA in progress |
+| `maps/amusement-park.json` | Park space graph: 461 spaces, 962 edges incl. mirror doors, rides, water loop, verified | Complete |
 
 ## v1 scope (designer-confirmed 2026-07-26)
 
-Base game only: 10 base Investigators (Kya Prosser and Winston Pitts tagged `set: promo`, excluded), base + MI item cards (NF cards tagged and excluded). Open question: whether MI variants replace their same-named base cards or are shuffled in alongside them.
+Base game only: 10 base Investigators (Kya Prosser and Winston Pitts tagged `set: promo`, excluded), base + MI item cards (NF cards tagged and excluded). MI cards are replacement alternatives for their same-named base cards, behind a "Use Mini-Expansion cards" settings toggle (designer-confirmed).
 
 ## Known gaps
 

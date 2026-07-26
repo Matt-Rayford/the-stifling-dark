@@ -303,7 +303,8 @@
    "supply": 2,
    "text": "The next time you Sprint, roll a D6 twice instead of rolling the Sprint die. Use the higher of the two rolls as your Sprint movement",
    "notes": "Alternate version of Adrenaline Shot with different rules text; card bears a circled 'MI' set mark (bottom-right), likely an expansion/variant set",
-   "set": "MI"
+   "set": "MI",
+   "replaces": "adrenaline-shot"
   },
   {
    "id": "cross-mi",
@@ -312,7 +313,8 @@
    "supply": 2,
    "text": "The Adversary must place a {noise} (Noise) token on the main board on any Door spaces they Move onto this round",
    "notes": "Alternate version of Cross with different rules text; card bears a circled 'MI' set mark (bottom-right)",
-   "set": "MI"
+   "set": "MI",
+   "replaces": "cross"
   },
   {
    "id": "dirty-rag-mi",
@@ -321,7 +323,8 @@
    "supply": 2,
    "text": "You may ignore the effects of 1 Map Hazard",
    "notes": "Alternate version of Dirty Rag with different rules text; card bears a circled 'MI' set mark (bottom-right)",
-   "set": "MI"
+   "set": "MI",
+   "replaces": "dirty-rag"
   },
   {
    "id": "lantern-mi",
@@ -330,7 +333,8 @@
    "supply": 2,
    "text": "Place the {lantern} (Lantern) token on the main board on an adjacent space. That space is Bright, and everything within 3 spaces of it is Dim\nYou may only use this Item once per round. Remove the token at the end of the round",
    "notes": "Alternate version of Lantern with different rules text; card bears a circled 'MI' set mark (bottom-right)",
-   "set": "MI"
+   "set": "MI",
+   "replaces": "lantern"
   },
   {
    "id": "rabbits-foot-mi",
@@ -339,7 +343,8 @@
    "supply": null,
    "text": "You may look at the next 2 Event cards and replace 1 of them with any discarded Event card, then place the cards back on top of the Event deck in the same order\nYou may not replace the Major Event card",
    "notes": "Alternate version of Rabbit's Foot with different rules text; card bears a circled 'MI' set mark (bottom-right)",
-   "set": "MI"
+   "set": "MI",
+   "replaces": "rabbits-foot"
   },
   {
    "id": "flashbang",
@@ -378,5 +383,5 @@
    "set": "NF"
   }
  ],
- "_v1Scope": "v1 includes base + MI cards; NF cards excluded per designer decision (2026-07-26)."
+ "_v1Scope": "v1 includes the base deck. MI cards ('Mini-Expansion') are REPLACEMENT alternatives for their same-named base cards, enabled by the 'Use Mini-Expansion cards' settings toggle. NF cards excluded from v1."
 }

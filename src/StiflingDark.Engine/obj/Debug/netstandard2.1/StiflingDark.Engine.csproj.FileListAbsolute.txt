@@ -1,0 +1,11 @@
+/Users/matt/Documents/GitHub/the-stifling-dark/src/StiflingDark.Engine/bin/Debug/netstandard2.1/StiflingDark.Engine.deps.json
+/Users/matt/Documents/GitHub/the-stifling-dark/src/StiflingDark.Engine/bin/Debug/netstandard2.1/StiflingDark.Engine.dll
+/Users/matt/Documents/GitHub/the-stifling-dark/src/StiflingDark.Engine/bin/Debug/netstandard2.1/StiflingDark.Engine.pdb
+/Users/matt/Documents/GitHub/the-stifling-dark/src/StiflingDark.Engine/obj/Debug/netstandard2.1/StiflingDark.Engine.csproj.AssemblyReference.cache
+/Users/matt/Documents/GitHub/the-stifling-dark/src/StiflingDark.Engine/obj/Debug/netstandard2.1/StiflingDark.Engine.GeneratedMSBuildEditorConfig.editorconfig
+/Users/matt/Documents/GitHub/the-stifling-dark/src/StiflingDark.Engine/obj/Debug/netstandard2.1/StiflingDark.Engine.AssemblyInfoInputs.cache
+/Users/matt/Documents/GitHub/the-stifling-dark/src/StiflingDark.Engine/obj/Debug/netstandard2.1/StiflingDark.Engine.AssemblyInfo.cs
+/Users/matt/Documents/GitHub/the-stifling-dark/src/StiflingDark.Engine/obj/Debug/netstandard2.1/StiflingDark.Engine.csproj.CoreCompileInputs.cache
+/Users/matt/Documents/GitHub/the-stifling-dark/src/StiflingDark.Engine/obj/Debug/netstandard2.1/StiflingDark.Engine.sourcelink.json
+/Users/matt/Documents/GitHub/the-stifling-dark/src/StiflingDark.Engine/obj/Debug/netstandard2.1/StiflingDark.Engine.dll
+/Users/matt/Documents/GitHub/the-stifling-dark/src/StiflingDark.Engine/obj/Debug/netstandard2.1/StiflingDark.Engine.pdb
