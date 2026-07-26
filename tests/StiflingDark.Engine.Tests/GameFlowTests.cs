@@ -220,7 +220,7 @@ namespace StiflingDark.Engine.Tests
         }
 
         [Fact]
-        public void Timeout_after_17_rounds_is_a_draw_for_the_butcher()
+        public void Timeout_kills_everyone_still_on_the_board()
         {
             var game = NewSawmillGame();
             while (game.State.Phase != GamePhase.GameOver)
@@ -233,7 +233,8 @@ namespace StiflingDark.Engine.Tests
                 game.AdversaryEndTurn();
             }
             Assert.Equal(17, game.State.Round);
-            Assert.Equal(GameResult.Draw, game.State.Result);
+            // No banish objective selected: unescaped Investigators count as killed.
+            Assert.Equal(GameResult.AdversaryWins, game.State.Result);
         }
 
         [Fact]

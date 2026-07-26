@@ -402,6 +402,7 @@ namespace StiflingDark.Engine.Core
             {
                 throw new InvalidOperationException($"{inv.DefId} has no Ammo token.");
             }
+            ConsumeCarriedToken(inv, "ammo-1", "ammo-2");
             State.Objective.EscapeReadyRound = State.Round + 2;
             Log("objective", $"{inv.DefId} fired the flare; help arrives in round {State.Objective.EscapeReadyRound}");
             FinishInvolvedAction(inv);
@@ -459,6 +460,7 @@ namespace StiflingDark.Engine.Core
             {
                 throw new InvalidOperationException($"{inv.DefId} has no Ride Parts token.");
             }
+            ConsumeCarriedToken(inv, "ride-parts-1", "ride-parts-2");
             State.Objective.EscapeReadyRound = State.Round + 1;
             Log("objective", $"{inv.DefId} started cutting the lock; it opens in round {State.Objective.EscapeReadyRound}");
             FinishInvolvedAction(inv);
@@ -477,6 +479,21 @@ namespace StiflingDark.Engine.Core
         }
 
         // ---------- Shared objective plumbing ----------
+
+        /// <summary>Spend one of the named tokens the investigator carries (designer ruling: Ammo and Ride Parts are consumed).</summary>
+        private void ConsumeCarriedToken(InvestigatorState inv, params string[] tokenNames)
+        {
+            foreach (string token in tokenNames)
+            {
+                if (State.Objective.TokenCarriers.TryGetValue(token, out string carrier) && carrier == inv.DefId)
+                {
+                    State.Objective.TokenCarriers.Remove(token);
+                    Log("objective", $"{inv.DefId} spent {token}");
+                    return;
+                }
+            }
+            throw new InvalidOperationException($"{inv.DefId} carries none of: {string.Join(", ", tokenNames)}.");
+        }
 
         private void Escape(InvestigatorState inv)
         {

@@ -653,10 +653,14 @@ namespace StiflingDark.Engine.Core
 
             if (State.Round >= Db.Config.Rounds)
             {
-                // Timeout outcome depends on the selected Objective (Cult: adversary wins;
-                // others: draw). Objectives are not implemented yet, so record a plain timeout.
+                // Timeout: with the Grave/Eggs banish objectives the game is a draw; the
+                // Altar (Cult) banish is an adversary win. Otherwise anyone still on the
+                // board counts as being killed, handing the Adversary the win.
                 State.Phase = GamePhase.GameOver;
-                State.Result = State.Adversary.DefId == "cult-of-hunlow" ? GameResult.AdversaryWins : GameResult.Draw;
+                string? selected = State.Objective.SelectedEscapeCard;
+                State.Result = selected == "the-grave" || selected == "the-eggs"
+                    ? GameResult.Draw
+                    : GameResult.AdversaryWins;
                 Log("gameover", "round limit reached");
                 return;
             }
