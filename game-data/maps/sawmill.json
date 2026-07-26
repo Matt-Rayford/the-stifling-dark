@@ -7578,5 +7578,7 @@
    "b": "318",
    "type": "move"
   }
- ]
+ ],
+ "spacePitch": 304,
+ "spaceRadius": 81
 }

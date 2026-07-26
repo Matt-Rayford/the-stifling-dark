@@ -17,6 +17,7 @@ namespace StiflingDark.Engine.Data
         public IReadOnlyList<MapDef> Maps { get; }
         public IReadOnlyList<InvestigatorDef> Investigators { get; }
         public IReadOnlyList<CardDef> Cards { get; }
+        public FlashlightDef Flashlight { get; }
 
         private readonly Dictionary<string, MapDef> _mapById;
         private readonly Dictionary<string, InvestigatorDef> _investigatorById;
@@ -29,12 +30,13 @@ namespace StiflingDark.Engine.Data
 
         public IEnumerable<CardDef> Deck(string deck) => Cards.Where(c => c.Deck == deck);
 
-        private GameDatabase(GameConfig config, List<MapDef> maps, List<InvestigatorDef> investigators, List<CardDef> cards)
+        private GameDatabase(GameConfig config, List<MapDef> maps, List<InvestigatorDef> investigators, List<CardDef> cards, FlashlightDef flashlight)
         {
             Config = config;
             Maps = maps;
             Investigators = investigators;
             Cards = cards;
+            Flashlight = flashlight;
             _mapById = maps.ToDictionary(m => m.Id);
             _investigatorById = investigators.ToDictionary(i => i.Id);
         }
@@ -50,8 +52,27 @@ namespace StiflingDark.Engine.Data
             };
             var investigators = LoadInvestigators(Path.Combine(gameDataDir, "investigators.json"));
             var cards = LoadAllDecks(Path.Combine(gameDataDir, "cards"));
+            var flashlight = LoadFlashlight(Path.Combine(gameDataDir, "flashlight.json"));
             Validate(maps, investigators);
-            return new GameDatabase(config, maps, investigators, cards);
+            return new GameDatabase(config, maps, investigators, cards, flashlight);
+        }
+
+        private static FlashlightDef LoadFlashlight(string path)
+        {
+            var j = ReadJson(path);
+            var def = new FlashlightDef
+            {
+                OriginX = j["origin"]!["x"]!.Value<double>(),
+                OriginY = j["origin"]!["y"]!.Value<double>(),
+                ImageWidth = j["imageSize"]!["w"]!.Value<double>(),
+                ImageHeight = j["imageSize"]!["h"]!.Value<double>(),
+                LengthInSpacePitches = j["scale"]!["lengthInSpacePitches"]!.Value<double>(),
+            };
+            foreach (var p in (JArray)j["outlinePolygon"]!)
+            {
+                def.OutlinePolygon.Add(new[] { p[0]!.Value<double>(), p[1]!.Value<double>() });
+            }
+            return def;
         }
 
         private static JObject ReadJson(string path) => JObject.Parse(File.ReadAllText(path));
@@ -89,6 +110,8 @@ namespace StiflingDark.Engine.Data
             {
                 Id = j["id"]!.Value<string>()!,
                 Name = j["name"]!.Value<string>()!,
+                SpacePitch = j["spacePitch"]!.Value<double>(),
+                SpaceRadius = j["spaceRadius"]!.Value<double>(),
                 Zones = ((JObject)j["zones"]!).Properties().ToDictionary(p => p.Name, p => p.Value.Value<string>()!),
             };
             foreach (var s in (JArray)j["spaces"]!)

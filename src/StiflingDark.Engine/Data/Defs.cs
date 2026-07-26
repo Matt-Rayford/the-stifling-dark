@@ -43,6 +43,10 @@ namespace StiflingDark.Engine.Data
     {
         public string Id { get; set; } = "";
         public string Name { get; set; } = "";
+        /// <summary>Center-to-center distance between adjacent spaces, in board pixels.</summary>
+        public double SpacePitch { get; set; }
+        /// <summary>Space circle radius, in board pixels.</summary>
+        public double SpaceRadius { get; set; }
         /// <summary>Zone letter to display name.</summary>
         public Dictionary<string, string> Zones { get; set; } = new Dictionary<string, string>();
         public List<SpaceDef> Spaces { get; set; } = new List<SpaceDef>();
@@ -101,6 +105,20 @@ namespace StiflingDark.Engine.Data
         public string? AdversaryCardType { get; set; }
         /// <summary>Adversary cards: cooldown slot 1 or 2; null when handled by card text.</summary>
         public int? Cooldown { get; set; }
+    }
+
+    /// <summary>The Small Flashlight template geometry, from game-data/flashlight.json.</summary>
+    public sealed class FlashlightDef
+    {
+        /// <summary>Beam outline in template pixels, [x, y] pairs.</summary>
+        public List<double[]> OutlinePolygon { get; set; } = new List<double[]>();
+        /// <summary>Notch center (where the figure sits), template pixels.</summary>
+        public double OriginX { get; set; }
+        public double OriginY { get; set; }
+        public double ImageWidth { get; set; }
+        public double ImageHeight { get; set; }
+        /// <summary>Designer-confirmed: the template's full length spans this many space pitches.</summary>
+        public double LengthInSpacePitches { get; set; }
     }
 
     public sealed class InvestigatorCountRules

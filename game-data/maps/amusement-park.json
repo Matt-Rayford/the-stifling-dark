@@ -8370,5 +8370,7 @@
    "near 316",
    "below M-43 (Mirror Maze south exit)"
   ]
- }
+ },
+ "spacePitch": 304,
+ "spaceRadius": 81
 }
