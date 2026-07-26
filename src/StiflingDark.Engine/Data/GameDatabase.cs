@@ -30,6 +30,12 @@ namespace StiflingDark.Engine.Data
 
         public IEnumerable<CardDef> Deck(string deck) => Cards.Where(c => c.Deck == deck);
 
+        private readonly Dictionary<string, RasterLineOfSightBlocker> _losMasks;
+
+        /// <summary>The CV-extracted obstacle mask for a map, or null when no mask file exists.</summary>
+        public RasterLineOfSightBlocker? LosMask(string mapId) =>
+            _losMasks.TryGetValue(mapId, out var mask) ? mask : null;
+
         private GameDatabase(GameConfig config, List<MapDef> maps, List<InvestigatorDef> investigators, List<CardDef> cards, FlashlightDef flashlight)
         {
             Config = config;
@@ -37,6 +43,7 @@ namespace StiflingDark.Engine.Data
             Investigators = investigators;
             Cards = cards;
             Flashlight = flashlight;
+            _losMasks = new Dictionary<string, RasterLineOfSightBlocker>();
             _mapById = maps.ToDictionary(m => m.Id);
             _investigatorById = investigators.ToDictionary(i => i.Id);
         }
@@ -54,7 +61,16 @@ namespace StiflingDark.Engine.Data
             var cards = LoadAllDecks(Path.Combine(gameDataDir, "cards"));
             var flashlight = LoadFlashlight(Path.Combine(gameDataDir, "flashlight.json"));
             Validate(maps, investigators);
-            return new GameDatabase(config, maps, investigators, cards, flashlight);
+            var db = new GameDatabase(config, maps, investigators, cards, flashlight);
+            foreach (var map in maps)
+            {
+                string maskPath = Path.Combine(gameDataDir, "maps", map.Id + "-los-mask.bin");
+                if (File.Exists(maskPath))
+                {
+                    db._losMasks[map.Id] = RasterLineOfSightBlocker.Load(maskPath);
+                }
+            }
+            return db;
         }
 
         private static FlashlightDef LoadFlashlight(string path)

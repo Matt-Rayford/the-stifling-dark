@@ -42,6 +42,11 @@ namespace StiflingDark.Engine.Core
             Graph = new MapGraph(db.Map(state.ScenarioId));
             _beam = new FlashlightBeam(db.Flashlight);
             _rng = new DeterministicRng(state.RngState);
+            var mask = db.LosMask(state.ScenarioId);
+            if (mask != null)
+            {
+                _losBlocker = mask;
+            }
         }
 
         /// <summary>Resume from a saved state.</summary>

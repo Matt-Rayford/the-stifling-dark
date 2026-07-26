@@ -156,7 +156,7 @@ namespace StiflingDark.Engine.Tests
             var game = NewSawmillGame();
             var aira = Aira(game);
             aira.Items.Add("cross");
-            aira.Space = "S-19"; // within Stalk range of The Butcher on S-25
+            aira.Space = "S-24"; // adjacent to The Butcher on S-25: clear line of sight
             game.State.Adversary.ActiveAbilities.Add("escalating-terror");
 
             game.BeginInvestigatorTurn("aira");

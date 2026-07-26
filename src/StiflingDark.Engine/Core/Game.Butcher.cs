@@ -117,9 +117,8 @@ namespace StiflingDark.Engine.Core
                 throw new InvalidOperationException("Stalk was already used this turn.");
             }
 
-            // TODO: LOS — the map's Obstacle geometry has not been extracted into a line-of-sight
-            // blocker yet (see ILineOfSightBlocker); range is checked by distance only for now.
             var withinRange = Graph.DistancesFrom(adv.Space, 8, State.Overlay);
+            var from = Graph.Space(adv.Space);
             var targets = new List<InvestigatorState>();
             foreach (string id in targetInvIds)
             {
@@ -127,6 +126,11 @@ namespace StiflingDark.Engine.Core
                 if (!withinRange.ContainsKey(inv.Space))
                 {
                     throw new InvalidOperationException($"{id} is not within 8 spaces of The Butcher to Stalk.");
+                }
+                var to = Graph.Space(inv.Space);
+                if (_losBlocker.Blocks(from.X, from.Y, to.X, to.Y))
+                {
+                    throw new InvalidOperationException($"{id} is not in The Butcher's line of sight.");
                 }
                 targets.Add(inv);
             }
