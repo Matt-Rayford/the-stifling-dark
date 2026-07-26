@@ -9,10 +9,11 @@ namespace StiflingDark.Engine.Core
     /// Attack/Ability cards from game-data/cards/adversary-cards.json, and the Eggs
     /// Banish objective from game-data/cards/escape-cards.json / player-aids.json.
     ///
-    /// Several card effects reference systems the engine does not have yet (Hatchling AI,
-    /// movement-blocking Mucus/Tunnel tokens, per-turn Charge hooks, an adversary-owned
-    /// move/turn-end sub-hook). Those are logged as "todo" events rather than silently
-    /// dropped; see the accompanying report for the full list. Everything the current state
+    /// A few card effects still reference systems the engine does not have (Hatchling AI,
+    /// movement-blocking Mucus/Tunnel tokens, per-Investigator Charge hooks). Those are logged
+    /// as "todo" events rather than silently dropped; see the accompanying report for the full
+    /// list. The Enraged movement rules, Devour's Bright restriction, the Enraged Disappear
+    /// block and the "remove at the end of the next round" token timings are all enforced now. Everything the current state
     /// model *can* represent (movement, Wounds, Conditions via
     /// <see cref="GrantConditionWithSubstitution"/>, card tokens via
     /// <see cref="PlaceBoardToken"/>, Shadow token, Revealed, distance/adjacency validation)
@@ -32,13 +33,9 @@ namespace StiflingDark.Engine.Core
                 adv.Counters["devour-active"] = 1;
             }
 
-            if (adv.Counters.TryGetValue("enraged", out int enraged) && enraged == 1 &&
-                !adv.Counters.ContainsKey("enraged-move-todo-logged"))
-            {
-                adv.Counters["enraged-move-todo-logged"] = 1;
-                Log("todo", "Enraged movement (4 MP flat, no Sprint die, Bright spaces cost 2 MP) is not " +
-                             "enforced: EnsureAdversaryTurnStarted computes MP the same way for every adversary.");
-            }
+            // Enraged movement (a flat 4 MP, no Sprint die, 2 MP to enter a Bright space) is
+            // applied by the shared framework: EnsureAdversaryTurnStarted hands out the flat
+            // budget and AdversaryMoveStep charges the Bright premium.
         }
 
         partial void ApplyHorrorCard(string cardId, List<string> targets)
@@ -200,6 +197,12 @@ namespace StiflingDark.Engine.Core
             {
                 throw new InvalidOperationException("The Horror may not use its Attack card without Ambushing first.");
             }
+            if (!ambushed && devourReady && adv.ActionsUsed.Contains("moved-onto-bright"))
+            {
+                // "...as long as you do not Move onto any Bright spaces before doing so."
+                throw new InvalidOperationException(
+                    "Devour's Attack is off: The Horror Moved onto a Bright space this turn.");
+            }
             if (!ambushed && devourReady && targets.Count != 1)
             {
                 throw new InvalidOperationException("Devour's Attack targets exactly 1 Investigator.");
@@ -221,7 +224,6 @@ namespace StiflingDark.Engine.Core
                 adv.Counters.Remove("devour-active");
                 adv.ShadowTokens["main"] = adv.Space;
                 Log("adversary", "Devour: attacked without Ambushing");
-                Log("todo", "Devour's 'no Move onto a Bright space before attacking' restriction is not enforced.");
             }
         }
 
@@ -272,16 +274,17 @@ namespace StiflingDark.Engine.Core
         private void ApplyDevour()
         {
             State.Adversary.Counters["devour-next-turn"] = 1;
-            Log("adversary", "Devour queued: next turn The Horror may Attack once without Ambushing first");
-            Log("todo", "Devour's 'as long as you do not Move onto a Bright space first' restriction is not enforced.");
+            Log("adversary", "Devour queued: next turn The Horror may Attack once without Ambushing first, " +
+                             "as long as it has not Moved onto a Bright space by then");
         }
 
         private void ApplyFumingFissure()
         {
             State.Adversary.Counters["fuming-fissure-round"] = State.Round + 1;
             Log("adversary", "Fuming Fissure queued for next round");
-            Log("todo", "Fuming Fissure's Charge effects (lose 1 Charge in-Zone / +1 Charge cost outside a Zone) " +
-                         "are not enforced: they would need hooks in EndTurn/ChargeFlashlight/PlaceFlashlight in Game.cs.");
+            Log("todo", "Fuming Fissure's Charge effects (lose 1 Charge in-Zone at end of turn / +1 Charge to place a " +
+                         "Flashlight outside a Zone) are not enforced: both are per-Investigator, and the Flashlight " +
+                         $"surcharge channel (RoundModifiers[\"{FlashlightChargeSurchargeKey}\"]) is board-wide.");
         }
 
         /// <summary>Either 2 investigator ids (both get Darkness) or 1 investigator id plus a
@@ -295,8 +298,9 @@ namespace StiflingDark.Engine.Core
                 GrantConditionWithSubstitution(inv, "darkness");
                 State.Objective.Tokens["occluded-lights"] = zone;
                 Log("adversary", $"Occluded Lights token placed on zone {zone}");
-                Log("todo", "Occluded Lights' Zone block (no Bright/Dim token next round) is not enforced " +
-                             "(needs a hook in ActivateLightSwitch in Game.cs).");
+                Log("todo", "Occluded Lights' Zone block (no Bright or Dim token may be placed on the Zone next " +
+                             "round) is not enforced: ActivateLightSwitch / PlaceDimToken would have to consult " +
+                             "Objective.Tokens[\"occluded-lights\"], and neither is a card-hook site.");
             }
             else if (targets.Count == 2)
             {
@@ -309,13 +313,43 @@ namespace StiflingDark.Engine.Core
                     "Occluded Lights needs either 2 Investigators, or 1 Investigator and a Zone letter.");
             }
 
-            // Cooldown icon is absent; the printed rule delays the move to Cooldown 2 until the
-            // end of next round. Approximated here as an immediate move (see report).
+            // "Put this card in front of the Adversary screen when you use it. At the end of the
+            // next round, place it face-down in your Cooldown 2 area and remove the token." The
+            // card leaves the Active slots now (so it cannot be replayed) and HorrorOnRoundEnd
+            // completes the move a round later.
             var adv = State.Adversary;
             if (adv.ActiveAbilities.Remove("occluded-lights"))
             {
+                adv.Counters["occluded-lights-round"] = State.Round + 1;
+            }
+        }
+
+        /// <summary>
+        /// The Horror's "remove the tokens at the end of the next round" clauses: Thick Mucus,
+        /// Tunnel, and Occluded Lights (which also finishes its delayed trip to Cooldown 2).
+        /// </summary>
+        partial void HorrorOnRoundEnd()
+        {
+            var adv = State.Adversary;
+            if (adv.Counters.TryGetValue("mucus-placed-round", out int mucusRound) && State.Round > mucusRound)
+            {
+                adv.Counters.Remove("mucus-placed-round");
+                int removed = RemoveBoardTokens("mucus-");
+                Log("adversary", $"the {removed} Mucus token(s) are removed at the end of the round");
+            }
+            if (adv.Counters.TryGetValue("tunnel-placed-round", out int tunnelRound) && State.Round > tunnelRound)
+            {
+                adv.Counters.Remove("tunnel-placed-round");
+                RemoveBoardToken("tunnel-1");
+                Log("adversary", "the Tunnel token is removed at the end of the round");
+            }
+            if (adv.Counters.TryGetValue("occluded-lights-round", out int occludedRound) &&
+                State.Round >= occludedRound)
+            {
+                adv.Counters.Remove("occluded-lights-round");
+                State.Objective.Tokens.Remove("occluded-lights");
                 adv.Cooldown2.Add(new CooldownCard { CardId = "occluded-lights", FaceUp = false });
-                Log("todo", "Occluded Lights' Cooldown 2 move is applied immediately, not at the end of next round.");
+                Log("adversary", "Occluded Lights goes face-down into Cooldown 2 and its token is removed");
             }
         }
 
@@ -361,9 +395,9 @@ namespace StiflingDark.Engine.Core
             PlaceBoardToken("mucus-2", targets[1]);
             adv.Counters["mucus-placed-round"] = State.Round;
             Log("adversary", $"placed 2 Mucus tokens: {targets[0]}, {targets[1]}");
-            Log("todo", "Mucus tokens are on the board under BoardTokens[\"mucus-*\"], but they do not block " +
-                         "Movement (MapGraph.TryStep takes no card tokens) and are not auto-removed at the end of " +
-                         "next round (OnRoundEnd has no adversary sub-hook).");
+            Log("todo", "Mucus tokens are on the board under BoardTokens[\"mucus-*\"] and are removed on time now, " +
+                         "but they still do not block Movement: MapGraph.TryStep takes no card tokens, and the " +
+                         "per-action gate is asked before the destination space is known.");
         }
 
         private void ApplyTunnel(List<string> targets)
@@ -376,9 +410,9 @@ namespace StiflingDark.Engine.Core
             PlaceBoardToken("tunnel-1", space); // validates the space exists
             State.Adversary.Counters["tunnel-placed-round"] = State.Round;
             Log("adversary", $"Tunnel token placed at {space}");
-            Log("todo", "the Tunnel token is on the board under BoardTokens[\"tunnel-1\"], but its " +
-                         "Move-on-or-adjacent-to-the-token bypass next turn is not enforced (needs an " +
-                         "AdversaryMoveStep hook), nor is the token's end-of-next-round removal.");
+            Log("todo", "the Tunnel token is on the board under BoardTokens[\"tunnel-1\"] and is removed on time now, " +
+                         "but its Move-on-or-adjacent-to-the-token bypass next turn is not enforced: " +
+                         "AdversaryMoveStep validates each step through MapGraph, which knows no card tokens.");
         }
 
         // ---------- The Eggs banish objective ----------
@@ -446,10 +480,10 @@ namespace StiflingDark.Engine.Core
             {
                 adv.Counters["enraged"] = 1;
                 RevealAdversary("Enraged");
-                Log("adversary", "The Horror gains the Enraged Condition");
-                Log("todo", "Enraged should permanently block Disappear (AdversaryDisappear is shared with the " +
-                             "other Adversaries and cannot be special-cased here); Counters[\"enraged\"] is the " +
-                             "authoritative flag but nothing currently stops a Disappear call after this point.");
+                // Counters["enraged"] is the authoritative flag: the shared AdversaryDisappear
+                // refuses outright from here on, and the turn framework switches to the flat
+                // 4 MP Enraged movement budget.
+                Log("adversary", "The Horror gains the Enraged Condition: no more Ambush, no more Disappear");
             }
             FinishInvolvedAction(inv);
         }

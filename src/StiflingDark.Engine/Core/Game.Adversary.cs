@@ -13,6 +13,10 @@ namespace StiflingDark.Engine.Core
     {
         private bool _banishSetupDone;
 
+        /// <summary>Adversary Counters key: the round in which the Adversary may play no Ability
+        /// cards at all, only Attacks and Core Actions (the Cross Item card).</summary>
+        public const string AbilitiesBlockedRoundKey = "abilities-blocked-round";
+
         private static readonly Dictionary<string, int> AdversaryBaseMp = new Dictionary<string, int>
         {
             ["butcher"] = 5,
@@ -100,16 +104,56 @@ namespace StiflingDark.Engine.Core
             adv.AttackUsedThisTurn = false;
             // Designer-confirmed: an Adversary that BEGINS its turn Revealed cannot Attack that turn.
             adv.AttackLockedThisTurn = adv.Revealed;
-            int sprint = _rng.RollSprintDie(Db.Config.SprintDieFaces);
-            SaveRng();
-            adv.SprintRolled = sprint;
-            adv.MpRemaining = AdversaryBaseMp[adv.DefId] + sprint;
+            OnAdversaryTurnStart();
+            int flatMp = FlatAdversaryMp();
+            if (flatMp > 0)
+            {
+                // The Enraged Horror (4 MP) and the Corporeal Mor'gonnod (10 MP) replace the
+                // printed budget with a flat one and roll no Sprint die at all.
+                adv.SprintRolled = 0;
+                adv.MpRemaining = flatMp;
+            }
+            else
+            {
+                int sprint = SkipAdversarySprintDie() ? 0 : _rng.RollSprintDie(Db.Config.SprintDieFaces);
+                SaveRng();
+                adv.SprintRolled = sprint;
+                adv.MpRemaining = AdversaryBaseMp[adv.DefId] + sprint;
+            }
             switch (adv.DefId)
             {
                 case "butcher": BeginButcherTurn(); break;
                 case "insatiable-horror": BeginHorrorTurn(); break;
                 case "cult-of-hunlow": BeginCultTurn(); break;
             }
+        }
+
+        /// <summary>The flat, Sprint-die-free MP budget of the two "final form" states, or 0
+        /// when the printed base + Sprint die applies.</summary>
+        private int FlatAdversaryMp()
+        {
+            if (State.Adversary.DefId == "insatiable-horror" && AdversaryCounter("enraged") == 1)
+            {
+                return 4;
+            }
+            if (State.Adversary.DefId == "cult-of-hunlow" && AdversaryCounter("corporeal") == 1)
+            {
+                return CorporealMoveMp;
+            }
+            return 0;
+        }
+
+        /// <summary>Witch Bells: the Investigators may force the Adversary to forgo their
+        /// Sprint die for the turn they are about to take.</summary>
+        private bool SkipAdversarySprintDie()
+        {
+            if (AdversaryCounter("skip-sprint-die-round") != State.Round)
+            {
+                return false;
+            }
+            State.Adversary.Counters.Remove("skip-sprint-die-round");
+            Log("adversary", "Witch Bells: no Sprint die this turn");
+            return true;
         }
 
         /// <summary>Resolve an Attack or active Ability card. Targets are investigator def
@@ -137,9 +181,17 @@ namespace StiflingDark.Engine.Core
                     throw new InvalidOperationException("The Attack card was already used this turn.");
                 }
             }
-            else if (!adv.ActiveAbilities.Contains(cardId))
+            else
             {
-                throw new InvalidOperationException($"'{cardId}' is not an active Ability (on cooldown, face-down, or not chosen).");
+                if (!adv.ActiveAbilities.Contains(cardId))
+                {
+                    throw new InvalidOperationException($"'{cardId}' is not an active Ability (on cooldown, face-down, or not chosen).");
+                }
+                if (AdversaryCounter(AbilitiesBlockedRoundKey) == State.Round)
+                {
+                    throw new InvalidOperationException(
+                        "A Cross is raised: no Ability cards this turn (Attacks and Core Actions are still available).");
+                }
             }
             if (adv.ActionsUsed.Contains("card:" + cardId))
             {
@@ -190,13 +242,14 @@ namespace StiflingDark.Engine.Core
             }
         }
 
-        /// <summary>An Attack deals its Wounds to one investigator (helper for the adversary partials).</summary>
+        /// <summary>An Attack deals its Wounds to one investigator (helper for the adversary
+        /// partials). Tagged as Adversary-inflicted, so Mauled adds its extra Wound.</summary>
         private void DealAttackWounds(string invId, int count, bool faceUp)
         {
             var target = Investigator(invId);
             for (int i = 0; i < count && !target.Dead; i++)
             {
-                GainWound(target, faceUp);
+                GainWound(target, faceUp, WoundFromAdversary);
             }
         }
 

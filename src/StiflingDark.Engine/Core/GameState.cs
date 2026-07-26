@@ -41,6 +41,13 @@ namespace StiflingDark.Engine.Core
         public int Charge { get; set; }
         public int MajorAbilityTokens { get; set; } = 1;
         public List<WoundInstance> Wounds { get; set; } = new List<WoundInstance>();
+        /// <summary>
+        /// Wounds held outside the printed Wound slots: their face-up text applies, but they
+        /// do not occupy a slot and do not count toward the death threshold. Currently only
+        /// the Neurotoxin Condition parks Wounds here ("place a face-up Wound below this
+        /// card ... it does not take up a Wound slot").
+        /// </summary>
+        public List<WoundInstance> NonSlotWounds { get; set; } = new List<WoundInstance>();
         public List<string> Items { get; set; } = new List<string>();
         /// <summary>Condition card ids held by this Investigator; at most 1 copy of each (see Game.GainCondition).</summary>
         public List<string> Conditions { get; set; } = new List<string>();
@@ -51,8 +58,23 @@ namespace StiflingDark.Engine.Core
         public bool Dead { get; set; }
         public bool Escaped { get; set; }
 
+        /// <summary>
+        /// The Spirit card this dead Investigator's player took, or null when they are not a
+        /// Spirit (every living Investigator, and any dead one whose player declined). A Spirit
+        /// keeps this row's Items, Evidence, Space, and standee but has no player board: its
+        /// Stamina, Charge, Wounds, and Conditions are emptied on adoption and it can never
+        /// gain more. See Game.Spirits.cs.
+        /// </summary>
+        public string? SpiritId { get; set; }
+
+        /// <summary>Major Ability tokens left on the Spirit card (starts at 2, never regained).
+        /// Unrelated to <see cref="MajorAbilityTokens"/>, which belongs to the player board.</summary>
+        public int SpiritMajorTokens { get; set; }
+
         // Per-turn bookkeeping (reset when the turn begins).
         public int MpRemaining { get; set; }
+        /// <summary>Spirit Abilities used so far this turn (max 2).</summary>
+        public int SpiritAbilitiesUsedThisTurn { get; set; }
         public bool TurnTakenThisRound { get; set; }
         public bool SprintedOrRested { get; set; }
         public bool Rested { get; set; }

@@ -18,10 +18,12 @@ namespace StiflingDark.Engine.Core
     /// <see cref="BeginCultTurn"/>). No private instance fields are used, so a save/load in
     /// the middle of an Adversary turn keeps every Cultist's remaining MP and acting order.
     ///
-    /// Counters keys used here: "blood", "corporeal", "corporeal-mp", "cmp:cN" (per-Cultist
-    /// MP), "cfin:cN" (Cultist has finished acting), "cult-actor" (index of the Cultist
-    /// currently acting), "bloodlet-count", "burning-heart-round", "dried-tongue-round",
-    /// "shriveled-hand-round", "altar-revealed", "knife-used-round", "banish-supplies".
+    /// Counters keys used here: "blood", "corporeal", "cmp:cN" (per-Cultist MP), "cfin:cN"
+    /// (Cultist has finished acting), "cult-actor" (index of the Cultist currently acting),
+    /// "bloodlet-count", "burning-heart-round", "dried-tongue-round", "shriveled-hand-round",
+    /// "unblinking-eye-round", "altar-revealed", "knife-used-round", "banish-supplies".
+    /// Corporeal Mor'gonnod spends the shared AdversaryState.MpRemaining like every other main
+    /// figure; the turn framework simply hands him a flat CorporealMoveMp with no Sprint die.
     /// </summary>
     public sealed partial class Game
     {
@@ -119,12 +121,13 @@ namespace StiflingDark.Engine.Core
             }
 
             int bonus = BurningHeartBonus();
-            adv.MpRemaining += bonus; // Mor'gonnod: 3 + Sprint (+ Burning Heart)
+            // Mor'gonnod: 3 + Sprint while Ethereal, a flat CorporealMoveMp once Corporeal
+            // (handed out by EnsureAdversaryTurnStarted), plus Burning Heart either way.
+            adv.MpRemaining += bonus;
             if (corporeal)
             {
                 adv.Revealed = true;              // Corporeal is Revealed for the rest of the game
                 adv.AttackLockedThisTurn = false; // ...and ignores the Revealed card
-                adv.Counters["corporeal-mp"] = CorporealMoveMp + bonus;
             }
             foreach (var cultist in adv.Figures.Where(f => f.Alive))
             {
@@ -181,11 +184,12 @@ namespace StiflingDark.Engine.Core
                 cultist.Revealed = true;
                 Log("reveal", $"Cultist {cultist.Id} at {to} (moved onto a Bright space)");
             }
-            // todo: a Cultist already standing on a space that a Flashlight or Light Switch
-            // later makes Bright is not Revealed yet — the shared RevealOnBright in Game.cs
-            // only knows about the main figure. Needs a shared-file hook.
+            // A Cultist already standing on a space that a Flashlight or Light Switch later
+            // makes Bright is Revealed by the shared RevealOnBright (Game.cs), which walks
+            // AdversaryState.Figures alongside the main figure.
             // todo: carriage rotation (ApplyAdversaryCarriageRotation) only rotates the main
-            // figure; a Cultist in a carriage is not rotated.
+            // figure; a Cultist in a carriage is not rotated. Per-figure rotation needs a
+            // per-figure "already rotated this round" flag, and AdversaryFigure has none.
         }
 
         /// <summary>A Revealed Cultist in a Dim or Dark space goes Hidden; they may not Bloodlet this turn.</summary>
@@ -380,50 +384,27 @@ namespace StiflingDark.Engine.Core
             adv.ShadowTokens.Clear(); // every remaining figure is on the main board
             adv.Revealed = true;
             adv.Counters["corporeal"] = 1;
-            adv.Counters["corporeal-mp"] = 0; // the budget is handed out at the start of his next turn
+            adv.MpRemaining = 0; // his own budget is handed out at the start of his next turn
             adv.AttackLockedThisTurn = false; // the Attack card is face-up from now on
             Log("adversary", $"The Final Sacrifice at {adv.Space}: Mor'gonnod is Corporeal");
             AdversaryEndTurn();
         }
 
         /// <summary>
-        /// Corporeal movement: up to 10 MP per turn, 2 MP to enter a Bright space. Separate
-        /// from the shared <see cref="AdversaryMoveStep"/> (which charges 1 MP everywhere and
-        /// spends the Ethereal 3 + Sprint budget).
+        /// Corporeal movement: a flat CorporealMoveMp per turn with 2 MP to enter a Bright space.
+        /// Both of those now live in the shared framework — EnsureAdversaryTurnStarted hands out
+        /// the flat budget, <see cref="AdversaryMoveStep"/> charges the Bright premium — so this
+        /// is just the named entry point for the Cult UI, and there is no second movement path to
+        /// keep in step: calling AdversaryMoveStep directly while Corporeal is equally correct.
         /// </summary>
         public void MorgonnodCorporealMoveStep(string to)
         {
-            EnsureAdversaryTurnStarted();
             RequireCultAdversary();
             if (!IsCorporeal())
             {
                 throw new InvalidOperationException("Mor'gonnod is Ethereal; use AdversaryMoveStep (3 MP + Sprint).");
             }
-            var adv = State.Adversary;
-            string from = adv.Space;
-            RequireSpace(to);
-            var step = Graph.TryStep(FigureKind.Adversary, from, to, State.Overlay)
-                ?? throw new InvalidOperationException($"Mor'gonnod cannot move {from} -> {to}.");
-            int cost = (IsBright(to) ? 2 : 1) + (step.CrossesWindow ? 1 : 0);
-            int budget = CultCounter("corporeal-mp");
-            if (cost > budget)
-            {
-                throw new InvalidOperationException($"Move costs {cost} MP, only {budget} left.");
-            }
-            adv.Counters["corporeal-mp"] = budget - cost;
-            adv.Space = to;
-            if (step.CrossesWindow)
-            {
-                string key = BoardOverlay.EdgeKey(from, to);
-                if (!adv.NoiseTokens.Contains(key))
-                {
-                    adv.NoiseTokens.Add(key);
-                }
-            }
-            ApplyAdversaryCarriageRotation();
-            Log("adversary", $"Mor'gonnod moved {from} -> {to} ({cost} MP, {adv.Counters["corporeal-mp"]} left)");
-            // todo: the shared AdversaryMoveStep should be blocked (or redirected here) while
-            // Corporeal — it would spend the Ethereal budget and charge 1 MP for Bright spaces.
+            AdversaryMoveStep(to);
         }
 
         private bool IsCorporeal() => CultCounter("corporeal") == 1;
@@ -532,7 +513,6 @@ namespace StiflingDark.Engine.Core
                     // "+1 MP for each Flashlight on the board, from your next turn onwards."
                     adv.Counters["burning-heart-round"] = State.Round + 1;
                     Log("adversary", $"Burning Heart: from round {State.Round + 1}, +1 MP per Flashlight");
-                    Log("todo", "burning-heart: the end condition (a round in which no Investigator gains Charge or Stamina) is not tracked, so the card never sends itself to Cooldown 2");
                     break;
                 }
                 case "cleft-hoof":
@@ -543,12 +523,9 @@ namespace StiflingDark.Engine.Core
                         ?? throw new InvalidOperationException($"{inv.DefId} has no face-up Wound to flip.");
                     var hellfire = targets.Skip(1).ToList();
                     ValidateTokenSpaces(hellfire, 3, "hellfire");
-                    wound.FaceUp = false;
+                    FlipWoundFaceDown(inv, wound); // honors Hemorrhage's flip-down restriction
                     PlaceCardTokens("hellfire", hellfire);
                     UpdateMorgonnodShadow();
-                    Log("todo", "cleft-hoof: the Hellfire tokens are on the board under BoardTokens[\"hellfire-*\"], " +
-                                "but the face-up Wound for Moving onto one needs an adversary sub-hook off " +
-                                "OnInvestigatorMoveStep (Game.EffectDispatch.cs dispatches it to the card decks only).");
                     break;
                 }
                 case "dried-tongue":
@@ -592,7 +569,6 @@ namespace StiflingDark.Engine.Core
                     // "Next round you may Bloodlet with 2 different Cultists."
                     adv.Counters["shriveled-hand-round"] = State.Round + 1;
                     Log("adversary", $"Shriveled Hand: 2 Cultists may Bloodlet in round {State.Round + 1}");
-                    Log("todo", "shriveled-hand: the follow-up (removed from the game if used, otherwise face-down in Cooldown 1) needs an end-of-Adversary-turn hook");
                     break;
                 }
                 case "spiked-vertebrae":
@@ -607,21 +583,109 @@ namespace StiflingDark.Engine.Core
                     ValidateTokenSpaces(targets, 3, "desecrated-ground");
                     PlaceCardTokens("desecrated-ground", targets);
                     UpdateMorgonnodShadow();
-                    Log("todo", "twisted-horn: the Desecrated Ground tokens are on the board under " +
-                                "BoardTokens[\"desecrated-ground-*\"], but the end-of-turn D6 for Moving onto one " +
-                                "needs an adversary sub-hook off OnInvestigatorMoveStep/OnInvestigatorTurnEnd.");
                     break;
                 }
                 case "unblinking-eye":
                 {
-                    // "Investigators who do not place a Flashlight next round gain Paranoid."
-                    Log("todo", "unblinking-eye: Paranoid can be granted now, but deciding who to grant it to means " +
-                                "reading State.Flashlights at the end of next round, and OnRoundEnd has no adversary " +
-                                "sub-hook (Game.EffectDispatch.cs dispatches it to Items/Events only).");
+                    // "Investigators who do not place a Flashlight next round gain the Paranoid
+                    // Condition." Judged at the end of the Adversary turn of that round, while
+                    // State.Flashlights still holds every placement made during it.
+                    adv.Counters["unblinking-eye-round"] = State.Round + 1;
+                    Log("adversary", $"Unblinking Eye: anyone without a Flashlight in round {State.Round + 1} gains Paranoid");
                     break;
                 }
                 default:
                     throw new InvalidOperationException($"'{cardId}' is not a Cult of Hunlow card.");
+            }
+        }
+
+        // ---------- Token triggers and end-of-turn follow-ups (Game.EffectDispatch.cs) ----------
+
+        /// <summary>Round-modifier prefix + Investigator def id: they Moved onto an unlit
+        /// Desecrated Ground token this turn and owe its end-of-turn D6.</summary>
+        private const string DesecratedGroundPrefix = "desecrated-ground-stepped:";
+
+        partial void CultOnInvestigatorMoveStep(InvestigatorState inv, string from, string to)
+        {
+            // inv.Space rather than `to`: a carriage rotation or water float may have carried them
+            // onward after the step, and a token only triggers where they actually end up.
+            if (HasBoardTokenAt("hellfire-", inv.Space))
+            {
+                // "Investigators must take a face-up Wound if they Move onto a Hellfire token."
+                Log("adversary", $"{inv.DefId} Moved onto Hellfire at {inv.Space}");
+                GainWound(inv, faceUp: true, WoundFromAdversary);
+            }
+            // "If an Investigator Moves onto one or more Desecrated Ground tokens, they must roll
+            // a D6 at the end of their turn. On a 1-3, gain a face-down Wound. If the Desecrated
+            // Ground token is Bright when the Investigator Moves onto it, they may ignore it."
+            if (HasBoardTokenAt("desecrated-ground-", inv.Space) && !IsBright(inv.Space))
+            {
+                SetRoundModifier(DesecratedGroundPrefix + inv.DefId, 1);
+            }
+        }
+
+        partial void CultOnInvestigatorTurnEnd(InvestigatorState inv)
+        {
+            if (!ClearRoundModifier(DesecratedGroundPrefix + inv.DefId))
+            {
+                return;
+            }
+            int roll = _rng.Roll(6);
+            SaveRng();
+            Log("adversary", $"{inv.DefId} rolls {roll} for the Desecrated Ground they walked on");
+            if (roll <= 3)
+            {
+                GainWound(inv, faceUp: false, WoundFromAdversary);
+            }
+        }
+
+        /// <summary>
+        /// The Cult's three "at the end of your turn" follow-ups. Each of them reads state that is
+        /// only complete at this moment: Unblinking Eye needs the round's full set of Flashlight
+        /// placements (still on the board until EndRound clears them), Shriveled Hand needs the
+        /// Bloodletting count of the turn that is finishing, and Burning Heart needs to know
+        /// whether anybody gained Charge or Stamina across the whole round.
+        /// </summary>
+        partial void CultOnAdversaryTurnEnd()
+        {
+            var adv = State.Adversary;
+
+            if (CultCounter("unblinking-eye-round") == State.Round)
+            {
+                adv.Counters.Remove("unblinking-eye-round");
+                foreach (var inv in State.Investigators.Where(i => !i.Dead && !i.Escaped))
+                {
+                    if (!State.Flashlights.Any(f => f.InvestigatorId == inv.DefId))
+                    {
+                        Log("adversary", $"Unblinking Eye: {inv.DefId} placed no Flashlight this round");
+                        GrantConditionWithSubstitution(inv, "paranoid");
+                    }
+                }
+            }
+
+            if (CultCounter("shriveled-hand-round") == State.Round)
+            {
+                adv.Counters.Remove("shriveled-hand-round");
+                adv.ActiveAbilities.Remove("shriveled-hand");
+                if (CultCounter("bloodlet-count") >= 2)
+                {
+                    Log("adversary", "Shriveled Hand did its work and is removed from the game");
+                }
+                else
+                {
+                    adv.Cooldown1.Add(new CooldownCard { CardId = "shriveled-hand", FaceUp = false });
+                    Log("adversary", "fewer than 2 Cultists Bloodlet: Shriveled Hand goes face-down into Cooldown 1");
+                }
+            }
+
+            int burningFrom = CultCounter("burning-heart-round");
+            if (burningFrom != 0 && State.Round >= burningFrom && !HasRoundModifier(ResourceGainedKey))
+            {
+                adv.Counters.Remove("burning-heart-round");
+                adv.ActiveAbilities.Remove("burning-heart");
+                adv.Cooldown2.Add(new CooldownCard { CardId = "burning-heart", FaceUp = false });
+                Log("adversary", "no Investigator gained Charge or Stamina this round: " +
+                                 "Burning Heart goes face-down into Cooldown 2");
             }
         }
 

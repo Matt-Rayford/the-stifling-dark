@@ -35,15 +35,20 @@ namespace StiflingDark.Engine.Core
     /// "no Investigator has taken their turn yet" already identifies that moment. (A
     /// mid-round <see cref="FromState"/> resume skips that round's re-application.)
     ///
-    /// Enforcement: an Event whose text has to be enforced somewhere the card-effect hooks
-    /// do not reach (mostly inside Game.cs's own action methods) still records its modifier,
-    /// and additionally logs a "todo" naming the method that has to read it. Everything the
-    /// hooks *can* enforce is enforced for real:
-    ///   EventsOnTurnStart        MP penalty (Rainy, Updraft).
-    ///   EventsOnMoveStep         Move Stamina cost (Firestorm).
-    ///   EventsOnFlashlightPlaced Charge surcharge (Foggy) and the line-of-sight limits
-    ///                            (Misty, Hazy, Downpour).
-    ///   EventsOnRoundEnd         expiry of an unresolved Adversary choice.
+    /// Enforcement: every card below is enforced for real. The modifier keys are the contract
+    /// between this file and the enforcement site, which is either one of this file's own
+    /// hooks or — for the clauses that bite inside a core action — the action itself in
+    /// Game.cs, which reads the key directly:
+    ///   EventsOnTurnStart          MP penalty (Rainy, Updraft).
+    ///   EventsOnMoveStep           Move Stamina cost (Firestorm).
+    ///   EventsTrimFlashlightBright the line-of-sight limits (Misty, Hazy, Downpour).
+    ///   EventsCollectActionBlockers the forbidden Actions (Muddy, Interference).
+    ///   EventsOnRoundEnd           expiry of an unresolved Adversary choice.
+    ///   Game.PlaceFlashlight       the Charge surcharge, validated and spent up front (Foggy).
+    ///   Game.Sprint                the Stamina surcharge and the D6 Wound (Squall, Severe
+    ///                              Heat, Pyrocumulus).
+    ///   Game.LoseStamina           the shifted Wound icons on a Sprint (Cold Front).
+    ///   Game.EndTurn               the blocked Rest Stamina (Heavy Winds, Heavy Smoke, Tornado).
     ///
     /// Player/Adversary choices (Fallen Tree, Flare-Up, Roll Vortex, and Fire Tornado's 4-6
     /// branch) latch <see cref="EventChoicePending"/> and are answered by
@@ -57,40 +62,40 @@ namespace StiflingDark.Engine.Core
         /// Enforced in <see cref="EventsOnTurnStart"/>. (Rainy, Updraft)</summary>
         public const string MpPenaltyKey = "mp-penalty";
 
-        /// <summary>Extra Stamina every Sprint costs. Read site owed by Game.Sprint. (Squall, Severe Heat)</summary>
+        /// <summary>Extra Stamina every Sprint costs. Spent by Game.Sprint. (Squall, Severe Heat)</summary>
         public const string SprintStaminaSurchargeKey = "sprint-stamina-surcharge";
 
         /// <summary>Sprinting trips the Stamina track's Wound icons this many spaces early.
-        /// Read site owed by Game.Sprint/Game.LoseStamina. (Cold Front)</summary>
+        /// Applied by Game.LoseStamina for Sprint-origin losses. (Cold Front)</summary>
         public const string SprintWoundIconShiftKey = "sprint-wound-icon-shift";
 
         /// <summary>D6 result at or above which a Sprint costs a face-down Wound; 0 = no roll.
-        /// Read site owed by Game.Sprint. (Pyrocumulus)</summary>
+        /// Rolled by Game.Sprint. (Pyrocumulus)</summary>
         public const string SprintD6WoundThresholdKey = "sprint-d6-wound-threshold";
 
-        /// <summary>Extra Charge a Flashlight placement costs. Deducted in
-        /// <see cref="EventsOnFlashlightPlaced"/>; the up-front affordability check is owed by
-        /// Game.PlaceFlashlight. (Foggy; the Butcher's Decay wants the same key.)</summary>
+        /// <summary>Extra Charge a Flashlight placement costs. Validated and spent up front by
+        /// Game.PlaceFlashlight, so a placement nobody can afford is refused rather than
+        /// half-applied. (Foggy; the Butcher's Decay adds to the same key.)</summary>
         public const string FlashlightChargeSurchargeKey = "flashlight-charge-surcharge";
 
         /// <summary>Maximum distance, in spaces, at which a Flashlight grants line of sight;
-        /// 0 = unlimited. Enforced in <see cref="EventsOnFlashlightPlaced"/>. (Misty)</summary>
+        /// 0 = unlimited. Enforced in <see cref="EventsTrimFlashlightBright"/>. (Misty)</summary>
         public const string FlashlightLosRangeKey = "flashlight-los-range";
 
         /// <summary>Set: only the Flashlight's single center line grants line of sight.
-        /// Enforced in <see cref="EventsOnFlashlightPlaced"/>. (Hazy, Downpour)</summary>
+        /// Enforced in <see cref="EventsTrimFlashlightBright"/>. (Hazy, Downpour)</summary>
         public const string FlashlightCenterLineOnlyKey = "flashlight-center-line-only";
 
-        /// <summary>Set: Point of Interest tokens may not be picked up. Read site owed by
-        /// Game.PickUpPoiToken. (Muddy)</summary>
+        /// <summary>Set: Point of Interest tokens may not be picked up. Enforced through the
+        /// per-action gate in <see cref="EventsCollectActionBlockers"/>. (Muddy)</summary>
         public const string PoiPickupForbiddenKey = "poi-pickup-forbidden";
 
-        /// <summary>Set: the Charge Final Action is unavailable. Read site owed by
-        /// Game.ChargeFlashlight. (Interference)</summary>
+        /// <summary>Set: the Charge Final Action is unavailable. Enforced through the per-action
+        /// gate in <see cref="EventsCollectActionBlockers"/>. (Interference)</summary>
         public const string ChargeActionForbiddenKey = "charge-action-forbidden";
 
-        /// <summary>Set: no Stamina is gained as part of a Final Action, Rest included. Read
-        /// site owed by Game.EndTurn. (Heavy Winds, Heavy Smoke, Tornado)</summary>
+        /// <summary>Set: no Stamina is gained as part of a Final Action, Rest included. Enforced
+        /// by Game.EndTurn. (Heavy Winds, Heavy Smoke, Tornado)</summary>
         public const string NoRestStaminaKey = "no-rest-stamina";
 
         /// <summary>Stamina the first Move step of a turn costs. Enforced in
@@ -185,19 +190,23 @@ namespace StiflingDark.Engine.Core
             Log("event", $"firestorm: {inv.DefId} pays {cost} Stamina to Move this turn");
         }
 
-        partial void EventsOnFlashlightPlaced(InvestigatorState inv)
+        partial void EventsCollectActionBlockers(InvestigatorState inv, string actionKey, List<string> blockers)
         {
-            int surcharge = RoundModifier(FlashlightChargeSurchargeKey);
-            if (surcharge > 0)
+            switch (actionKey)
             {
-                int paid = Math.Min(surcharge, inv.Charge);
-                inv.Charge -= paid;
-                Log("event", $"{inv.DefId} pays {paid} extra Charge for the Flashlight");
-                Log("todo", "the extra Charge is taken after the fact; refusing a placement the Investigator " +
-                            "cannot afford needs the surcharge read in Game.PlaceFlashlight (Game.cs), which has " +
-                            $"no card hook before it spends Charge (RoundModifiers[\"{FlashlightChargeSurchargeKey}\"]).");
+                case ActionPickUpPoi:
+                    if (HasRoundModifier(PoiPickupForbiddenKey))
+                    {
+                        blockers.Add($"{State.CurrentEvent}: Point of Interest tokens may not be picked up this round");
+                    }
+                    break;
+                case ActionCharge:
+                    if (HasRoundModifier(ChargeActionForbiddenKey))
+                    {
+                        blockers.Add($"{State.CurrentEvent}: the Charge Final Action is unavailable this round");
+                    }
+                    break;
             }
-            TrimFlashlightLineOfSight(inv);
         }
 
         partial void EventsOnRoundEnd()
@@ -223,8 +232,7 @@ namespace StiflingDark.Engine.Core
                 // ----- Amusement Park, minor -----
                 case "cold-front":
                     SetRoundModifier(SprintWoundIconShiftKey, 1);
-                    LogUnenforced(id, "Game.Sprint/Game.LoseStamina", SprintWoundIconShiftKey,
-                        "Sprinting must trip the Stamina track's Wound icons 1 space early");
+                    Log("event", $"{id}: Sprinting trips the Stamina track's Wound icons 1 space early this round");
                     break;
                 case "foggy":
                     SetRoundModifier(FlashlightChargeSurchargeKey, 1);
@@ -232,8 +240,7 @@ namespace StiflingDark.Engine.Core
                     break;
                 case "muddy":
                     SetRoundModifier(PoiPickupForbiddenKey, 1);
-                    LogUnenforced(id, "Game.PickUpPoiToken", PoiPickupForbiddenKey,
-                        "Point of Interest tokens may not be picked up this round");
+                    Log("event", $"{id}: Point of Interest tokens may not be picked up this round");
                     break;
                 case "rainy":
                 case "updraft":
@@ -243,21 +250,18 @@ namespace StiflingDark.Engine.Core
                 case "squall":
                 case "severe-heat":
                     SetRoundModifier(SprintStaminaSurchargeKey, 1);
-                    LogUnenforced(id, "Game.Sprint", SprintStaminaSurchargeKey,
-                        "Sprinting costs 1 extra Stamina this round");
+                    Log("event", $"{id}: Sprinting costs 1 extra Stamina this round");
                     break;
 
                 // ----- Amusement Park, moderate -----
                 case "heavy-winds":
                 case "heavy-smoke":
                     SetRoundModifier(NoRestStaminaKey, 1);
-                    LogUnenforced(id, "Game.EndTurn", NoRestStaminaKey,
-                        "no Stamina may be gained as part of a Final Action this round, Rest included");
+                    Log("event", $"{id}: no Stamina may be gained as part of a Final Action this round, Rest included");
                     break;
                 case "interference":
                     SetRoundModifier(ChargeActionForbiddenKey, 1);
-                    LogUnenforced(id, "Game.ChargeFlashlight", ChargeActionForbiddenKey,
-                        "the Charge Final Action is unavailable this round");
+                    Log("event", $"{id}: the Charge Final Action is unavailable this round");
                     break;
                 case "misty":
                     SetRoundModifier(FlashlightLosRangeKey, 3);
@@ -288,8 +292,7 @@ namespace StiflingDark.Engine.Core
                 // ----- Sawmill, moderate -----
                 case "pyrocumulus":
                     SetRoundModifier(SprintD6WoundThresholdKey, 4);
-                    LogUnenforced(id, "Game.Sprint", SprintD6WoundThresholdKey,
-                        "an Investigator who Sprints must roll a D6 and take a face-down Wound on a 4+");
+                    Log("event", $"{id}: an Investigator who Sprints must roll a D6 and take a face-down Wound on a 4+");
                     break;
                 case "roll-vortex":
                     BeginEventChoice(id, "a Zone, up to 2 Destroyed Doors and 1 Open Window in it");
@@ -316,14 +319,6 @@ namespace StiflingDark.Engine.Core
             }
         }
 
-        /// <summary>Record an Event whose text can only be enforced inside a Game.cs action.</summary>
-        private void LogUnenforced(string id, string site, string modifierKey, string what)
-        {
-            Log("event", $"{id}: {what}");
-            Log("todo", $"{id}: {what} — {site} has to read RoundModifiers[\"{modifierKey}\"]; " +
-                        "it lives in Game.cs and exposes no card hook at that point.");
-        }
-
         // ---------- Persistent Majors ----------
 
         private void MarkPersistentMajor(string id)
@@ -348,8 +343,7 @@ namespace StiflingDark.Engine.Core
                         break;
                     case "tornado":
                         SetRoundModifier(NoRestStaminaKey, 1);
-                        LogUnenforced(id, "Game.EndTurn", NoRestStaminaKey,
-                            "no Stamina may be gained as part of a Final Action, Rest included");
+                        Log("event", $"{id}: no Stamina may be gained as part of a Final Action, Rest included");
                         break;
                     case "firestorm":
                         SetRoundModifier(MoveStaminaCostKey, 1);
@@ -684,70 +678,21 @@ namespace StiflingDark.Engine.Core
         // ---------- Flashlight line-of-sight limits ----------
 
         /// <summary>
-        /// Apply Misty's 3-space range and Hazy/Downpour's center-line-only restriction to
-        /// the placement that was just made, trimming both the placement's own Bright list
-        /// and the board overlay.
-        ///
-        /// "Center line" is the digital reading of the printed template's middle sight line:
-        /// the ray from the Investigator along the placement angle, keeping the spaces whose
-        /// circle that ray passes through. The Investigator's own space always stays lit.
+        /// Misty's 3-space range and Hazy/Downpour's center-line-only restriction, applied to
+        /// the Bright set before the placement is recorded — so a space outside the reduced
+        /// beam is never lit and never Reveals what stands on it.
         /// </summary>
-        private void TrimFlashlightLineOfSight(InvestigatorState inv)
+        partial void EventsTrimFlashlightBright(InvestigatorState inv, double angleRadians, HashSet<string> bright)
         {
-            int range = RoundModifier(FlashlightLosRangeKey);
-            bool centerOnly = HasRoundModifier(FlashlightCenterLineOnlyKey);
-            if (range <= 0 && !centerOnly)
+            int dropped = TrimBrightToRange(inv.Space, bright, RoundModifier(FlashlightLosRangeKey));
+            if (HasRoundModifier(FlashlightCenterLineOnlyKey))
             {
-                return;
+                dropped += TrimBrightToCenterLines(inv.Space, angleRadians, bright, lines: 1);
             }
-            var placement = State.Flashlights.LastOrDefault(f => f.InvestigatorId == inv.DefId);
-            if (placement == null)
+            if (dropped > 0)
             {
-                return;
+                Log("event", $"{dropped} space(s) fall outside {inv.DefId}'s reduced Flashlight line of sight");
             }
-            var within = range > 0
-                ? Graph.DistancesFrom(placement.Space, range, State.Overlay)
-                : null;
-            var origin = Graph.Space(placement.Space);
-            double fx = Math.Cos(placement.AngleRadians);
-            double fy = Math.Sin(placement.AngleRadians);
-            double radius = Graph.Def.SpaceRadius;
-
-            var kept = new List<string>();
-            foreach (string spaceId in placement.BrightSpaces)
-            {
-                if (spaceId == placement.Space)
-                {
-                    kept.Add(spaceId);
-                    continue;
-                }
-                if (within != null && !within.ContainsKey(spaceId))
-                {
-                    continue;
-                }
-                if (centerOnly)
-                {
-                    var space = Graph.Space(spaceId);
-                    double dx = space.X - origin.X;
-                    double dy = space.Y - origin.Y;
-                    if (dx * fx + dy * fy < 0 || Math.Abs(dx * -fy + dy * fx) > radius)
-                    {
-                        continue;
-                    }
-                }
-                kept.Add(spaceId);
-            }
-            if (kept.Count == placement.BrightSpaces.Count)
-            {
-                return;
-            }
-            Log("event", $"{placement.BrightSpaces.Count - kept.Count} space(s) fall outside " +
-                         $"{inv.DefId}'s reduced Flashlight line of sight");
-            placement.BrightSpaces = kept;
-            RecomputeBrightSpaces();
-            Log("todo", "the line-of-sight limit is applied after the placement, so anything the full beam " +
-                        "already Revealed stays Revealed; the limit belongs inside FlashlightBeam.ComputeBright / " +
-                        "Game.PreviewFlashlight (Game.cs), which take no card modifiers.");
         }
 
         // ---------- Shared helpers ----------

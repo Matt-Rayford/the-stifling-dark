@@ -9,15 +9,21 @@ namespace StiflingDark.Engine.Core
     /// deck effects, hung on the WoundsOn*/ConditionsOn* sub-hooks declared in
     /// Game.EffectDispatch.cs.
     ///
-    /// A number of printed clauses reference systems the engine does not implement yet
-    /// (Obstruction tokens, a Major/Minor Ability action, an Item "use" action, per-action
-    /// gating hooks for Sprint/Trade/Doors/Final Actions, an origin tag on GainWound, an
-    /// Adversary-turn-start hook, ...). Those are logged with Log("todo", ...) rather than
-    /// silently skipped or approximated into something the card doesn't say. Where an
-    /// existing hook lets a *reasonable* approximation stand in for a clause the engine
-    /// cannot enforce exactly (e.g. a flat MP reduction for "-N footprint when Moving",
-    /// since MoveStep has no per-step interception point), the approximation is used and
-    /// called out in a comment.
+    /// Most printed clauses now have a real enforcement point: the per-action gate
+    /// (<see cref="CollectActionBlockers"/>) carries every "you may not X" Wound and
+    /// Condition, <see cref="ModifySprintRoll"/> carries Torn Ligament and Paranoid,
+    /// <see cref="OnWoundGained"/>'s origin tag carries Punctured Lung and Mauled,
+    /// <see cref="TrimFlashlightBright"/> carries Tunnel Vision and Bufotoxin, and
+    /// <see cref="OnAdversaryTurnStart"/> plus <see cref="ConditionsOnRoundEnd"/> carry
+    /// Possessed and Neurotoxin.
+    ///
+    /// What is left references systems the engine genuinely does not have (Obstruction
+    /// tokens, a Major/Minor Ability action, Map Hazards). Those are logged with
+    /// Log("todo", ...) rather than silently skipped or approximated into something the card
+    /// doesn't say. Where an existing hook lets a *reasonable* approximation stand in for a
+    /// clause the engine cannot enforce exactly (e.g. a flat MP reduction for "-N footprint
+    /// when Moving", since MoveStep has no per-step interception point), the approximation is
+    /// used and called out in a comment.
     /// </summary>
     public sealed partial class Game
     {
@@ -34,8 +40,12 @@ namespace StiflingDark.Engine.Core
             }
         }
 
+        /// <summary>True when a face-up copy of that Wound card is in effect on this
+        /// Investigator. Neurotoxin's Wounds sit outside the Wound slots but the card is
+        /// explicit that "you suffer the effects", so they count here too.</summary>
         private static bool FaceUpWound(InvestigatorState inv, string cardId) =>
-            inv.Wounds.Any(w => w.FaceUp && w.CardId == cardId);
+            inv.Wounds.Any(w => w.FaceUp && w.CardId == cardId) ||
+            inv.NonSlotWounds.Any(w => w.FaceUp && w.CardId == cardId);
 
         // ---------- Condition grant with the printed duplicate-substitution rider ----------
 
@@ -135,64 +145,33 @@ namespace StiflingDark.Engine.Core
                     Log("todo", "collapsed-lung: Obstruction tokens and a capped max-Stamina are not modeled");
                     break;
 
-                case "claustrophobia":
-                    Log("todo", "claustrophobia: LockDoor/OpenDoor have no per-investigator gating hook");
-                    break;
-
                 case "dislocated-hip":
-                    Log("todo", "dislocated-hip: MoveStep has no validation hook to block travel through Map Hazards");
+                    Log("todo", "dislocated-hip: Map Hazards are not modeled at all (no space or edge carries " +
+                                "one), so there is nothing for the 'move' action gate to refuse travel through");
                     break;
 
                 case "disoriented":
                     Log("todo", "disoriented: no Major/Minor Ability action exists yet to restrict");
                     break;
 
-                case "drain":
-                    Log("todo", "drain: ChargeFlashlight has no per-investigator gating hook");
-                    break;
-
-                case "ergophobia":
-                    Log("todo", "ergophobia: TakeInvolvedAction has no per-investigator gating hook");
-                    break;
-
-                case "hemorrhage":
-                    Log("todo", "hemorrhage: nothing intercepts other Wounds being flipped face-down " +
-                                "(e.g. Adversary cards set WoundInstance.FaceUp directly) to block it");
-                    break;
-
-                case "mangled-hands":
-                    Log("todo", "mangled-hands: no Item/Cursed Item 'use' action exists yet to restrict");
-                    break;
-
-                case "mistrust":
-                    Log("todo", "mistrust: TradeItem/TradeEvidence/PickUpPoiToken have no per-investigator gating hook");
-                    break;
-
-                case "nyctophilia":
-                    Log("todo", "nyctophilia: PlaceFlashlight has no per-investigator gating hook");
-                    break;
-
                 case "nyctophobia":
-                    Log("todo", "nyctophobia: MoveStep validates and commits the move before WoundsOnMoveStep " +
-                                "fires, too late to block a Bright/Dim-to-Dark move");
+                    Log("todo", "nyctophobia: the 'move' action gate is asked before the destination is known, " +
+                                "so a Bright/Dim-to-Dark step cannot be singled out; the gate would need the " +
+                                "destination space alongside the action key");
                     break;
 
-                case "punctured-lung":
-                    Log("todo", "punctured-lung: GainWound has no origin tag distinguishing Sprint-caused Wounds");
-                    break;
-
-                case "torn-ligament":
-                    Log("todo", "torn-ligament: Sprint has no hook to subtract 1 from the rolled die");
-                    break;
-
-                case "tunnel-vision":
-                    Log("todo", "tunnel-vision: Wounds have no OnFlashlightPlaced hook (only Conditions/Items/" +
-                                "Events do), so Flashlight line-of-sight cannot be restricted");
-                    break;
-
-                // breathless, dying-battery, panic, fractured-foot, pulled-hammy, slipped-disc:
-                // no "receive or flip face-up" text - they are ongoing, handled in the turn hooks below.
-                // commiserate: a discretionary discard action - see the public Commiserate() helper above.
+                // The remaining Wounds have no immediate "receive or flip face-up" text; their
+                // printed restrictions are enforced where they actually bite:
+                //   claustrophobia, drain, ergophobia, mistrust, nyctophilia, mangled-hands
+                //       -> WoundsCollectActionBlockers (the per-action gate).
+                //   torn-ligament                -> WoundsModifySprintRoll.
+                //   punctured-lung               -> WoundsOnWoundGained (the "sprint" origin tag).
+                //   tunnel-vision                -> WoundsTrimFlashlightBright.
+                //   hemorrhage                   -> FlipWoundFaceDown (Game.ItemEffects.cs), the single
+                //                                   funnel every Wound flip-down goes through.
+                //   breathless, dying-battery, panic, fractured-foot, pulled-hammy, slipped-disc
+                //       -> the turn hooks below.
+                //   commiserate                  -> the public Commiserate() helper above.
             }
         }
 
@@ -263,13 +242,6 @@ namespace StiflingDark.Engine.Core
 
         partial void ConditionsOnTurnStart(InvestigatorState inv)
         {
-            if (HasCondition(inv, "bufotoxin"))
-            {
-                LogTodoOnce($"bufotoxin:{inv.DefId}",
-                    "bufotoxin: Conditions have no face-down/face-up state, and there is no Adversary-turn " +
-                    "hook to flip this card and apply its next-round Flashlight line-of-sight restriction");
-            }
-
             if (HasCondition(inv, "choking-fear"))
             {
                 // "On your next turn ... your footprint is reduced by 1." Approximated the
@@ -279,33 +251,17 @@ namespace StiflingDark.Engine.Core
                 // "your next turn").
                 inv.MpRemaining = Math.Max(0, inv.MpRemaining - 1);
                 Log("condition", $"{inv.DefId}'s Choking Fear reduces this turn's MP by 1");
-                LogTodoOnce($"choking-fear-sprint:{inv.DefId}", "choking-fear: Sprint has no gating hook to forbid it");
             }
 
-            if (HasCondition(inv, "darkness"))
-            {
-                LogTodoOnce($"darkness:{inv.DefId}",
-                    "darkness: PlaceFlashlight has no per-investigator gating hook to forbid using the Flashlight");
-            }
-
-            if (HasCondition(inv, "gear-jam"))
-            {
-                LogTodoOnce($"gear-jam:{inv.DefId}",
-                    "gear-jam: ChargeFlashlight has no per-investigator gating hook to require spending a Stamina");
-            }
-
-            if (HasCondition(inv, "mauled"))
-            {
-                LogTodoOnce($"mauled:{inv.DefId}",
-                    "mauled: GainWound has no origin tag distinguishing Adversary-inflicted Wounds, so the " +
-                    "additional face-down Wound cannot be triggered");
-            }
-
+            // "At the start of each of your turns, place a face-up Wound below this card. You
+            // suffer the effects of the Wound, but it does not take up a Wound slot."
             if (HasCondition(inv, "neurotoxin"))
             {
-                LogTodoOnce($"neurotoxin:{inv.DefId}",
-                    "neurotoxin: there is no non-Wound-slot Wound pool on InvestigatorState and no " +
-                    "ConditionsOnRoundEnd hook, so the below-this-card Wounds and their 2-Wound discard cannot be modeled");
+                var wound = new WoundInstance { CardId = Draw(State.WoundDeck, "wound"), FaceUp = true };
+                inv.NonSlotWounds.Add(wound);
+                Log("condition",
+                    $"{inv.DefId}'s Neurotoxin puts {wound.CardId} below the card ({inv.NonSlotWounds.Count}/2)");
+                ResolveWoundFaceUp(inv, wound);
             }
 
             if (HasCondition(inv, "paranoid"))
@@ -316,21 +272,15 @@ namespace StiflingDark.Engine.Core
                 if (roll <= 2)
                 {
                     inv.MpRemaining /= 2;
+                    // "Halve your footprint (including Sprint) this round": the latch lets
+                    // ConditionsModifySprintRoll halve a Sprint rolled later in the turn too.
+                    SetRoundModifier(ParanoidHalvedPrefix + inv.DefId, 1);
                     Log("condition", $"{inv.DefId}'s Paranoid halves this turn's MP");
-                    LogTodoOnce($"paranoid-sprint:{inv.DefId}",
-                        "paranoid: Sprint has no hook to also halve a Sprint roll gained later this round");
                 }
                 else if (roll >= 5)
                 {
                     DiscardCondition(inv, "paranoid");
                 }
-            }
-
-            if (HasCondition(inv, "possessed"))
-            {
-                LogTodoOnce($"possessed:{inv.DefId}",
-                    "possessed: there is no Adversary-turn-start hook to let the Adversary move this " +
-                    "Investigator and Bloodlet with them");
             }
         }
 
@@ -338,10 +288,19 @@ namespace StiflingDark.Engine.Core
         {
             if (HasCondition(inv, "bleeding"))
             {
+                // "At the end of each of your turns, gain 1 face-up Wound. Once you've gained 2
+                // face-up Wounds from this card, discard it." The per-card counter lives in the
+                // same serializable Adversary Counters bag Bufotoxin's face-up state uses.
+                string countKey = BleedingCountPrefix + inv.DefId;
                 GainWound(inv, faceUp: true);
-                Log("condition", $"{inv.DefId}'s Bleeding causes a face-up Wound");
-                LogTodoOnce($"bleeding-count:{inv.DefId}",
-                    "bleeding: no per-condition counter exists to discard this card once it has caused 2 Wounds");
+                int caused = (State.Adversary.Counters.TryGetValue(countKey, out int c) ? c : 0) + 1;
+                State.Adversary.Counters[countKey] = caused;
+                Log("condition", $"{inv.DefId}'s Bleeding causes a face-up Wound ({caused}/2)");
+                if (caused >= 2)
+                {
+                    State.Adversary.Counters.Remove(countKey);
+                    DiscardCondition(inv, "bleeding");
+                }
             }
 
             if (HasCondition(inv, "choking-fear"))
@@ -358,6 +317,15 @@ namespace StiflingDark.Engine.Core
 
             if (HasCondition(inv, "gear-jam"))
             {
+                // "You may not take the Charge Final Action unless you spend a Stamina." The
+                // gate refuses the Action outright when there is no Stamina to spend; the spend
+                // itself lands here, which fires immediately after ChargeFlashlight sets the
+                // Final Action and therefore still belongs to that same Action.
+                if (inv.FinalAction == FinalActionKind.Charge)
+                {
+                    SpendStamina(inv, 1);
+                    Log("condition", $"{inv.DefId} spends 1 Stamina to Charge through Gear Jam");
+                }
                 int roll = _rng.Roll(6);
                 SaveRng();
                 Log("condition", $"{inv.DefId} rolls {roll} for Gear Jam");
@@ -366,6 +334,289 @@ namespace StiflingDark.Engine.Core
                     DiscardCondition(inv, "gear-jam");
                 }
             }
+        }
+
+        partial void ConditionsOnRoundEnd()
+        {
+            foreach (var inv in State.Investigators)
+            {
+                // Neurotoxin: "If there are 2 face-up Wounds below this card at the end of the
+                // round, discard this Condition and both Wounds."
+                if (HasCondition(inv, "neurotoxin") && inv.NonSlotWounds.Count >= 2)
+                {
+                    inv.NonSlotWounds.Clear();
+                    DiscardCondition(inv, "neurotoxin");
+                    Log("condition", $"{inv.DefId}'s Neurotoxin runs its course; both Wounds below it are discarded");
+                }
+
+                // Bufotoxin: "Discard this Condition at the end of the next round" — the round
+                // after the Adversary flipped it face-up, whose Flashlights it restricted.
+                if (BufotoxinActiveRound(inv) == State.Round)
+                {
+                    State.Adversary.Counters.Remove(BufotoxinFaceUpPrefix + inv.DefId);
+                    DiscardCondition(inv, "bufotoxin");
+                }
+            }
+        }
+
+        // ---------- The per-action gate (Game.cs RequireActionAllowed) ----------
+
+        partial void WoundsCollectActionBlockers(InvestigatorState inv, string actionKey, List<string> blockers)
+        {
+            switch (actionKey)
+            {
+                case ActionLockDoor:
+                case ActionOpenDoor:
+                    if (FaceUpWound(inv, "claustrophobia"))
+                    {
+                        blockers.Add("Claustrophobia: you may not Lock or Open Doors");
+                    }
+                    break;
+                case ActionCharge:
+                    if (FaceUpWound(inv, "drain"))
+                    {
+                        blockers.Add("Drain: you may no longer take the Charge Final Action");
+                    }
+                    break;
+                case ActionInvolved:
+                    if (FaceUpWound(inv, "ergophobia"))
+                    {
+                        blockers.Add("Ergophobia: you may no longer take the Involved Action Final Action");
+                    }
+                    break;
+                case ActionTrade:
+                    if (FaceUpWound(inv, "mistrust"))
+                    {
+                        blockers.Add($"Mistrust: {inv.DefId} may not Trade or be Traded with");
+                    }
+                    break;
+                case ActionPickUpPoi:
+                    if (FaceUpWound(inv, "mistrust"))
+                    {
+                        blockers.Add("Mistrust: you may not pick up Point of Interest tokens");
+                    }
+                    break;
+                case ActionPlaceFlashlight:
+                    if (FaceUpWound(inv, "nyctophilia"))
+                    {
+                        blockers.Add("Nyctophilia: you may no longer take the Place Flashlight Final Action");
+                    }
+                    break;
+                case ActionUseItem:
+                    if (FaceUpWound(inv, "mangled-hands"))
+                    {
+                        blockers.Add("Mangled Hands: you may not use Item or Cursed Item cards");
+                    }
+                    break;
+            }
+        }
+
+        partial void ConditionsCollectActionBlockers(InvestigatorState inv, string actionKey, List<string> blockers)
+        {
+            switch (actionKey)
+            {
+                case ActionSprint:
+                    if (HasCondition(inv, "choking-fear"))
+                    {
+                        blockers.Add("Choking Fear: you may not Sprint this turn");
+                    }
+                    break;
+                case ActionPlaceFlashlight:
+                    if (HasCondition(inv, "darkness"))
+                    {
+                        blockers.Add("Darkness: you may not use your Flashlight this turn");
+                    }
+                    break;
+                case ActionCharge:
+                    // "...unless you spend a Stamina": with none to spend the Action is simply
+                    // unavailable. ConditionsOnTurnEnd does the spending.
+                    if (HasCondition(inv, "gear-jam") && inv.Stamina < 1)
+                    {
+                        blockers.Add("Gear Jam: Charging costs a Stamina and you have none");
+                    }
+                    break;
+            }
+        }
+
+        // ---------- Sprint roll adjustments (Game.cs Sprint) ----------
+
+        partial void WoundsModifySprintRoll(InvestigatorState inv, List<int> rollBox)
+        {
+            // "Subtract 1 from your Sprint roll, down to a minimum of 1." Game.Sprint applies
+            // the floor, so every card may simply subtract.
+            if (FaceUpWound(inv, "torn-ligament"))
+            {
+                rollBox[0] -= 1;
+                Log("wound", $"{inv.DefId}'s Torn Ligament subtracts 1 from the Sprint roll");
+            }
+        }
+
+        partial void ConditionsModifySprintRoll(InvestigatorState inv, List<int> rollBox)
+        {
+            if (HasRoundModifier(ParanoidHalvedPrefix + inv.DefId))
+            {
+                rollBox[0] /= 2;
+                Log("condition", $"{inv.DefId}'s Paranoid halves the Sprint roll too");
+            }
+        }
+
+        // ---------- Flashlight line-of-sight limits (Game.cs PlaceFlashlight) ----------
+
+        partial void WoundsTrimFlashlightBright(InvestigatorState inv, double angleRadians, HashSet<string> bright)
+        {
+            // "When you place your Flashlight, only the 3 center lines may be used for line of
+            // sight" — the middle sight line plus one to either side (see TrimBrightToCenterLines).
+            if (!FaceUpWound(inv, "tunnel-vision"))
+            {
+                return;
+            }
+            int dropped = TrimBrightToCenterLines(inv.Space, angleRadians, bright, lines: 3);
+            if (dropped > 0)
+            {
+                Log("wound", $"{inv.DefId}'s Tunnel Vision drops {dropped} space(s) outside the 3 center lines");
+            }
+        }
+
+        partial void ConditionsTrimFlashlightBright(InvestigatorState inv, double angleRadians, HashSet<string> bright)
+        {
+            // Bufotoxin, once the Adversary has flipped it face-up: "Next round, you can only
+            // use the center line of your Flashlight for line of sight."
+            if (BufotoxinActiveRound(inv) != State.Round)
+            {
+                return;
+            }
+            int dropped = TrimBrightToCenterLines(inv.Space, angleRadians, bright, lines: 1);
+            if (dropped > 0)
+            {
+                Log("condition", $"{inv.DefId}'s Bufotoxin drops {dropped} space(s) outside the center line");
+            }
+        }
+
+        // ---------- Wound origin reactions (Game.cs GainWound) ----------
+
+        partial void WoundsOnWoundGained(InvestigatorState inv, WoundInstance wound, string origin)
+        {
+            // "Face-down Wounds gained from Sprinting are now face-up."
+            if (origin == WoundFromSprint && !wound.FaceUp && FaceUpWound(inv, "punctured-lung"))
+            {
+                wound.FaceUp = true;
+                Log("wound", $"{inv.DefId}'s Punctured Lung turns the Sprint Wound face-up");
+            }
+        }
+
+        partial void ConditionsOnWoundGained(InvestigatorState inv, WoundInstance wound, string origin)
+        {
+            // Mauled: "Each time you gain 1 or more Wounds from the Adversary, gain 1
+            // additional face-down Wound." The extra Wound is untagged, so it cannot cascade.
+            if (origin != WoundFromAdversary || !HasCondition(inv, "mauled"))
+            {
+                return;
+            }
+            Log("condition", $"{inv.DefId}'s Mauled adds an extra face-down Wound");
+            GainWound(inv, faceUp: false);
+        }
+
+        // ---------- Adversary-turn window (Game.Adversary.cs EnsureAdversaryTurnStarted) ----------
+
+        /// <summary>Adversary Counters key prefix + Investigator def id: the round on which the
+        /// Adversary flipped that Investigator's Bufotoxin face-up. Conditions carry no
+        /// face-up state of their own, and this is the one serializable per-card bag the
+        /// Adversary side already owns.</summary>
+        private const string BufotoxinFaceUpPrefix = "bufotoxin-face-up:";
+
+        /// <summary>Adversary Counters key prefix + Investigator def id: how many face-up Wounds
+        /// their Bleeding has caused so far (it is discarded at 2).</summary>
+        private const string BleedingCountPrefix = "bleeding-count:";
+
+        /// <summary>Round-modifier prefix + Investigator def id: Paranoid rolled 1-2 for them
+        /// this round, so a Sprint rolled later is halved as well.</summary>
+        private const string ParanoidHalvedPrefix = "paranoid-halved:";
+
+        /// <summary>The round in which a flipped Bufotoxin restricts that Investigator's
+        /// Flashlight ("next round"), or 0 when the card is face-down or absent.</summary>
+        private int BufotoxinActiveRound(InvestigatorState inv) =>
+            HasCondition(inv, "bufotoxin") &&
+            State.Adversary.Counters.TryGetValue(BufotoxinFaceUpPrefix + inv.DefId, out int flipped)
+                ? flipped + 1
+                : 0;
+
+        partial void ConditionsOnAdversaryTurnStart()
+        {
+            foreach (var inv in State.Investigators.Where(i => !i.Dead && !i.Escaped))
+            {
+                if (HasCondition(inv, "bufotoxin") &&
+                    !State.Adversary.Counters.ContainsKey(BufotoxinFaceUpPrefix + inv.DefId))
+                {
+                    Log("condition", $"the Adversary may flip {inv.DefId}'s Bufotoxin face-up (FlipBufotoxinFaceUp)");
+                }
+                if (HasCondition(inv, "possessed"))
+                {
+                    Log("condition", $"the Adversary may use {inv.DefId}'s Possessed this turn (UsePossessed)");
+                }
+            }
+        }
+
+        /// <summary>
+        /// Bufotoxin: "The Adversary may flip it face-up on any of their turns." Doing so
+        /// restricts that Investigator's Flashlight to its center line for the whole of the
+        /// following round, after which the Condition is discarded
+        /// (<see cref="ConditionsOnRoundEnd"/>).
+        /// </summary>
+        public void FlipBufotoxinFaceUp(string investigatorId)
+        {
+            RequirePhase(GamePhase.AdversaryTurn);
+            var inv = Investigator(investigatorId);
+            if (!HasCondition(inv, "bufotoxin"))
+            {
+                throw new InvalidOperationException($"{investigatorId} does not have the Bufotoxin Condition.");
+            }
+            if (State.Adversary.Counters.ContainsKey(BufotoxinFaceUpPrefix + inv.DefId))
+            {
+                throw new InvalidOperationException($"{investigatorId}'s Bufotoxin is already face-up.");
+            }
+            State.Adversary.Counters[BufotoxinFaceUpPrefix + inv.DefId] = State.Round;
+            Log("condition", $"{inv.DefId}'s Bufotoxin is face-up: center line only in round {State.Round + 1}");
+        }
+
+        /// <summary>
+        /// Possessed: "At the start of any Adversary turn, the Adversary may move you up to 4
+        /// spaces and take the Bloodletting Action with you, discarding this Condition
+        /// afterwards." The move is validated and applied here, then the ordinary
+        /// <see cref="Bloodletting"/> Action runs with the named Cultist (so its own
+        /// restrictions — round 1, Revealed, adjacency, the per-turn limit — all still apply,
+        /// against the Investigator's new space).
+        /// </summary>
+        public void UsePossessed(string cultistId, string investigatorId, string destinationSpace)
+        {
+            EnsureAdversaryTurnStarted();
+            var inv = Investigator(investigatorId);
+            if (!HasCondition(inv, "possessed"))
+            {
+                throw new InvalidOperationException($"{investigatorId} does not have the Possessed Condition.");
+            }
+            if (inv.Dead || inv.Escaped)
+            {
+                throw new InvalidOperationException($"{investigatorId} is not on the board.");
+            }
+            if (destinationSpace != inv.Space &&
+                !Graph.DistancesFrom(inv.Space, 4, State.Overlay).ContainsKey(destinationSpace))
+            {
+                throw new InvalidOperationException($"Possessed moves an Investigator up to 4 spaces; '{destinationSpace}' is further.");
+            }
+            if (State.Investigators.Any(o => o != inv && !o.Dead && !o.Escaped && o.Space == destinationSpace))
+            {
+                throw new InvalidOperationException($"'{destinationSpace}' is occupied by another Investigator.");
+            }
+            string from = inv.Space;
+            inv.Space = destinationSpace;
+            RemoveFlashlightIfForcedMove(inv.DefId);
+            Log("condition", $"Possessed: the Adversary walks {inv.DefId} from {from} to {destinationSpace}");
+            Bloodletting(cultistId, investigatorId);
+            DiscardCondition(inv, "possessed");
+            LogTodoOnce($"possessed-immunity:{inv.DefId}",
+                "possessed: the trailing clause (once used, this Investigator cannot gain Wounds and cannot be " +
+                "the target of Bloodletting or Severed Ear for the rest of the Adversary's turn) is not enforced — " +
+                "GainWound and Bloodletting have no per-Investigator immunity latch to consult");
         }
     }
 }

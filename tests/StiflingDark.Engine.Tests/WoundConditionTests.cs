@@ -122,15 +122,26 @@ namespace StiflingDark.Engine.Tests
         }
 
         [Fact]
-        public void Claustrophobia_face_up_logs_a_todo_since_doors_have_no_gating_hook()
+        public void Claustrophobia_blocks_locking_and_opening_doors_while_face_up()
         {
             var game = NewSawmillGame();
             var aira = game.State.Investigators.First(i => i.DefId == "aira");
             game.State.WoundDeck.Insert(0, "claustrophobia");
-
             game.GainWound(aira, faceUp: true);
 
-            Assert.Contains(game.State.Log, e => e.Type == "todo" && e.Detail.Contains("claustrophobia"));
+            Assert.Contains("Claustrophobia", string.Join("|", game.ActionBlockers("aira", Game.ActionLockDoor)));
+            Assert.Contains("Claustrophobia", string.Join("|", game.ActionBlockers("aira", Game.ActionOpenDoor)));
+            // Everything else stays legal.
+            Assert.Empty(game.ActionBlockers("aira", Game.ActionSprint));
+
+            game.BeginInvestigatorTurn("aira");
+            aira.Space = "S-16";
+            var error = Assert.Throws<InvalidOperationException>(() => game.LockDoor("S-17"));
+            Assert.Contains("Claustrophobia", error.Message);
+
+            // Face-down again (a Medkit, Leather Jacket, ...) and the restriction lifts.
+            aira.Wounds[0].FaceUp = false;
+            Assert.Empty(game.ActionBlockers("aira", Game.ActionLockDoor));
         }
 
         [Fact]
@@ -384,7 +395,7 @@ namespace StiflingDark.Engine.Tests
         }
 
         [Fact]
-        public void Bleeding_grants_a_face_up_wound_at_the_end_of_every_turn_it_is_held()
+        public void Bleeding_grants_a_face_up_wound_each_turn_then_discards_itself_after_two()
         {
             var game = NewSawmillGame();
             var aira = game.State.Investigators.First(i => i.DefId == "aira");
@@ -395,8 +406,20 @@ namespace StiflingDark.Engine.Tests
 
             Assert.Single(aira.Wounds);
             Assert.True(aira.Wounds[0].FaceUp);
-            Assert.True(game.HasCondition(aira, "bleeding")); // no counter yet to auto-discard it (logged as a todo).
-            Assert.Contains(game.State.Log, e => e.Type == "todo" && e.Detail.Contains("bleeding"));
+            Assert.True(game.HasCondition(aira, "bleeding"));
+
+            // Second Wound from the same card: "once you've gained 2 from this card, discard it."
+            foreach (string inv in new[] { "lucy-belle", "mitchell", "vincent" })
+            {
+                game.BeginInvestigatorTurn(inv);
+                game.EndTurnWithoutFinalAction();
+            }
+            game.AdversaryEndTurn();
+            game.BeginInvestigatorTurn("aira");
+            game.EndTurnWithoutFinalAction();
+
+            Assert.Equal(2, aira.Wounds.Count);
+            Assert.False(game.HasCondition(aira, "bleeding"));
         }
 
         [Fact]
@@ -434,31 +457,77 @@ namespace StiflingDark.Engine.Tests
         }
 
         [Fact]
-        public void Bufotoxin_turn_start_logs_a_todo_for_its_missing_face_down_state()
+        public void Bufotoxin_starts_face_down_and_the_adversary_may_flip_it_on_their_turn()
         {
             var game = NewSawmillGame();
             var aira = game.State.Investigators.First(i => i.DefId == "aira");
             game.GrantConditionWithSubstitution(aira, "bufotoxin");
 
+            // Face-down: no restriction, and it may not be flipped outside an Adversary turn.
             game.BeginInvestigatorTurn("aira");
-
-            Assert.Contains(game.State.Log, e => e.Type == "todo" && e.Detail.Contains("bufotoxin"));
+            Assert.Throws<InvalidOperationException>(() => game.FlipBufotoxinFaceUp("aira"));
+            FinishRoundAfterAira(game); // round 2: the Adversary turn offered the flip on the way
+            Assert.Contains(game.State.Log, e => e.Type == "condition" && e.Detail.Contains("may flip"));
         }
 
         [Fact]
-        public void Mauled_turn_start_logs_a_todo_for_the_missing_wound_origin_tag()
+        public void A_flipped_bufotoxin_trims_next_rounds_flashlight_then_discards_itself()
+        {
+            var game = NewSawmillGame();
+            var aira = game.State.Investigators.First(i => i.DefId == "aira");
+            game.GrantConditionWithSubstitution(aira, "bufotoxin");
+            game.BeginInvestigatorTurn("aira");
+            FinishRoundAfterAira(game); // now in round 2 with the Adversary turn behind us
+
+            // Flip it during the round-2 Adversary turn, so round 3 is the restricted one.
+            foreach (string inv in new[] { "aira", "lucy-belle", "mitchell", "vincent" })
+            {
+                game.BeginInvestigatorTurn(inv);
+                game.EndTurnWithoutFinalAction();
+            }
+            game.FlipBufotoxinFaceUp("aira");
+            Assert.Throws<InvalidOperationException>(() => game.FlipBufotoxinFaceUp("aira"));
+            game.AdversaryEndTurn();
+
+            Assert.Equal(3, game.State.Round);
+            var unrestricted = game.PreviewFlashlight("aira", 0.0);
+            Assert.True(unrestricted.Count > 1);
+            game.BeginInvestigatorTurn("aira");
+            aira.Charge = 3;
+            game.PlaceFlashlight(0.0);
+            Assert.True(game.State.Flashlights.Single().BrightSpaces.Count < unrestricted.Count);
+            Assert.Contains(game.State.Log, e => e.Type == "condition" && e.Detail.Contains("center line"));
+
+            // "Discard this Condition at the end of the next round."
+            foreach (string inv in new[] { "lucy-belle", "mitchell", "vincent" })
+            {
+                game.BeginInvestigatorTurn(inv);
+                game.EndTurnWithoutFinalAction();
+            }
+            game.AdversaryEndTurn();
+            Assert.False(game.HasCondition(aira, "bufotoxin"));
+        }
+
+        [Fact]
+        public void Mauled_adds_one_extra_face_down_wound_to_adversary_wounds_only()
         {
             var game = NewSawmillGame();
             var aira = game.State.Investigators.First(i => i.DefId == "aira");
             game.GrantConditionWithSubstitution(aira, "mauled");
 
-            game.BeginInvestigatorTurn("aira");
+            // An untagged Wound (a card cost, an objective) is unaffected.
+            game.GainWound(aira, faceUp: false);
+            Assert.Single(aira.Wounds);
 
-            Assert.Contains(game.State.Log, e => e.Type == "todo" && e.Detail.Contains("mauled"));
+            // One from the Adversary brings a second, face-down, and cannot cascade further.
+            game.GainWound(aira, faceUp: true, origin: Game.WoundFromAdversary);
+            Assert.Equal(3, aira.Wounds.Count);
+            Assert.Equal(1, aira.Wounds.Count(w => w.FaceUp));
+            Assert.Contains(game.State.Log, e => e.Type == "condition" && e.Detail.Contains("Mauled adds"));
         }
 
         [Fact]
-        public void Neurotoxin_turn_start_logs_a_todo_for_the_missing_wound_pool_state()
+        public void Neurotoxin_parks_a_face_up_wound_outside_the_slots_each_turn()
         {
             var game = NewSawmillGame();
             var aira = game.State.Investigators.First(i => i.DefId == "aira");
@@ -466,19 +535,156 @@ namespace StiflingDark.Engine.Tests
 
             game.BeginInvestigatorTurn("aira");
 
-            Assert.Contains(game.State.Log, e => e.Type == "todo" && e.Detail.Contains("neurotoxin"));
+            Assert.Single(aira.NonSlotWounds);
+            Assert.True(aira.NonSlotWounds[0].FaceUp);
+            Assert.Empty(aira.Wounds); // it does not take up a Wound slot, so it cannot kill
         }
 
         [Fact]
-        public void Possessed_turn_start_logs_a_todo_for_the_missing_adversary_turn_hook()
+        public void Neurotoxin_discards_itself_and_both_wounds_once_two_are_below_it()
+        {
+            var game = NewSawmillGame();
+            var aira = game.State.Investigators.First(i => i.DefId == "aira");
+            game.GrantConditionWithSubstitution(aira, "neurotoxin");
+
+            game.BeginInvestigatorTurn("aira");
+            FinishRoundAfterAira(game);
+            Assert.Single(aira.NonSlotWounds); // 1 after round 1's end
+            Assert.True(game.HasCondition(aira, "neurotoxin"));
+
+            game.BeginInvestigatorTurn("aira");
+            Assert.Equal(2, aira.NonSlotWounds.Count);
+            FinishRoundAfterAira(game);
+
+            Assert.Empty(aira.NonSlotWounds);
+            Assert.False(game.HasCondition(aira, "neurotoxin"));
+        }
+
+        [Fact]
+        public void A_neurotoxin_wound_still_applies_its_ongoing_effect()
+        {
+            var game = NewSawmillGame();
+            var aira = game.State.Investigators.First(i => i.DefId == "aira");
+            int baseMp = TestData.Db.Investigator("aira").Mp;
+            game.GrantConditionWithSubstitution(aira, "neurotoxin");
+            game.State.WoundDeck.Insert(0, "fractured-foot");
+
+            game.BeginInvestigatorTurn("aira");
+
+            // WoundsOnTurnStart runs before ConditionsOnTurnStart, so the MP cut lands on the
+            // following turn; what this pins down is that the non-slot Wound counts as face-up.
+            Assert.Equal("fractured-foot", aira.NonSlotWounds[0].CardId);
+            FinishRoundAfterAira(game);
+            game.BeginInvestigatorTurn("aira");
+            Assert.Equal(baseMp - 1, aira.MpRemaining);
+        }
+
+        [Fact]
+        public void Possessed_is_offered_at_the_start_of_the_adversary_turn()
         {
             var game = NewSawmillGame();
             var aira = game.State.Investigators.First(i => i.DefId == "aira");
             game.GrantConditionWithSubstitution(aira, "possessed");
 
             game.BeginInvestigatorTurn("aira");
+            FinishRoundAfterAira(game);
 
-            Assert.Contains(game.State.Log, e => e.Type == "todo" && e.Detail.Contains("possessed"));
+            Assert.Contains(game.State.Log,
+                e => e.Type == "condition" && e.Detail.Contains("may use aira's Possessed"));
+        }
+
+        [Fact]
+        public void Torn_ligament_subtracts_one_from_the_sprint_roll_with_a_floor_of_one()
+        {
+            var game = NewSawmillGame();
+            var aira = game.State.Investigators.First(i => i.DefId == "aira");
+            aira.Wounds.Add(new WoundInstance { CardId = "torn-ligament", FaceUp = true });
+            int baseMp = TestData.Db.Investigator("aira").Mp;
+
+            game.BeginInvestigatorTurn("aira");
+            game.Sprint();
+
+            // The Sprint die is 2,2,3,3,3,4, so -1 lands in 1..3 and never below the floor.
+            Assert.InRange(aira.MpRemaining - baseMp, 1, 3);
+            Assert.Contains(game.State.Log, e => e.Type == "wound" && e.Detail.Contains("Torn Ligament"));
+        }
+
+        [Fact]
+        public void Punctured_lung_turns_sprint_wounds_face_up_but_leaves_other_wounds_alone()
+        {
+            var game = NewSawmillGame();
+            var aira = game.State.Investigators.First(i => i.DefId == "aira");
+            aira.Wounds.Add(new WoundInstance { CardId = "punctured-lung", FaceUp = true });
+
+            game.GainWound(aira, faceUp: false, origin: Game.WoundFromWindow);
+            Assert.False(aira.Wounds[1].FaceUp);
+
+            game.GainWound(aira, faceUp: false, origin: Game.WoundFromSprint);
+            Assert.True(aira.Wounds[2].FaceUp);
+            Assert.Contains(game.State.Log, e => e.Type == "wound" && e.Detail.Contains("Punctured Lung"));
+        }
+
+        [Fact]
+        public void Tunnel_vision_keeps_only_the_three_center_lines_of_the_flashlight()
+        {
+            var game = NewSawmillGame();
+            var aira = game.State.Investigators.First(i => i.DefId == "aira");
+            aira.Wounds.Add(new WoundInstance { CardId = "tunnel-vision", FaceUp = true });
+            var unrestricted = game.PreviewFlashlight("aira", 0.0);
+            Assert.True(unrestricted.Count > 1);
+
+            game.BeginInvestigatorTurn("aira");
+            game.PlaceFlashlight(0.0);
+
+            var placement = game.State.Flashlights.Single();
+            Assert.True(placement.BrightSpaces.Count < unrestricted.Count);
+            Assert.Contains(aira.Space, placement.BrightSpaces);
+            // Nothing outside the trimmed beam is lit, so nothing outside it was Revealed either.
+            Assert.Equal(placement.BrightSpaces.ToHashSet(), game.State.Overlay.BrightSpaces);
+        }
+
+        [Fact]
+        public void Drain_ergophobia_nyctophilia_and_mistrust_each_block_their_own_action()
+        {
+            var game = NewSawmillGame();
+            var aira = game.State.Investigators.First(i => i.DefId == "aira");
+            var lucy = game.State.Investigators.First(i => i.DefId == "lucy-belle");
+            aira.Wounds.Add(new WoundInstance { CardId = "drain", FaceUp = true });
+            aira.Wounds.Add(new WoundInstance { CardId = "ergophobia", FaceUp = true });
+            aira.Wounds.Add(new WoundInstance { CardId = "nyctophilia", FaceUp = true });
+            lucy.Wounds.Add(new WoundInstance { CardId = "mistrust", FaceUp = true });
+            aira.Space = "117";
+            lucy.Space = "S-17";
+            aira.Items.Add("energy-bar");
+
+            game.BeginInvestigatorTurn("aira");
+            Assert.Throws<InvalidOperationException>(() => game.ChargeFlashlight());
+            Assert.Throws<InvalidOperationException>(() => game.TakeInvolvedAction());
+            Assert.Throws<InvalidOperationException>(() => game.PlaceFlashlight(0.0));
+            // Mistrust is on the *other* side of the trade: "or be Traded with".
+            var error = Assert.Throws<InvalidOperationException>(() => game.TradeItem("lucy-belle", "energy-bar"));
+            Assert.Contains("Mistrust", error.Message);
+            Assert.Equal(FinalActionKind.None, aira.FinalAction);
+        }
+
+        [Fact]
+        public void Gear_jam_costs_a_stamina_to_charge_and_blocks_it_outright_at_zero()
+        {
+            var game = NewSawmillGame();
+            var aira = game.State.Investigators.First(i => i.DefId == "aira");
+            game.GrantConditionWithSubstitution(aira, "gear-jam");
+            aira.Charge = 1;
+
+            game.BeginInvestigatorTurn("aira");
+            int stamina = aira.Stamina;
+            game.ChargeFlashlight();
+            Assert.Equal(2, aira.Charge);
+            Assert.Equal(stamina - 1, aira.Stamina);
+
+            // With no Stamina left to spend the Action is simply unavailable.
+            game.GrantConditionWithSubstitution(aira, "gear-jam");
+            aira.Stamina = 0;
+            Assert.Contains("Gear Jam", string.Join("|", game.ActionBlockers("aira", Game.ActionCharge)));
         }
     }
 }

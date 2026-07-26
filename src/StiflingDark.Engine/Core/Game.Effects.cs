@@ -46,6 +46,112 @@ namespace StiflingDark.Engine.Core
         /// (Discharge, Fear, Fumble, Spasm).</summary>
         partial void ResolveWoundFaceUp(InvestigatorState inv, WoundInstance wound);
 
+        /// <summary>
+        /// Collect every reason this Investigator may not take <paramref name="actionKey"/>
+        /// (one of the Action* consts below) right now. Implementors append one
+        /// human-readable clause per blocking card; an empty list means the action is legal.
+        /// Called by <see cref="RequireActionAllowed"/> at the very top of each gated action,
+        /// before anything has been validated or mutated, so implementations must be free of
+        /// side effects — a blocked action must leave the state untouched.
+        /// </summary>
+        partial void CollectActionBlockers(InvestigatorState inv, string actionKey, List<string> blockers);
+
+        /// <summary>A Sprint die has just been rolled and the result may still be changed.
+        /// <paramref name="rollBox"/> is a single-element mutable cell holding the roll (Torn
+        /// Ligament's -1, Paranoid's halving, Lucky Dice's reroll).</summary>
+        partial void ModifySprintRoll(InvestigatorState inv, List<int> rollBox);
+
+        /// <summary>The Bright set a Flashlight placement is about to produce, still mutable
+        /// and not yet recorded: trim it here and nothing outside the reduced beam is ever
+        /// lit or Revealed (Misty's range limit, Hazy/Downpour/Tunnel Vision/Bufotoxin's
+        /// center-line limits).</summary>
+        partial void TrimFlashlightBright(InvestigatorState inv, double angleRadians, HashSet<string> bright);
+
+        /// <summary>A Wound card has been drawn for <paramref name="inv"/> and is about to
+        /// enter their Wound slots; <paramref name="origin"/> is one of the WoundFrom* consts.
+        /// Implementors may still flip <paramref name="wound"/> face-up (Punctured Lung) or
+        /// inflict further Wounds (Mauled).</summary>
+        partial void OnWoundGained(InvestigatorState inv, WoundInstance wound, string origin);
+
+        /// <summary>An Investigator has just died, before the Adversary's win condition is
+        /// checked. Implemented by Game.Spirits.cs, which offers the Spirit card when the kill
+        /// does not end the game (see <see cref="AdoptSpirit"/>).</summary>
+        partial void OnInvestigatorDeath(InvestigatorState inv);
+
+        /// <summary>Start of the Adversary turn, before the per-adversary Begin hooks run
+        /// (Possessed, Bufotoxin's flip window).</summary>
+        partial void OnAdversaryTurnStart();
+
+        /// <summary>End of the Adversary turn, before the cooldowns advance and before the
+        /// round ends — this round's Flashlights are still on the board here (Unblinking Eye,
+        /// Burning Heart's end condition, Shriveled Hand's follow-up).</summary>
+        partial void OnAdversaryTurnEnd();
+
+        /// <summary>Start of a round, after <see cref="GameState.RoundModifiers"/> has been
+        /// cleared and the round's Event card resolved, so a card armed on an earlier round
+        /// can still write a modifier that covers this whole round (the Butcher's Decay).</summary>
+        partial void OnRoundStart();
+
+        // ---------- Action keys (RequireActionAllowed / CollectActionBlockers) ----------
+
+        /// <summary>The Sprint core action.</summary>
+        public const string ActionSprint = "sprint";
+        /// <summary>The Rest core action.</summary>
+        public const string ActionRest = "rest";
+        /// <summary>The Charge Final Action.</summary>
+        public const string ActionCharge = "charge";
+        /// <summary>The Place Flashlight Final Action.</summary>
+        public const string ActionPlaceFlashlight = "place-flashlight";
+        /// <summary>Locking a Door.</summary>
+        public const string ActionLockDoor = "lock-door";
+        /// <summary>Opening (or un-Locking) a Door.</summary>
+        public const string ActionOpenDoor = "open-door";
+        /// <summary>Trading an Item or an Evidence token, in either direction.</summary>
+        public const string ActionTrade = "trade";
+        /// <summary>Picking up a Point of Interest token.</summary>
+        public const string ActionPickUpPoi = "pickup-poi";
+        /// <summary>Any Involved Action Final Action (generic, Evidence turn-in, objectives).</summary>
+        public const string ActionInvolved = "involved";
+        /// <summary>Using an Item / Medical Item / Cursed Item card.</summary>
+        public const string ActionUseItem = "use-item";
+        /// <summary>One Move step.</summary>
+        public const string ActionMove = "move";
+
+        // ---------- Wound origin tags (GainWound / OnWoundGained) ----------
+
+        /// <summary>The Wound was incurred while resolving a Sprint (its Stamina cost, Cold
+        /// Front's shifted icons, Pyrocumulus' D6). Punctured Lung flips these face-up.</summary>
+        public const string WoundFromSprint = "sprint";
+        /// <summary>The Wound came from the Adversary (an Attack, Bloodletting, an Ability).
+        /// Mauled adds 1 extra face-down Wound to these.</summary>
+        public const string WoundFromAdversary = "adversary";
+        /// <summary>The Wound came from choosing to keep moving through a Window.</summary>
+        public const string WoundFromWindow = "window";
+        /// <summary>The Wound came from crossing a Wound icon on the Stamina track, outside
+        /// a Sprint.</summary>
+        public const string WoundFromStaminaTrack = "stamina";
+
+        // ---------- Round-modifier keys owned by the shared framework ----------
+
+        /// <summary>Prefix + Investigator def id: their next Involved Action counts as an
+        /// Interact Action and does not end their turn (Spare Tools). Consumed by
+        /// Game.EndTurn.</summary>
+        public const string InvolvedAsInteractPrefix = "involved-as-interact:";
+
+        /// <summary>Prefix + Investigator def id: they already spent an Involved Action this
+        /// turn, so Spare Tools' "you may not take another Involved Action this turn" applies.</summary>
+        public const string InvolvedActionUsedPrefix = "involved-action-used:";
+
+        /// <summary>Prefix + Investigator def id: 1 Charge of their next Flashlight placement
+        /// is paid from somewhere else (Spare Batteries' Supply token). Consumed by
+        /// Game.PlaceFlashlight.</summary>
+        public const string FlashlightChargeWaiverPrefix = "flashlight-charge-waiver:";
+
+        /// <summary>Set once any Investigator has finished a turn this round holding more
+        /// Charge or Stamina than they started it with (the Cult's Burning Heart end
+        /// condition: "until no Investigators gain Charge or Lungs ... during their turns").</summary>
+        public const string ResourceGainedKey = "charge-or-stamina-gained";
+
         // ---------- Conditions ----------
 
         /// <summary>True when this Investigator already holds that Condition card.</summary>
@@ -162,6 +268,50 @@ namespace StiflingDark.Engine.Core
         }
 
         public bool ClearRoundModifier(string key) => State.RoundModifiers.Remove(key);
+
+        // ---------- Flashlight line-of-sight trims (shared by the TrimFlashlightBright decks) ----------
+
+        /// <summary>
+        /// Keep only the Bright spaces within <paramref name="range"/> spaces of
+        /// <paramref name="fromSpace"/>. Returns how many spaces were dropped.
+        /// </summary>
+        private int TrimBrightToRange(string fromSpace, HashSet<string> bright, int range)
+        {
+            if (range <= 0)
+            {
+                return 0;
+            }
+            var within = Graph.DistancesFrom(fromSpace, range, State.Overlay);
+            return bright.RemoveWhere(id => id != fromSpace && !within.ContainsKey(id));
+        }
+
+        /// <summary>
+        /// Keep only the Bright spaces covered by the flashlight template's central sight
+        /// lines. "Center line" is the digital reading of the printed template's middle sight
+        /// line: the ray from <paramref name="fromSpace"/> along <paramref name="angleRadians"/>,
+        /// keeping the spaces whose circle that ray passes through. <paramref name="lines"/>
+        /// widens the corridor to that many parallel sight lines (1 = the middle line only,
+        /// 3 = the middle line plus one to either side). The Investigator's own space always
+        /// stays lit. Returns how many spaces were dropped.
+        /// </summary>
+        private int TrimBrightToCenterLines(string fromSpace, double angleRadians, HashSet<string> bright, int lines)
+        {
+            var origin = Graph.Space(fromSpace);
+            double fx = Math.Cos(angleRadians);
+            double fy = Math.Sin(angleRadians);
+            double halfWidth = Graph.Def.SpaceRadius * lines;
+            return bright.RemoveWhere(id =>
+            {
+                if (id == fromSpace)
+                {
+                    return false;
+                }
+                var space = Graph.Space(id);
+                double dx = space.X - origin.X;
+                double dy = space.Y - origin.Y;
+                return dx * fx + dy * fy < 0 || Math.Abs(dx * -fy + dy * fx) > halfWidth;
+            });
+        }
 
         // ---------- Wound face-up plumbing ----------
 

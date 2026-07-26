@@ -218,6 +218,93 @@ namespace StiflingDark.Engine.Tests
             Assert.Equal("S-26", game.State.Objective.Tokens["hatchling-1"]);
         }
 
+        // ---------- Enraged movement, Devour's Bright restriction, token expiry ----------
+
+        [Fact]
+        public void The_enraged_horror_moves_on_a_flat_four_mp_with_no_sprint_die()
+        {
+            var game = NewHorrorGame();
+            ReachAdversaryTurn(game, 2);
+            game.AdversaryEndTurn();
+            game.State.Adversary.Counters["enraged"] = 1;
+            ReachAdversaryTurn(game, 3);
+            var adv = game.State.Adversary;
+
+            game.AdversaryMoveStep("S-24"); // Dark: 1 MP
+            Assert.Equal(0, adv.SprintRolled);
+            Assert.Equal(3, adv.MpRemaining);
+
+            game.State.Overlay.BrightSpaces.Add("S-21");
+            game.AdversaryMoveStep("S-21"); // Bright: 2 MP
+            Assert.Equal(1, adv.MpRemaining);
+
+            game.State.Overlay.BrightSpaces.Add("S-18");
+            Assert.Throws<InvalidOperationException>(() => game.AdversaryMoveStep("S-18"));
+        }
+
+        [Fact]
+        public void Devours_attack_is_off_once_the_horror_has_moved_onto_a_bright_space()
+        {
+            var game = NewHorrorGame(abilityCards: new List<string> { "devour", "tunnel" });
+            ReachAdversaryTurn(game, 2);
+            game.PlayAdversaryCard("devour", new List<string>());
+            game.AdversaryEndTurn();
+            ReachAdversaryTurn(game, 3);
+
+            game.State.Overlay.BrightSpaces.Add("S-24");
+            game.AdversaryMoveStep("S-24");
+            Inv(game, "aira").Space = "S-21"; // adjacent to the Horror on S-24
+
+            var error = Assert.Throws<InvalidOperationException>(() =>
+                game.PlayAdversaryCard("bufotoxin", new List<string> { "aira" }));
+            Assert.Contains("Bright", error.Message);
+            Assert.Empty(Inv(game, "aira").Wounds);
+        }
+
+        [Fact]
+        public void Mucus_and_tunnel_tokens_come_off_the_board_at_the_end_of_the_next_round()
+        {
+            var game = NewHorrorGame(abilityCards: new List<string> { "thick-mucus", "tunnel" });
+            ReachAdversaryTurn(game, 2);
+            game.PlayAdversaryCard("thick-mucus", new List<string> { "S-21", "S-24" });
+            game.PlayAdversaryCard("tunnel", new List<string> { "S-27" });
+            Assert.Equal(2, game.BoardTokenIds("mucus-").Count);
+
+            game.AdversaryEndTurn(); // end of the round they were placed in: they stay
+            Assert.Equal(2, game.BoardTokenIds("mucus-").Count);
+            Assert.Equal("S-27", game.BoardTokenSpace("tunnel-1"));
+
+            ReachAdversaryTurn(game, 3);
+            game.AdversaryEndTurn(); // end of the next round: both come off
+
+            Assert.Empty(game.BoardTokenIds("mucus-"));
+            Assert.Null(game.BoardTokenSpace("tunnel-1"));
+        }
+
+        [Fact]
+        public void Occluded_lights_waits_until_the_end_of_the_next_round_to_reach_cooldown_two()
+        {
+            var game = NewHorrorGame(abilityCards: new List<string> { "occluded-lights", "tunnel" });
+            var adv = game.State.Adversary;
+            ReachAdversaryTurn(game, 2);
+            game.PlayAdversaryCard("occluded-lights", new List<string> { "aira", "S" });
+
+            // Out of the Active slots at once ("in front of the Adversary screen"), but not yet
+            // on a cooldown track.
+            Assert.DoesNotContain("occluded-lights", adv.ActiveAbilities);
+            Assert.DoesNotContain(adv.Cooldown2, c => c.CardId == "occluded-lights");
+            Assert.Equal("S", game.State.Objective.Tokens["occluded-lights"]);
+
+            game.AdversaryEndTurn();
+            Assert.DoesNotContain(adv.Cooldown2, c => c.CardId == "occluded-lights");
+
+            ReachAdversaryTurn(game, 3);
+            game.AdversaryEndTurn();
+
+            Assert.Contains(adv.Cooldown2, c => c.CardId == "occluded-lights");
+            Assert.False(game.State.Objective.Tokens.ContainsKey("occluded-lights"));
+        }
+
         // ---------- Cooldown cycling ----------
 
         [Fact]
@@ -313,7 +400,11 @@ namespace StiflingDark.Engine.Tests
 
             Assert.Equal(1, game.State.Adversary.Counters["enraged"]);
             Assert.True(game.State.Adversary.Revealed);
-            Assert.Contains(game.State.Log, e => e.Type == "todo" && e.Detail.Contains("Enraged"));
+            // Enraged is permanent and takes Disappear away for the rest of the game.
+            game.AdversaryEndTurn();
+            ReachAdversaryTurn(game, 7);
+            var error = Assert.Throws<InvalidOperationException>(() => game.AdversaryDisappear());
+            Assert.Contains("Enraged", error.Message);
         }
 
         [Fact]

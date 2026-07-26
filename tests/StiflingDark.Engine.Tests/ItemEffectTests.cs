@@ -64,6 +64,210 @@ namespace StiflingDark.Engine.Tests
             game.AdversaryEndTurn();
         }
 
+        // ---------- Cards the new intercept points unblocked ----------
+
+        [Fact]
+        public void Spare_Batteries_pays_a_flashlight_placement_out_of_its_own_supply()
+        {
+            var game = NewSawmillGame();
+            var aira = Aira(game);
+            aira.Items.Add("spare-batteries");
+            aira.Charge = 2;
+
+            game.BeginInvestigatorTurn("aira");
+            game.UseItem("spare-batteries");
+            game.PlaceFlashlight(0.0);
+
+            Assert.Equal(2, aira.Charge); // the Supply paid, not the Charge track
+            Assert.Single(game.State.Flashlights);
+        }
+
+        [Fact]
+        public void Spare_Batteries_covers_only_the_next_placement()
+        {
+            var game = NewSawmillGame();
+            var aira = Aira(game);
+            aira.Items.Add("spare-batteries");
+            aira.Charge = 2;
+
+            game.BeginInvestigatorTurn("aira");
+            game.UseItem("spare-batteries");
+            game.PlaceFlashlight(0.0); // ends aira's turn
+            foreach (string inv in new[] { "lucy-belle", "mitchell", "vincent" })
+            {
+                game.BeginInvestigatorTurn(inv);
+                game.EndTurnWithoutFinalAction();
+            }
+            game.AdversaryEndTurn();
+            game.BeginInvestigatorTurn("aira");
+            game.PlaceFlashlight(0.0);
+
+            Assert.Equal(1, aira.Charge);
+        }
+
+        [Fact]
+        public void Spare_Tools_turns_an_involved_action_into_an_interact_that_does_not_end_the_turn()
+        {
+            var game = NewSawmillGame();
+            var aira = Aira(game);
+            aira.Items.Add("spare-tools");
+
+            game.BeginInvestigatorTurn("aira");
+            game.UseItem("spare-tools");
+            game.TakeInvolvedAction();
+
+            Assert.Equal("aira", game.State.ActiveInvestigator);
+            Assert.Equal(FinalActionKind.None, aira.FinalAction);
+            // "...but you may not take another Involved Action this turn."
+            Assert.Throws<InvalidOperationException>(() => game.TakeInvolvedAction());
+            // A different Final Action is still open.
+            game.ChargeFlashlight();
+            Assert.True(aira.TurnTakenThisRound);
+        }
+
+        [Fact]
+        public void The_Cross_takes_the_adversarys_abilities_away_for_their_next_turn()
+        {
+            var game = NewSawmillGame();
+            var aira = Aira(game);
+            aira.Items.Add("cross");
+            game.State.Adversary.ActiveAbilities.Add("escalating-terror");
+
+            game.BeginInvestigatorTurn("aira");
+            game.UseItem("cross");
+            FinishRoundAfterAira(game); // the Adversary turn happens on the way out of the round
+
+            Assert.Contains(game.State.Log, e => e.Type == "item" && e.Detail.Contains("Cross"));
+            // Next round the lockout has expired.
+            game.BeginInvestigatorTurn("aira");
+            game.EndTurnWithoutFinalAction();
+            foreach (string inv in new[] { "lucy-belle", "mitchell", "vincent" })
+            {
+                game.BeginInvestigatorTurn(inv);
+                game.EndTurnWithoutFinalAction();
+            }
+            game.PlayAdversaryCard("escalating-terror");
+            Assert.Equal(1, game.State.Adversary.Counters["escalating-terror-pending"]);
+        }
+
+        [Fact]
+        public void The_Cross_still_leaves_attacks_and_core_actions_available()
+        {
+            var game = NewSawmillGame();
+            var aira = Aira(game);
+            aira.Items.Add("cross");
+            aira.Space = "S-19"; // within Stalk range of The Butcher on S-25
+            game.State.Adversary.ActiveAbilities.Add("escalating-terror");
+
+            game.BeginInvestigatorTurn("aira");
+            game.UseItem("cross");
+            game.EndTurnWithoutFinalAction();
+            foreach (string inv in new[] { "lucy-belle", "mitchell", "vincent" })
+            {
+                game.BeginInvestigatorTurn(inv);
+                game.EndTurnWithoutFinalAction();
+            }
+
+            var error = Assert.Throws<InvalidOperationException>(() => game.PlayAdversaryCard("escalating-terror"));
+            Assert.Contains("Cross", error.Message);
+            game.ButcherStalk(new List<string> { "aira" }); // a Core Action: still fine
+            Assert.True(game.State.Adversary.SpineChill.ContainsKey("aira"));
+        }
+
+        [Fact]
+        public void Lucky_Dice_rerolls_the_next_sprint_and_keeps_the_better_roll()
+        {
+            var game = NewSawmillGame();
+            var aira = Aira(game);
+            aira.Items.Add("lucky-dice");
+
+            game.BeginInvestigatorTurn("aira");
+            game.UseItem("lucky-dice");
+            int before = aira.MpRemaining;
+            game.Sprint();
+
+            var reroll = game.State.Log.Last(e => e.Type == "item" && e.Detail.Contains("Lucky Dice reroll"));
+            Assert.Contains("vs", reroll.Detail);
+            Assert.InRange(aira.MpRemaining - before, 2, 4);
+            // One Supply spent of 2, so the card is still in hand.
+            Assert.Contains("lucky-dice", aira.Items);
+        }
+
+        [Fact]
+        public void Energy_Drink_reopens_movement_after_a_window_stopped_it()
+        {
+            var game = NewSawmillGame();
+            var aira = Aira(game);
+            aira.Items.Add("energy-drink");
+
+            game.BeginInvestigatorTurn("aira");
+            aira.Space = "117";
+            game.MoveStep("S-17");
+            game.ResolveWindow(stopAndLoseStamina: true);
+            Assert.True(aira.MovementLocked);
+
+            game.UseItem("energy-drink");
+
+            Assert.False(aira.MovementLocked);
+            Assert.DoesNotContain("energy-drink", aira.Items); // single use
+        }
+
+        [Fact]
+        public void Firecrackers_drag_every_adversary_figure_two_spaces_toward_the_noise()
+        {
+            var game = NewSawmillGame();
+            var aira = Aira(game);
+            aira.Items.Add("firecrackers");
+            var adv = game.State.Adversary;
+            aira.Space = "S-19";
+            string target = game.Graph.DistancesFrom(aira.Space, 3, game.State.Overlay).Keys
+                .First(id => id != aira.Space);
+            int before = game.Graph.DistancesFrom(target, int.MaxValue, game.State.Overlay)[adv.Space];
+
+            game.BeginInvestigatorTurn("aira");
+            game.UseItem("firecrackers", new List<string> { target });
+
+            int after = game.Graph.DistancesFrom(target, int.MaxValue, game.State.Overlay)[adv.Space];
+            Assert.Equal(Math.Max(0, before - 2), after);
+            Assert.Contains(game.State.Log, e => e.Type == "adversary" && e.Detail.Contains("Firecrackers"));
+        }
+
+        [Fact]
+        public void Firecrackers_need_a_space_within_three()
+        {
+            var game = NewSawmillGame();
+            var aira = Aira(game);
+            aira.Items.Add("firecrackers");
+            var within3 = game.Graph.DistancesFrom(aira.Space, 3, game.State.Overlay);
+            string far = game.Graph.Def.Spaces.Select(s => s.Id).First(id => !within3.ContainsKey(id));
+
+            game.BeginInvestigatorTurn("aira");
+            Assert.Throws<InvalidOperationException>(() => game.UseItem("firecrackers", new List<string> { far }));
+            Assert.Contains("firecrackers", aira.Items); // the failed use spent nothing
+        }
+
+        [Fact]
+        public void Witch_Bells_can_take_the_adversarys_sprint_die_away()
+        {
+            var game = NewSawmillGame();
+            var aira = Aira(game);
+            aira.Items.Add("witch-bells");
+
+            game.BeginInvestigatorTurn("aira");
+            game.UseItem("witch-bells", new List<string> { "sprint" });
+            Assert.True(game.HasCondition(aira, "darkness"));
+            game.EndTurnWithoutFinalAction();
+            foreach (string inv in new[] { "lucy-belle", "mitchell", "vincent" })
+            {
+                game.BeginInvestigatorTurn(inv);
+                game.EndTurnWithoutFinalAction();
+            }
+            game.AdversaryMoveStep("S-26");
+
+            Assert.Equal(0, game.State.Adversary.SprintRolled);
+            Assert.Equal(5 - 1, game.State.Adversary.MpRemaining); // base 5, no die, 1 step taken
+        }
+
         // ---------- Supply / discard bookkeeping ----------
 
         [Fact]

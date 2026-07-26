@@ -135,6 +135,205 @@ namespace StiflingDark.Engine.Tests
             Assert.Equal(4, adv.KillsToWin); // the Cult must kill every Investigator
         }
 
+        // ---------- Possessed (the Adversary-turn-start hook) ----------
+
+        [Fact]
+        public void Possessed_walks_the_investigator_over_and_bloodlets_them_then_discards_itself()
+        {
+            var game = NewCultGame(abilities: new[] { "severed-ear", "dried-tongue", "razor-like-talons" });
+            var aira = Inv(game, "aira");
+            FinishInvestigatorTurns(game);
+            game.AdversaryEndTurn(); // Severed Ear may not be used on the first round
+
+            aira.Space = "S-24"; // adjacent to Mor'gonnod on S-25 for Severed Ear
+            FinishInvestigatorTurns(game);
+            game.PlayAdversaryCard("severed-ear", new List<string> { "aira" });
+            Assert.True(game.HasCondition(aira, "possessed"));
+            game.AdversaryEndTurn();
+
+            // Round 3: the Adversary is offered the Condition and cashes it in, dragging aira
+            // to a space next to Cultist c1 (S-21) and Bloodletting with them.
+            FinishInvestigatorTurns(game);
+            int blood = game.State.Adversary.Counters["blood"];
+
+            game.UsePossessed("c1", "aira", "S-18");
+
+            // The Adversary-turn-start hook offered the Condition as the turn opened.
+            Assert.Contains(game.State.Log,
+                e => e.Type == "condition" && e.Detail.Contains("may use aira's Possessed"));
+            Assert.Equal("S-18", aira.Space);
+            Assert.Single(aira.Wounds);
+            Assert.Equal(blood + 1, game.State.Adversary.Counters["blood"]);
+            Assert.False(game.HasCondition(aira, "possessed"));
+        }
+
+        [Fact]
+        public void Possessed_may_not_walk_an_investigator_more_than_four_spaces()
+        {
+            var game = NewCultGame(abilities: new[] { "severed-ear", "dried-tongue", "razor-like-talons" });
+            var aira = Inv(game, "aira");
+            FinishInvestigatorTurns(game);
+            game.AdversaryEndTurn(); // Severed Ear may not be used on the first round
+
+            aira.Space = "S-24";
+            FinishInvestigatorTurns(game);
+            game.PlayAdversaryCard("severed-ear", new List<string> { "aira" });
+            game.AdversaryEndTurn();
+            FinishInvestigatorTurns(game);
+
+            var within4 = game.Graph.DistancesFrom(aira.Space, 4, game.State.Overlay);
+            string far = game.Graph.Def.Spaces.Select(sp => sp.Id).First(id => !within4.ContainsKey(id));
+            Assert.Throws<InvalidOperationException>(() => game.UsePossessed("c1", "aira", far));
+            Assert.Equal("S-24", aira.Space);
+            Assert.True(game.HasCondition(aira, "possessed"));
+        }
+
+        // ---------- End-of-Adversary-turn follow-ups and token triggers ----------
+
+        [Fact]
+        public void Unblinking_eye_gives_paranoid_to_everyone_who_placed_no_flashlight()
+        {
+            var game = NewCultGame(abilities: new[] { "unblinking-eye", "dried-tongue", "severed-ear" });
+            FinishInvestigatorTurns(game);
+            game.PlayAdversaryCard("unblinking-eye");
+            game.AdversaryEndTurn();
+
+            // Round 2: aira places a Flashlight, nobody else does.
+            game.BeginInvestigatorTurn("aira");
+            game.PlaceFlashlight(0.0);
+            foreach (string id in new[] { "lucy-belle", "mitchell", "vincent" })
+            {
+                game.BeginInvestigatorTurn(id);
+                game.EndTurnWithoutFinalAction();
+            }
+            game.AdversaryEndTurn();
+
+            Assert.False(game.HasCondition(Inv(game, "aira"), "paranoid"));
+            foreach (string id in new[] { "lucy-belle", "mitchell", "vincent" })
+            {
+                Assert.True(game.HasCondition(Inv(game, id), "paranoid"));
+            }
+        }
+
+        [Fact]
+        public void Shriveled_hand_leaves_the_game_when_two_cultists_bloodlet_and_cools_down_when_they_do_not()
+        {
+            var game = NewCultGame(abilities: new[] { "shriveled-hand", "dried-tongue", "severed-ear" });
+            var adv = game.State.Adversary;
+            FinishInvestigatorTurns(game);
+            game.PlayAdversaryCard("shriveled-hand");
+            game.AdversaryEndTurn();
+
+            // Round 2: only 1 Cultist Bloodlets, so the card goes face-down into Cooldown 1.
+            Inv(game, "aira").Space = "S-17"; // adjacent to c1 on S-21
+            FinishInvestigatorTurns(game);
+            game.Bloodletting("c1", "aira");
+            game.AdversaryEndTurn();
+
+            Assert.DoesNotContain("shriveled-hand", adv.ActiveAbilities);
+            Assert.Contains(adv.Cooldown1, c => c.CardId == "shriveled-hand");
+            Assert.Contains(game.State.Log, e => e.Type == "adversary" && e.Detail.Contains("Cooldown 1"));
+        }
+
+        [Fact]
+        public void Shriveled_hand_is_removed_from_the_game_when_both_cultists_bloodlet()
+        {
+            var game = NewCultGame(abilities: new[] { "shriveled-hand", "dried-tongue", "severed-ear" });
+            var adv = game.State.Adversary;
+            FinishInvestigatorTurns(game);
+            game.PlayAdversaryCard("shriveled-hand");
+            game.AdversaryEndTurn();
+
+            Inv(game, "aira").Space = "S-17";     // adjacent to c1 on S-21
+            Inv(game, "lucy-belle").Space = "S-31"; // adjacent to c3 on S-27
+            FinishInvestigatorTurns(game);
+            game.Bloodletting("c1", "aira");
+            game.Bloodletting("c3", "lucy-belle");
+            game.AdversaryEndTurn();
+
+            Assert.DoesNotContain("shriveled-hand", adv.ActiveAbilities);
+            Assert.DoesNotContain(adv.Cooldown1, c => c.CardId == "shriveled-hand");
+            Assert.DoesNotContain(adv.Cooldown2, c => c.CardId == "shriveled-hand");
+        }
+
+        [Fact]
+        public void Burning_heart_ends_on_the_first_round_nobody_gains_charge_or_stamina()
+        {
+            var game = NewCultGame(abilities: new[] { "burning-heart", "dried-tongue", "severed-ear" });
+            var adv = game.State.Adversary;
+            FinishInvestigatorTurns(game);
+            game.PlayAdversaryCard("burning-heart");
+            game.AdversaryEndTurn();
+
+            // Round 2: somebody Rests, gaining Stamina, so the card stays in effect.
+            var aira = Inv(game, "aira");
+            aira.Stamina = 2;
+            game.BeginInvestigatorTurn("aira");
+            game.Rest();
+            game.EndTurnWithoutFinalAction();
+            foreach (string id in new[] { "lucy-belle", "mitchell", "vincent" })
+            {
+                game.BeginInvestigatorTurn(id);
+                game.EndTurnWithoutFinalAction();
+            }
+            game.AdversaryEndTurn();
+            Assert.Contains("burning-heart", adv.ActiveAbilities);
+
+            // Round 3: nobody gains anything.
+            FinishInvestigatorTurns(game);
+            game.AdversaryEndTurn();
+
+            Assert.DoesNotContain("burning-heart", adv.ActiveAbilities);
+            Assert.Contains(adv.Cooldown2, c => c.CardId == "burning-heart");
+        }
+
+        [Fact]
+        public void Hellfire_tokens_wound_an_investigator_who_moves_onto_one()
+        {
+            var game = NewCultGame(abilities: new[] { "cleft-hoof", "dried-tongue", "severed-ear" });
+            var aira = Inv(game, "aira");
+            aira.Wounds.Add(new WoundInstance { CardId = "breathless", FaceUp = true });
+            aira.Space = "S-18";
+            FinishInvestigatorTurns(game);
+            game.PlayAdversaryCard("cleft-hoof", new List<string> { "aira", "S-21", "S-24", "S-22" });
+            Assert.False(aira.Wounds[0].FaceUp); // the cost: 1 face-up Wound flipped face-down
+            game.AdversaryEndTurn();
+
+            game.BeginInvestigatorTurn("aira");
+            game.MoveStep("S-21");
+
+            Assert.Equal(2, aira.Wounds.Count);
+            Assert.True(aira.Wounds[1].FaceUp);
+        }
+
+        [Fact]
+        public void Desecrated_ground_is_rolled_for_at_the_end_of_the_turn_and_ignored_when_bright()
+        {
+            var game = NewCultGame(abilities: new[] { "twisted-horn", "dried-tongue", "severed-ear" });
+            var aira = Inv(game, "aira");
+            var lucy = Inv(game, "lucy-belle");
+            aira.Space = "S-18";
+            lucy.Space = "S-25";
+            FinishInvestigatorTurns(game);
+            game.PlayAdversaryCard("twisted-horn", new List<string> { "S-21", "S-24" });
+            game.AdversaryEndTurn();
+
+            // A Bright token may be ignored outright.
+            game.State.Overlay.BrightSpaces.Add("S-24");
+            game.BeginInvestigatorTurn("lucy-belle");
+            game.MoveStep("S-24");
+            game.EndTurnWithoutFinalAction();
+            Assert.Empty(lucy.Wounds);
+            Assert.DoesNotContain(game.State.Log, e => e.Detail.Contains("Desecrated Ground they walked on"));
+
+            // An unlit one owes a D6 at the end of the turn.
+            game.BeginInvestigatorTurn("aira");
+            game.MoveStep("S-21");
+            Assert.Empty(aira.Wounds); // nothing happens until the turn ends
+            game.EndTurnWithoutFinalAction();
+            Assert.Contains(game.State.Log, e => e.Detail.Contains("Desecrated Ground they walked on"));
+        }
+
         // ---------- Cultist Actions ----------
 
         [Fact]
@@ -363,16 +562,20 @@ namespace StiflingDark.Engine.Tests
 
             game.State.Overlay.BrightSpaces.Add("S-26");
             game.MorgonnodCorporealMoveStep("S-24"); // Dark: 1 MP
-            Assert.Equal(9, adv.Counters["corporeal-mp"]);
+            // Corporeal Mor'gonnod spends the shared MP pool: a flat 10, no Sprint die.
+            Assert.Equal(0, adv.SprintRolled);
+            Assert.Equal(9, adv.MpRemaining);
             game.MorgonnodCorporealMoveStep("S-25");
-            Assert.Equal(8, adv.Counters["corporeal-mp"]);
+            Assert.Equal(8, adv.MpRemaining);
             game.MorgonnodCorporealMoveStep("S-26"); // Bright: 2 MP
-            Assert.Equal(6, adv.Counters["corporeal-mp"]);
+            Assert.Equal(6, adv.MpRemaining);
             Assert.Equal("S-26", adv.Space);
 
-            adv.Counters["corporeal-mp"] = 1;
+            adv.MpRemaining = 1;
             game.State.Overlay.BrightSpaces.Add("S-28");
             Assert.Throws<InvalidOperationException>(() => game.MorgonnodCorporealMoveStep("S-28"));
+            // The shared entry point is the same path, not a second one that would undercharge.
+            Assert.Throws<InvalidOperationException>(() => game.AdversaryMoveStep("S-28"));
         }
 
         [Fact]

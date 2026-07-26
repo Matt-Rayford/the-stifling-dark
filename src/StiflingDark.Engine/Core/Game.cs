@@ -238,6 +238,9 @@ namespace StiflingDark.Engine.Core
                 Log("event", State.CurrentEvent!);
                 EventsOnDrawn();
             }
+            // Last: cards armed on an earlier round add their own round-long modifiers on top
+            // of whatever this round's Event just wrote (the Butcher's Decay stacking with Foggy).
+            OnRoundStart();
         }
 
         public void BeginInvestigatorTurn(string invId)
@@ -248,19 +251,52 @@ namespace StiflingDark.Engine.Core
                 throw new InvalidOperationException($"{State.ActiveInvestigator} has not finished their turn.");
             }
             var inv = Investigator(invId);
-            if (inv.TurnTakenThisRound || inv.Dead || inv.Escaped)
+            // A dead Investigator whose player took a Spirit card keeps taking turns (4 MP plus
+            // a free Sprint die); anyone else who is Dead or Escaped is off the board.
+            if (inv.TurnTakenThisRound || inv.Escaped || (inv.Dead && !IsSpirit(inv)))
             {
                 throw new InvalidOperationException($"{invId} cannot take a turn.");
             }
             State.ActiveInvestigator = invId;
-            inv.MpRemaining = Db.Investigator(invId).Mp;
+            inv.MpRemaining = IsSpirit(inv) ? SpiritMp : Db.Investigator(invId).Mp;
             inv.SprintedOrRested = false;
             inv.Rested = false;
             inv.FinalAction = FinalActionKind.None;
             inv.MovementLocked = false;
             inv.WaterFloatUsedThisTurn = false;
+            inv.SpiritAbilitiesUsedThisTurn = 0;
             ApplyCarriageRotation(inv);
+            NoteTurnStartResources(inv);
             OnInvestigatorTurnStart(inv);
+        }
+
+        // ---------- Per-action card gating ----------
+
+        /// <summary>
+        /// Refuse an action a card currently forbids. <paramref name="actionKey"/> is one of
+        /// the Action* consts in Game.Effects.cs; every blocking clause any held card
+        /// contributes is collected first, so the thrown message names all of them at once and
+        /// no partial state change has happened yet.
+        /// </summary>
+        private void RequireActionAllowed(InvestigatorState inv, string actionKey)
+        {
+            var blockers = new List<string>();
+            CollectActionBlockers(inv, actionKey, blockers);
+            if (blockers.Count > 0)
+            {
+                throw new InvalidOperationException(
+                    $"{inv.DefId} may not take the '{actionKey}' action: {string.Join("; ", blockers)}");
+            }
+        }
+
+        /// <summary>The blocking clauses that would stop <paramref name="invId"/> taking
+        /// <paramref name="actionKey"/> right now — for UIs that want to grey the button out
+        /// instead of catching the exception.</summary>
+        public List<string> ActionBlockers(string invId, string actionKey)
+        {
+            var blockers = new List<string>();
+            CollectActionBlockers(Investigator(invId), actionKey, blockers);
+            return blockers;
         }
 
         // ---------- Investigator actions ----------
@@ -269,22 +305,51 @@ namespace StiflingDark.Engine.Core
         {
             var inv = ActiveInv();
             RequireNoPendingWindow();
+            RequireActionAllowed(inv, ActionSprint);
             if (inv.SprintedOrRested)
             {
                 throw new InvalidOperationException("Sprint or Rest may be used once per turn.");
             }
-            SpendStamina(inv, 1);
+            if (IsSpirit(inv))
+            {
+                // "Spirits can Sprint every round" and pay no Stamina for it.
+                SprintAsSpirit(inv);
+                return;
+            }
+            // Squall / Severe Heat make every Sprint cost extra Stamina. The whole cost is
+            // spent as one Sprint-origin loss, so Punctured Lung and Cold Front see it too.
+            int staminaCost = 1 + Math.Max(0, RoundModifier(SprintStaminaSurchargeKey));
+            SpendStamina(inv, staminaCost, WoundFromSprint);
             int rolled = _rng.RollSprintDie(Db.Config.SprintDieFaces);
             SaveRng();
+            var rollBox = new List<int> { rolled };
+            ModifySprintRoll(inv, rollBox);
+            int finalRoll = Math.Max(1, rollBox[0]);
             inv.SprintedOrRested = true;
-            inv.MpRemaining += rolled;
-            Log("sprint", $"{inv.DefId} rolled {rolled} MP");
+            inv.MpRemaining += finalRoll;
+            Log("sprint", finalRoll == rolled
+                ? $"{inv.DefId} rolled {finalRoll} MP"
+                : $"{inv.DefId} rolled {rolled} MP, adjusted to {finalRoll}");
+            // Pyrocumulus: "an Investigator who Sprints must roll a D6 and take a face-down
+            // Wound on a 4+".
+            int threshold = RoundModifier(SprintD6WoundThresholdKey);
+            if (threshold > 0)
+            {
+                int d6 = _rng.Roll(6);
+                SaveRng();
+                Log("event", $"pyrocumulus: {inv.DefId} rolled {d6} for Sprinting");
+                if (d6 >= threshold)
+                {
+                    GainWound(inv, faceUp: false, origin: WoundFromSprint);
+                }
+            }
         }
 
         public void Rest()
         {
             var inv = ActiveInv();
             RequireNoPendingWindow();
+            RequireActionAllowed(inv, ActionRest);
             if (inv.SprintedOrRested)
             {
                 throw new InvalidOperationException("Sprint or Rest may be used once per turn.");
@@ -297,12 +362,13 @@ namespace StiflingDark.Engine.Core
         {
             var inv = ActiveInv();
             RequireNoPendingWindow();
+            RequireActionAllowed(inv, ActionMove);
             if (inv.MovementLocked)
             {
                 throw new InvalidOperationException("Movement is over for this turn.");
             }
             string from = inv.Space;
-            var step = Graph.TryStep(FigureKind.Investigator, inv.Space, to, State.Overlay)
+            var step = Graph.TryStep(FigureKindOf(inv), inv.Space, to, State.Overlay)
                 ?? throw new InvalidOperationException($"Cannot move {inv.Space} -> {to}.");
             if (step.Cost > inv.MpRemaining)
             {
@@ -335,7 +401,7 @@ namespace StiflingDark.Engine.Core
             }
             else
             {
-                GainWound(inv, faceUp: false);
+                GainWound(inv, faceUp: false, origin: WoundFromWindow);
             }
         }
 
@@ -389,6 +455,7 @@ namespace StiflingDark.Engine.Core
         {
             var inv = ActiveInv();
             RequireNoPendingWindow();
+            RequireActionAllowed(inv, locking ? ActionLockDoor : ActionOpenDoor);
             if (!Graph.DistancesFrom(inv.Space, 1, State.Overlay).ContainsKey(doorSpace) &&
                 Graph.Edge(inv.Space, doorSpace) == null)
             {
@@ -434,6 +501,7 @@ namespace StiflingDark.Engine.Core
         {
             var inv = ActiveInv();
             RequireNoPendingWindow();
+            RequireNotSpirit(inv, "pick up Medical Items");
             if (!State.MedicalItemSpaces.Remove(inv.Space))
             {
                 throw new InvalidOperationException("No Medical Item token here.");
@@ -445,6 +513,7 @@ namespace StiflingDark.Engine.Core
         {
             var inv = ActiveInv();
             RequireNoPendingWindow();
+            RequireActionAllowed(inv, ActionPickUpPoi);
             var token = State.PoiTokens.FirstOrDefault(p => p.TokenSpace == inv.Space && p.Revealed && !p.Collected)
                 ?? throw new InvalidOperationException("No revealed POI token here.");
             token.Collected = true;
@@ -464,6 +533,10 @@ namespace StiflingDark.Engine.Core
             var inv = ActiveInv();
             RequireNoPendingWindow();
             var target = Investigator(toInvId);
+            // Mistrust reads "you may not Trade or be Traded with", so both sides are gated.
+            RequireActionAllowed(inv, ActionTrade);
+            RequireActionAllowed(target, ActionTrade);
+            RequireCanReceiveTrade(target);
             RequireAdjacentForTrade(inv, target);
             if (!inv.Items.Remove(itemCardId))
             {
@@ -477,6 +550,9 @@ namespace StiflingDark.Engine.Core
             var inv = ActiveInv();
             RequireNoPendingWindow();
             var target = Investigator(toInvId);
+            RequireActionAllowed(inv, ActionTrade);
+            RequireActionAllowed(target, ActionTrade);
+            RequireCanReceiveTrade(target);
             RequireAdjacentForTrade(inv, target);
             if (!inv.EvidenceCarried.Remove(zone))
             {
@@ -503,6 +579,7 @@ namespace StiflingDark.Engine.Core
         {
             var inv = ActiveInv();
             RequireNoPendingWindow();
+            RequireActionAllowed(inv, ActionCharge);
             RequireNoFinalAction(inv);
             inv.FinalAction = FinalActionKind.Charge;
             inv.Charge = Math.Min(Db.Config.ChargeMax, inv.Charge + 1);
@@ -513,14 +590,15 @@ namespace StiflingDark.Engine.Core
         {
             var inv = ActiveInv();
             RequireNoPendingWindow();
+            RequireActionAllowed(inv, ActionPlaceFlashlight);
             RequireNoFinalAction(inv);
-            if (inv.Charge < 1)
-            {
-                throw new InvalidOperationException("Placing the Flashlight costs 1 Charge.");
-            }
-            inv.Charge -= 1;
+            PayFlashlightCharge(inv);
             inv.FinalAction = FinalActionKind.PlaceFlashlight;
             var bright = PreviewFlashlight(inv.DefId, angleRadians);
+            // Cards that shrink the beam (Misty's range, Hazy/Downpour/Tunnel Vision's center
+            // lines) trim it here, before anything is lit or Revealed, so a space outside the
+            // reduced beam never reveals what stands on it.
+            TrimFlashlightBright(inv, angleRadians, bright);
             State.Flashlights.Add(new FlashlightPlacement
             {
                 InvestigatorId = inv.DefId,
@@ -535,6 +613,32 @@ namespace StiflingDark.Engine.Core
             EndTurn(inv);
         }
 
+        /// <summary>
+        /// Validate and spend a Flashlight placement's Charge up front: the printed 1 plus any
+        /// surcharge in force this round (Foggy, the Butcher's Decay), less 1 if a card is
+        /// paying for it (Spare Batteries' Supply token). Refusing the placement before
+        /// anything is lit is the whole point of doing it here rather than in a card hook.
+        /// </summary>
+        private void PayFlashlightCharge(InvestigatorState inv)
+        {
+            string waiverKey = FlashlightChargeWaiverPrefix + inv.DefId;
+            bool waived = HasRoundModifier(waiverKey);
+            int cost = 1 + Math.Max(0, RoundModifier(FlashlightChargeSurchargeKey)) - (waived ? 1 : 0);
+            // Validate before spending anything, the waiver included: a refused placement must
+            // leave the Investigator exactly as they were.
+            if (inv.Charge < cost)
+            {
+                throw new InvalidOperationException(
+                    $"Placing the Flashlight costs {cost} Charge, {inv.DefId} has {inv.Charge}.");
+            }
+            if (waived)
+            {
+                ClearRoundModifier(waiverKey);
+                Log("flashlight", $"{inv.DefId} pays 1 less Charge for this placement");
+            }
+            inv.Charge -= cost;
+        }
+
         /// <summary>The Bright set a flashlight would produce — call freely for the mouse preview.</summary>
         public HashSet<string> PreviewFlashlight(string invId, double angleRadians) =>
             _beam.ComputeBright(Graph, Investigator(invId).Space, angleRadians, _losBlocker);
@@ -545,6 +649,7 @@ namespace StiflingDark.Engine.Core
         {
             var inv = ActiveInv();
             RequireNoPendingWindow();
+            RequireActionAllowed(inv, ActionInvolved);
             RequireNoFinalAction(inv);
             inv.FinalAction = FinalActionKind.InvolvedAction;
             EndTurn(inv);
@@ -559,19 +664,46 @@ namespace StiflingDark.Engine.Core
 
         private void EndTurn(InvestigatorState inv)
         {
-            // Moving through other Investigators is fine; ending the turn stacked is not.
-            if (State.Investigators.Any(o => o != inv && !o.Dead && !o.Escaped && o.Space == inv.Space))
+            // Spare Tools: the Involved Action just resolved counts as an Interact Action
+            // instead, so the turn does not end and a different Final Action is still open.
+            // Every Involved Action funnels through here, so one check covers them all.
+            if (inv.FinalAction == FinalActionKind.InvolvedAction &&
+                ClearRoundModifier(InvolvedAsInteractPrefix + inv.DefId))
+            {
+                inv.FinalAction = FinalActionKind.None;
+                SetRoundModifier(InvolvedActionUsedPrefix + inv.DefId, 1);
+                Log("item", $"{inv.DefId}'s Spare Tools turned that Involved Action into an Interact; their turn continues");
+                return;
+            }
+            // Moving through other Investigators is fine; ending the turn stacked is not. A
+            // Spirit is not an Investigator and has no player board, so the rule cuts neither
+            // way for it: living Investigators already ignore Spirit-occupied spaces (the
+            // o.Dead filter), and a Spirit may end its turn wherever it likes.
+            if (!IsSpirit(inv) &&
+                State.Investigators.Any(o => o != inv && !o.Dead && !o.Escaped && o.Space == inv.Space))
             {
                 throw new InvalidOperationException("Cannot end the turn on another Investigator's space.");
             }
             OnInvestigatorTurnEnd(inv);
             if (inv.Rested && inv.FinalAction != FinalActionKind.InvolvedAction)
             {
-                GainStamina(inv, 1);
+                // Heavy Winds / Heavy Smoke / Tornado: no Stamina may be gained as part of a
+                // Final Action this round, Rest included.
+                if (HasRoundModifier(NoRestStaminaKey))
+                {
+                    Log("event", $"{State.CurrentEvent}: {inv.DefId} gains no Stamina from Resting this round");
+                }
+                else
+                {
+                    GainStamina(inv, 1);
+                }
             }
+            NoteTurnResourceGains(inv);
             inv.TurnTakenThisRound = true;
             State.ActiveInvestigator = null;
-            if (State.Investigators.All(i => i.TurnTakenThisRound || i.Dead || i.Escaped))
+            // Spirits still take a turn every round, so a dead Investigator only stops holding
+            // the phase open once their player has declined (or lost) a Spirit card.
+            if (State.Investigators.All(i => i.TurnTakenThisRound || i.Escaped || (i.Dead && !IsSpirit(i))))
             {
                 State.Phase = GamePhase.AdversaryTurn;
                 State.Adversary.NoiseTokens.Clear();
@@ -586,12 +718,21 @@ namespace StiflingDark.Engine.Core
             string from = State.Adversary.Space;
             var step = Graph.TryStep(FigureKind.Adversary, from, to, State.Overlay)
                 ?? throw new InvalidOperationException($"Adversary cannot move {from} -> {to}.");
-            if (step.Cost > State.Adversary.MpRemaining)
+            // The Enraged Horror and the Corporeal Mor'gonnod both pay 2 MP to enter a Bright
+            // space; every other figure pays the printed 1 everywhere. MapGraph knows nothing
+            // about light level, so the extra MP is added on here rather than in TryStep.
+            int cost = step.Cost + (AdversaryPaysDoubleForBright() && IsBright(to) ? 1 : 0);
+            if (cost > State.Adversary.MpRemaining)
             {
-                throw new InvalidOperationException($"Move costs {step.Cost} MP, only {State.Adversary.MpRemaining} left.");
+                throw new InvalidOperationException($"Move costs {cost} MP, only {State.Adversary.MpRemaining} left.");
             }
-            State.Adversary.MpRemaining -= step.Cost;
+            State.Adversary.MpRemaining -= cost;
             State.Adversary.ActionsUsed.Add("move"); // Moving forecloses start-of-turn-only actions (e.g. Ambush).
+            if (IsBright(to))
+            {
+                // Devour: "as long as you do not Move onto any Bright spaces before doing so."
+                State.Adversary.ActionsUsed.Add("moved-onto-bright");
+            }
             State.Adversary.Space = to;
             if (step.CrossesWindow)
             {
@@ -615,12 +756,33 @@ namespace StiflingDark.Engine.Core
                 }
             }
             ApplyAdversaryCarriageRotation();
+            Log("adversary", $"moved {from} -> {to} ({cost} MP, {State.Adversary.MpRemaining} left)");
         }
+
+        /// <summary>
+        /// True while the main Adversary figure spends 2 MP to enter a Bright space instead of
+        /// 1: the Enraged Horror's replacement movement rules, and the Corporeal Mor'gonnod's.
+        /// Both also get a flat MP budget with no Sprint die (see EnsureAdversaryTurnStarted).
+        /// </summary>
+        private bool AdversaryPaysDoubleForBright() =>
+            AdversaryCounter("enraged") == 1 || AdversaryCounter("corporeal") == 1;
+
+        private int AdversaryCounter(string key) =>
+            State.Adversary.Counters.TryGetValue(key, out int value) ? value : 0;
 
         public void AdversaryDisappear()
         {
             EnsureAdversaryTurnStarted();
             var adv = State.Adversary;
+            if (AdversaryCounter("enraged") == 1)
+            {
+                // The Enraged Horror is on the main board for good.
+                throw new InvalidOperationException("The Horror is Enraged and can no longer Disappear.");
+            }
+            if (AdversaryCounter("corporeal") == 1)
+            {
+                throw new InvalidOperationException("Corporeal Mor'gonnod can no longer Disappear.");
+            }
             if (!adv.ActionsUsed.Add("disappear"))
             {
                 throw new InvalidOperationException("Disappear was already used this turn.");
@@ -668,6 +830,9 @@ namespace StiflingDark.Engine.Core
         public void AdversaryEndTurn()
         {
             EnsureAdversaryTurnStarted();
+            // Cards that resolve "at the end of your turn" run while this round's Flashlights
+            // are still on the board and before the cooldown tracks move.
+            OnAdversaryTurnEnd();
             AdvanceCooldowns();
             State.Adversary.TurnStarted = false;
             EndRound();
@@ -705,20 +870,37 @@ namespace StiflingDark.Engine.Core
 
         // ---------- Shared mechanics ----------
 
-        public void GainWound(InvestigatorState inv, bool faceUp)
+        /// <summary>
+        /// Draw a Wound card into an Investigator's Wound slots. <paramref name="origin"/> is
+        /// one of the WoundFrom* consts (Game.Effects.cs) and tells the cards that care where
+        /// the Wound came from — Punctured Lung turns Sprint Wounds face-up, Mauled adds an
+        /// extra face-down Wound to Adversary ones. It defaults to "" (an untagged Wound: a
+        /// card effect, an objective cost) so callers with nothing to say need not say it.
+        /// </summary>
+        public void GainWound(InvestigatorState inv, bool faceUp, string origin = "")
         {
+            if (IsSpirit(inv))
+            {
+                // A Spirit has no player board and therefore no Wound slots: it cannot die again.
+                Log("spirit", $"{inv.DefId}'s Spirit has no Wound slots (Wound ignored)");
+                return;
+            }
             var wound = new WoundInstance { CardId = Draw(State.WoundDeck, "wound"), FaceUp = faceUp };
+            // Cards may still flip this Wound face-up, or inflict further Wounds, before it
+            // lands (see the OnWoundGained hook).
+            OnWoundGained(inv, wound, origin);
             inv.Wounds.Add(wound);
             Log("wound", $"{inv.DefId} now has {inv.Wounds.Count} wound(s)");
-            if (faceUp)
+            if (wound.FaceUp)
             {
                 ResolveWoundFaceUp(inv, wound);
             }
-            if (inv.Wounds.Count >= Db.Config.WoundsToDie)
+            if (inv.Wounds.Count >= Db.Config.WoundsToDie && !inv.Dead)
             {
                 inv.Dead = true;
                 State.Adversary.Kills += 1;
                 Log("death", inv.DefId);
+                OnInvestigatorDeath(inv);
                 if (State.Adversary.Kills >= State.Adversary.KillsToWin)
                 {
                     State.Phase = GamePhase.GameOver;
@@ -728,24 +910,27 @@ namespace StiflingDark.Engine.Core
             }
         }
 
-        private void SpendStamina(InvestigatorState inv, int amount)
+        private void SpendStamina(InvestigatorState inv, int amount, string origin = WoundFromStaminaTrack)
         {
             if (inv.Stamina < amount)
             {
                 throw new InvalidOperationException("Not enough Stamina.");
             }
-            LoseStamina(inv, amount);
+            LoseStamina(inv, amount, origin);
         }
 
-        private void LoseStamina(InvestigatorState inv, int amount)
+        private void LoseStamina(InvestigatorState inv, int amount, string origin = WoundFromStaminaTrack)
         {
             var track = Db.Investigator(inv.DefId).StaminaTrack;
+            // Cold Front: "Sprinting must trip the Stamina track's Wound icons 1 space early."
+            int shift = origin == WoundFromSprint ? Math.Max(0, RoundModifier(SprintWoundIconShiftKey)) : 0;
             for (int i = 0; i < amount && inv.Stamina > 0; i++)
             {
                 inv.Stamina -= 1;
-                if (track.WoundIconSpaces.Contains(inv.Stamina))
+                if (track.WoundIconSpaces.Contains(inv.Stamina) ||
+                    (shift > 0 && track.WoundIconSpaces.Contains(inv.Stamina - shift)))
                 {
-                    GainWound(inv, faceUp: false);
+                    GainWound(inv, faceUp: false, origin: origin);
                 }
             }
         }
@@ -756,8 +941,42 @@ namespace StiflingDark.Engine.Core
             inv.Stamina = Math.Min(max, inv.Stamina + amount);
         }
 
+        // ---------- Per-turn resource-gain watch (the Cult's Burning Heart end condition) ----------
+
+        private const string TurnStartStaminaPrefix = "turn-start-stamina:";
+        private const string TurnStartChargePrefix = "turn-start-charge:";
+
+        private void NoteTurnStartResources(InvestigatorState inv)
+        {
+            SetRoundModifier(TurnStartStaminaPrefix + inv.DefId, inv.Stamina);
+            SetRoundModifier(TurnStartChargePrefix + inv.DefId, inv.Charge);
+        }
+
+        /// <summary>
+        /// Burning Heart stays in effect "until no Investigators gain Charge or Lungs from any
+        /// source during their turns", so what has to be watched is each turn as a whole rather
+        /// than each individual gain: an Investigator who ends their turn holding more of
+        /// either than they started it with gained some. That reading also costs nothing to
+        /// enforce — no card-specific call has to be threaded through every mutator — at the
+        /// price of missing a gain that was spent again inside the same turn.
+        /// </summary>
+        private void NoteTurnResourceGains(InvestigatorState inv)
+        {
+            if (inv.Stamina > RoundModifier(TurnStartStaminaPrefix + inv.DefId) ||
+                inv.Charge > RoundModifier(TurnStartChargePrefix + inv.DefId))
+            {
+                SetRoundModifier(ResourceGainedKey, 1);
+            }
+        }
+
         private void ApplyWaterFloat(InvestigatorState inv)
         {
+            // "Spirits are not affected by Dark spaces, Map Hazards, or anything that affects
+            // movement": the Tunnel of Love current does not carry them.
+            if (IsSpirit(inv))
+            {
+                return;
+            }
             if (!Graph.HasSpace(inv.Space) || !Graph.Space(inv.Space).Water ||
                 inv.WaterFloatUsedThisTurn || Graph.Def.WaterFlowLoop.Count == 0)
             {
@@ -784,6 +1003,10 @@ namespace StiflingDark.Engine.Core
 
         private void ApplyCarriageRotation(InvestigatorState inv)
         {
+            if (IsSpirit(inv))
+            {
+                return; // a forced ride rotation is something that affects movement; Spirits float
+            }
             if (inv.CarriageRotationUsedThisRound)
             {
                 return;

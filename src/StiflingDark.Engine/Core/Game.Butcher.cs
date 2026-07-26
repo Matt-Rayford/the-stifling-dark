@@ -74,17 +74,22 @@ namespace StiflingDark.Engine.Core
                 adv.Counters["vengeful-darkness-supply"] = supply;
             }
 
-            // Decay: "Using a Flashlight costs 1 extra Charge next round." The surcharge itself
-            // now has a home and an enforcement point (RoundModifiers[FlashlightChargeSurchargeKey],
-            // spent in Game.EventEffects.EventsOnFlashlightPlaced), but round modifiers are wiped
-            // when the round begins and this hook only runs at the *end* of the affected round —
-            // after every Flashlight for it has already been placed. Writing the modifier needs an
-            // adversary sub-hook at round start, which Game.EffectDispatch.cs does not offer.
-            if (adv.Counters.TryGetValue("decay-active-round", out int decayRound) && decayRound == State.Round)
+        }
+
+        /// <summary>
+        /// Decay: "Using a Flashlight costs 1 extra Charge next round." The Butcher's own turn
+        /// runs at the *end* of a round, long after that round's Flashlights were placed, so the
+        /// surcharge is written from the shared round-start hook instead — after BeginRound has
+        /// cleared the round's modifiers and resolved its Event card, so a Foggy in the same
+        /// round stacks with it rather than being overwritten.
+        /// </summary>
+        partial void ButcherOnRoundStart()
+        {
+            if (State.Adversary.Counters.TryGetValue("decay-active-round", out int decayRound) &&
+                decayRound == State.Round)
             {
-                Log("todo", "Decay: this round's Flashlight placements should have cost 1 extra Charge; " +
-                            "BeginButcherTurn runs after them, so the Butcher needs a round-start sub-hook to set " +
-                            "RoundModifiers[\"" + FlashlightChargeSurchargeKey + "\"] in time.");
+                int total = AddRoundModifier(FlashlightChargeSurchargeKey, 1);
+                Log("adversary", $"Decay: Flashlight placements cost {total} extra Charge this round");
             }
         }
 
@@ -220,10 +225,7 @@ namespace StiflingDark.Engine.Core
         {
             SpendStalk(1);
             State.Adversary.Counters["decay-active-round"] = State.Round + 1;
-            Log("todo", $"Decay: next round's Flashlight placements should cost 1 extra Charge. " +
-                        $"RoundModifiers[\"{FlashlightChargeSurchargeKey}\"] is the enforcement channel, but it is " +
-                        "cleared when the round begins, so it cannot be written from here — the Butcher needs a " +
-                        "round-start sub-hook.");
+            Log("adversary", $"Decay: Flashlight placements cost 1 extra Charge in round {State.Round + 1}");
         }
 
         /// <summary>
@@ -270,9 +272,8 @@ namespace StiflingDark.Engine.Core
         /// their turn on one, gain 1 Stalk and remove it. Remove all Evil Eye tokens at the
         /// beginning of your next turn." The tokens live in the shared card-token map
         /// (Game.PlaceBoardToken) and BeginButcherTurn removes them, matching the card's own
-        /// cleanup timing. The trigger-on-move/end-turn half still needs an adversary-owned
-        /// sub-hook off OnInvestigatorMoveStep/OnInvestigatorTurnEnd (Game.EffectDispatch.cs
-        /// only dispatches those to the Wound/Condition/Item/Event decks).
+        /// cleanup timing; the trigger half rides the Butcher's sub-hooks off
+        /// OnInvestigatorMoveStep / OnInvestigatorTurnEnd (see <see cref="TripEvilEye"/>).
         /// </summary>
         private void ApplyEvilEye(List<string> targets)
         {
@@ -290,9 +291,33 @@ namespace StiflingDark.Engine.Core
             PlaceBoardToken("evil-eye-1", targets[0]);
             PlaceBoardToken("evil-eye-2", targets[1]);
             Log("adversary", $"Evil Eye tokens placed on {targets[0]} and {targets[1]}");
-            Log("todo", "Evil Eye's \"Moves onto or ends their turn on one\" trigger needs an adversary sub-hook " +
-                        "off OnInvestigatorMoveStep/OnInvestigatorTurnEnd; the tokens themselves are on the board " +
-                        "under BoardTokens[\"evil-eye-*\"].");
+        }
+
+        partial void ButcherOnInvestigatorMoveStep(InvestigatorState inv, string from, string to)
+        {
+            // inv.Space rather than `to`: a carriage rotation or water float may have carried
+            // them onward after the step, and the token only triggers where they end up.
+            TripEvilEye(inv);
+        }
+
+        partial void ButcherOnInvestigatorTurnEnd(InvestigatorState inv)
+        {
+            TripEvilEye(inv);
+        }
+
+        /// <summary>"If an Investigator Moves onto or ends their turn on an Evil Eye token, gain
+        /// 1 Stalk and remove the token." Not Stalk from the Stalk Action, so Escalating Terror
+        /// does not double it.</summary>
+        private void TripEvilEye(InvestigatorState inv)
+        {
+            string? token = BoardTokenIds("evil-eye").FirstOrDefault(id => State.BoardTokens[id] == inv.Space);
+            if (token == null)
+            {
+                return;
+            }
+            RemoveBoardToken(token);
+            AddStalk(1);
+            Log("adversary", $"{inv.DefId} stepped on {token}: The Butcher gains 1 Stalk and removes it");
         }
 
         /// <summary>

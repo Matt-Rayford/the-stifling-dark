@@ -63,6 +63,68 @@ namespace StiflingDark.Engine.Tests
             game.AdversaryEndTurn();
         }
 
+        // ---------- Round-start and Investigator-turn sub-hooks ----------
+
+        [Fact]
+        public void Decay_makes_next_rounds_flashlight_placements_cost_an_extra_charge()
+        {
+            var game = NewButcherGame("rend", new List<string> { "decay", "escalating-terror" });
+            FinishInvestigatorTurns(game);
+            game.State.Adversary.Counters["stalk"] = 1;
+            game.PlayAdversaryCard("decay");
+            game.AdversaryEndTurn();
+
+            // Round 2: the surcharge is in force from the moment the round begins, so it is
+            // already there for the first Flashlight of the round.
+            Assert.Equal(2, game.State.Round);
+            Assert.Equal(1, game.RoundModifier(Game.FlashlightChargeSurchargeKey));
+            var aira = Inv(game, "aira");
+            aira.Charge = 3;
+            game.BeginInvestigatorTurn("aira");
+            game.PlaceFlashlight(0.0);
+            Assert.Equal(1, aira.Charge);
+
+            SkipRound(game);
+            Assert.Equal(0, game.RoundModifier(Game.FlashlightChargeSurchargeKey));
+        }
+
+        [Fact]
+        public void An_investigator_who_steps_on_an_evil_eye_token_hands_the_butcher_a_stalk()
+        {
+            var game = NewButcherGame("rend", new List<string> { "evil-eye", "escalating-terror" });
+            var aira = Inv(game, "aira");
+            aira.Space = "S-18";
+            FinishInvestigatorTurns(game);
+            game.State.Adversary.Counters["stalk"] = 0;
+            game.PlayAdversaryCard("evil-eye", new List<string> { "S-21", "S-24" });
+            game.AdversaryEndTurn();
+
+            game.BeginInvestigatorTurn("aira");
+            game.MoveStep("S-21");
+
+            Assert.Equal(1, game.State.Adversary.Counters["stalk"]);
+            Assert.Null(game.BoardTokenSpace("evil-eye-1"));
+            Assert.Equal("S-24", game.BoardTokenSpace("evil-eye-2")); // the other token is untouched
+        }
+
+        [Fact]
+        public void An_investigator_who_ends_their_turn_on_an_evil_eye_token_also_trips_it()
+        {
+            var game = NewButcherGame("rend", new List<string> { "evil-eye", "escalating-terror" });
+            FinishInvestigatorTurns(game);
+            game.State.Adversary.Counters["stalk"] = 0;
+            game.PlayAdversaryCard("evil-eye", new List<string> { "S-21", "S-24" });
+            game.AdversaryEndTurn();
+
+            var aira = Inv(game, "aira");
+            aira.Space = "S-24"; // put there by something other than a Move
+            game.BeginInvestigatorTurn("aira");
+            game.EndTurnWithoutFinalAction();
+
+            Assert.Equal(1, game.State.Adversary.Counters["stalk"]);
+            Assert.Null(game.BoardTokenSpace("evil-eye-2"));
+        }
+
         // ---------- Stalk range ----------
 
         [Fact]

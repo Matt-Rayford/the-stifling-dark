@@ -99,13 +99,10 @@ namespace StiflingDark.Engine.Core
             args ??= new List<string>();
             var inv = ActiveInv();
             RequireNoPendingWindow();
+            RequireActionAllowed(inv, ActionUseItem);
             if (!inv.Items.Contains(cardId))
             {
                 throw new InvalidOperationException($"{inv.DefId} does not hold Item card '{cardId}'.");
-            }
-            if (inv.Wounds.Any(w => w.FaceUp && w.CardId == "mangled-hands"))
-            {
-                throw new InvalidOperationException("Mangled Hands: you may not use Item or Cursed Item cards.");
             }
             var card = FindItemCard(cardId);
             ApplyItemEffect(inv, card, args);
@@ -314,7 +311,11 @@ namespace StiflingDark.Engine.Core
                     break;
                 }
                 case "cross":
-                    Log("todo", "cross: restricting the Adversary to Attacks/Core Actions only isn't enforced (Ability card resolution can't consult Item state)");
+                    // "The Adversary may not use any of their Ability cards during their next
+                    // turn. They may still use Attacks and Core Actions." Their next turn is
+                    // this round's Adversary turn; PlayAdversaryCard reads the latch.
+                    State.Adversary.Counters[AbilitiesBlockedRoundKey] = State.Round;
+                    Log("item", $"{inv.DefId} raised the Cross: no Adversary Ability cards this round");
                     break;
                 case "dirty-rag":
                     Log("todo", "dirty-rag: no Map Hazard system exists yet to neutralize");
@@ -350,11 +351,64 @@ namespace StiflingDark.Engine.Core
                     Log("item", $"{inv.DefId} ate an Energy Bar");
                     break;
                 case "energy-drink":
-                    Log("todo", "energy-drink: the engine has no discrete 'Move Action' to grant a second use of (movement spends from a shared MP pool, not per-action)");
+                    // "You may take the Move Action twice this turn." Movement spends from one
+                    // shared MP pool rather than per-Action, so a second Move Action has exactly
+                    // one observable effect: it lifts a movement lock, the only thing that can
+                    // stop an Investigator Moving again on the same turn.
+                    if (inv.MovementLocked)
+                    {
+                        inv.MovementLocked = false;
+                        Log("item", $"{inv.DefId} used Energy Drink: they may Move again this turn");
+                    }
+                    else
+                    {
+                        Log("item", $"{inv.DefId} used Energy Drink; nothing was stopping them Moving, so the shared MP pool is unchanged");
+                    }
                     break;
                 case "firecrackers":
-                    Log("todo", "firecrackers: forcing Adversary figures to Move isn't modeled (Adversary movement only runs during their own turn logic)");
+                {
+                    // "Select a space within 3 spaces of your current position. All Adversary
+                    // figures must immediately Move 2 spaces towards that space." A forced move
+                    // outside the Adversary's own turn, so it spends no MP and none of their
+                    // Actions; a figure pulled into the light is Revealed as usual.
+                    if (args.Count < 1)
+                    {
+                        throw new InvalidOperationException("Firecrackers: choose a space within 3 spaces of you.");
+                    }
+                    string bang = args[0];
+                    if (!Graph.DistancesFrom(inv.Space, 3, State.Overlay).ContainsKey(bang))
+                    {
+                        throw new InvalidOperationException("Firecrackers: the space must be within 3 spaces of you.");
+                    }
+                    var adv = State.Adversary;
+                    string dragged = StepFigureTowards(adv.Space, bang, 2);
+                    if (dragged != adv.Space)
+                    {
+                        adv.Space = dragged;
+                        Log("adversary", $"Firecrackers drag the Adversary to {dragged}");
+                        if (!adv.Revealed && IsBright(dragged))
+                        {
+                            RevealAdversary("dragged into the light by Firecrackers");
+                        }
+                    }
+                    foreach (var figure in adv.Figures.Where(f => f.Alive))
+                    {
+                        string next = StepFigureTowards(figure.Space, bang, 2);
+                        if (next == figure.Space)
+                        {
+                            continue;
+                        }
+                        figure.Space = next;
+                        Log("adversary", $"Firecrackers drag {figure.Id} to {next}");
+                        if (!figure.Revealed && IsBright(next))
+                        {
+                            figure.Revealed = true;
+                            Log("reveal", $"{figure.Id} at {next} (caught in the light)");
+                        }
+                    }
+                    Log("item", $"{inv.DefId} set off Firecrackers at {bang}");
                     break;
+                }
                 case "fresh-batteries":
                     GainCharge(inv, 2);
                     Log("item", $"{inv.DefId} used Fresh Batteries");
@@ -446,7 +500,12 @@ namespace StiflingDark.Engine.Core
                     break;
                 }
                 case "lucky-dice":
-                    Log("todo", "lucky-dice: rerolling an arbitrary prior dice roll isn't modeled (no generic reroll hook over Sprint/D6 rolls elsewhere)");
+                    // "You may re-roll any of your dice rolls and choose which roll to keep."
+                    // ModifySprintRoll is the one reroll interception point the engine has, so
+                    // the Supply arms a Sprint reroll; keeping the better of the two rolls is
+                    // what "choose" always comes to for a Sprint.
+                    AddMarker(inv, "lucky-dice-reroll");
+                    Log("item", $"{inv.DefId} readies Lucky Dice: their next Sprint roll is rerolled, best of two");
                     break;
                 case "makeshift-iv":
                 {
@@ -545,7 +604,9 @@ namespace StiflingDark.Engine.Core
                     Log("todo", "sedatives: skipping your next turn isn't enforced (BeginInvestigatorTurn has no lockout hook)");
                     break;
                 case "survival-kit":
-                    Log("todo", "survival-kit: ignoring an Event card's effect isn't modeled (Event effects are not implemented yet)");
+                    Log("todo", "survival-kit: Event effects are implemented now, but they are applied once, for everyone, " +
+                                "as RoundModifiers when the card is drawn; ignoring one for a single Investigator needs " +
+                                "those modifiers scoped per Investigator first");
                     break;
                 case "torch":
                 {
@@ -627,7 +688,16 @@ namespace StiflingDark.Engine.Core
                     break;
                 }
                 case "spare-tools":
-                    Log("todo", "spare-tools: converting an Involved Action final into a non-ending Interact isn't modeled (TurnInEvidence/objective methods always call EndTurn)");
+                    // "Make an Involved Action count as an Interact Action instead. This does not
+                    // end your turn, but you may not take another Involved Action this turn."
+                    // Every Involved Action funnels through Game.EndTurn, which consumes this
+                    // modifier instead of ending the turn.
+                    if (HasRoundModifier(InvolvedActionUsedPrefix + inv.DefId))
+                    {
+                        throw new InvalidOperationException($"{inv.DefId} has already taken an Involved Action this turn.");
+                    }
+                    SetRoundModifier(InvolvedAsInteractPrefix + inv.DefId, 1);
+                    Log("item", $"{inv.DefId} used Spare Tools: their next Involved Action counts as an Interact");
                     break;
                 case "stray-mutt":
                 {
@@ -674,13 +744,13 @@ namespace StiflingDark.Engine.Core
                         throw new InvalidOperationException("Tripod: choose the Flashlight angle (radians).");
                     }
                     double angle = double.Parse(args[0], CultureInfo.InvariantCulture);
-                    if (inv.Charge < 1)
-                    {
-                        throw new InvalidOperationException("Placing the Flashlight costs 1 Charge.");
-                    }
-                    inv.Charge -= 1;
+                    // Same Flashlight, same price and same beam limits as the Final Action —
+                    // Tripod only changes whether the turn ends.
+                    RequireActionAllowed(inv, ActionPlaceFlashlight);
+                    PayFlashlightCharge(inv);
                     inv.FinalAction = FinalActionKind.PlaceFlashlight;
                     var bright = PreviewFlashlight(inv.DefId, angle);
+                    TrimFlashlightBright(inv, angle, bright);
                     State.Flashlights.Add(new FlashlightPlacement
                     {
                         InvestigatorId = inv.DefId,
@@ -741,8 +811,11 @@ namespace StiflingDark.Engine.Core
                     break;
                 }
                 case "spare-batteries":
-                    GainCharge(inv, 1);
-                    Log("item", $"{inv.DefId} used Spare Batteries (approximated as a 1-Charge refund, since PlaceFlashlight's Charge cost can't be intercepted directly)");
+                    // "You may spend a Supply token from this card instead of spending a Charge
+                    // when using a Flashlight." Game.PlaceFlashlight consumes the waiver while it
+                    // works out what the placement costs, so no Charge changes hands at all.
+                    SetRoundModifier(FlashlightChargeWaiverPrefix + inv.DefId, 1);
+                    Log("item", $"{inv.DefId} spent a Spare Batteries Supply: their next Flashlight placement costs 1 less Charge");
                     break;
 
                 // ----- General items (MI) -----
@@ -859,10 +932,16 @@ namespace StiflingDark.Engine.Core
                             break;
                         case 3:
                         case 4:
-                            Log("todo", "foul-spell-bag: your Flashlight may never drop below 1 Charge (PlaceFlashlight's Charge cost can't be intercepted)");
+                            // "Your Flashlight may never drop below 1 Charge for the rest of the
+                            // game": a standing block on the Place Flashlight Action whenever
+                            // paying for it would empty the Charge track.
+                            AddMarker(inv, "flashlight-min-charge");
+                            Log("item", $"{inv.DefId}'s Flashlight may never drop below 1 Charge again");
                             break;
                         default:
-                            Log("todo", "foul-spell-bag: no longer gain face-down Wounds from Sprinting (LoseStamina can't be intercepted)");
+                            Log("todo", "foul-spell-bag: no longer gain face-down Wounds from Sprinting — GainWound now tags " +
+                                        "Sprint Wounds (WoundFromSprint), but the OnWoundGained hook can only change or add " +
+                                        "Wounds, not cancel the one being gained");
                             break;
                     }
                     switch (roll2)
@@ -1008,12 +1087,33 @@ namespace StiflingDark.Engine.Core
                     break;
                 }
                 case "witch-bells":
+                {
+                    // "Make the Adversary either not use a Sprint die, or place their Shadow token
+                    // on the main board where they begin their next turn." args[0] picks:
+                    // "sprint" (the default) or "shadow".
+                    string choice = args.Count > 0 ? args[0] : "sprint";
+                    if (choice != "sprint" && choice != "shadow")
+                    {
+                        throw new InvalidOperationException("Witch Bells takes \"sprint\" or \"shadow\".");
+                    }
+                    if (choice == "sprint")
+                    {
+                        State.Adversary.Counters["skip-sprint-die-round"] = State.Round;
+                        Log("item", $"{inv.DefId} rang Witch Bells: no Adversary Sprint die this round");
+                    }
+                    else
+                    {
+                        // Every Adversary already drops its Shadow token on its own space as its
+                        // turn begins (BeginButcherTurn / BeginHorrorTurn / BeginCultTurn), which
+                        // is exactly "where they begin their next turn".
+                        Log("item", $"{inv.DefId} rang Witch Bells: the Adversary's Shadow token shows where they begin their next turn");
+                    }
                     GainCondition(inv, "darkness");
-                    Log("item", $"{inv.DefId} used Witch Bells");
-                    Log("todo", "witch-bells: forcing the Adversary to skip their Sprint die or preset their Shadow token isn't hooked into the Adversary turn");
                     break;
+                }
                 case "ravens-wing":
-                    Log("todo", "ravens-wing: no Map Hazard system exists to move through, and the Flashlight-lockout cost can't be enforced by PlaceFlashlight");
+                    Log("todo", "ravens-wing: no Map Hazard system exists to move through, so the card has nothing to act " +
+                                "on (its Flashlight-lockout price would now ride the 'place-flashlight' action gate)");
                     break;
                 case "inscribed-axe":
                     SetStaminaDirect(inv, 0);
@@ -1080,6 +1180,71 @@ namespace StiflingDark.Engine.Core
                 GainWound(inv, faceUp: true);
                 Log("item", $"{inv.DefId} stepped into Kerosene flames at {to}");
             }
+        }
+
+        partial void ItemsCollectActionBlockers(InvestigatorState inv, string actionKey, List<string> blockers)
+        {
+            switch (actionKey)
+            {
+                case ActionInvolved:
+                    // Spare Tools: "you may not take another Involved Action this turn."
+                    if (HasRoundModifier(InvolvedActionUsedPrefix + inv.DefId))
+                    {
+                        blockers.Add("Spare Tools: you have already taken an Involved Action this turn");
+                    }
+                    break;
+                case ActionPlaceFlashlight:
+                    // Foul Spell Bag: "your Flashlight may never drop below 1 Charge."
+                    if (HasMarker(inv, "flashlight-min-charge") &&
+                        inv.Charge - (1 + Math.Max(0, RoundModifier(FlashlightChargeSurchargeKey))) < 1 &&
+                        !HasRoundModifier(FlashlightChargeWaiverPrefix + inv.DefId))
+                    {
+                        blockers.Add("Foul Spell Bag: your Flashlight may never drop below 1 Charge");
+                    }
+                    break;
+            }
+        }
+
+        partial void ItemsModifySprintRoll(InvestigatorState inv, List<int> rollBox)
+        {
+            if (!HasMarker(inv, "lucky-dice-reroll"))
+            {
+                return;
+            }
+            RemoveMarker(inv, "lucky-dice-reroll");
+            int reroll = _rng.RollSprintDie(Db.Config.SprintDieFaces);
+            SaveRng();
+            Log("item", $"{inv.DefId}'s Lucky Dice reroll: {rollBox[0]} vs {reroll}");
+            rollBox[0] = Math.Max(rollBox[0], reroll);
+        }
+
+        /// <summary>
+        /// Walk a figure up to <paramref name="steps"/> spaces along the shortest route toward
+        /// <paramref name="target"/>, stopping early when nothing gets closer. Used by the
+        /// cards that shove figures around outside their own turn (Firecrackers, Whistle).
+        /// </summary>
+        private string StepFigureTowards(string from, string target, int steps)
+        {
+            var toTarget = Graph.DistancesFrom(target, int.MaxValue, State.Overlay);
+            string current = from;
+            for (int i = 0; i < steps; i++)
+            {
+                if (!toTarget.TryGetValue(current, out int distance) || distance == 0)
+                {
+                    break;
+                }
+                string? closer = Graph.DistancesFrom(current, 1, State.Overlay).Keys
+                    .Where(n => n != current && toTarget.TryGetValue(n, out int nd) && nd < distance)
+                    .OrderBy(n => toTarget[n])
+                    .ThenBy(n => n, StringComparer.Ordinal)
+                    .FirstOrDefault();
+                if (closer == null)
+                {
+                    break;
+                }
+                current = closer;
+            }
+            return current;
         }
 
         partial void ItemsOnRoundEnd()

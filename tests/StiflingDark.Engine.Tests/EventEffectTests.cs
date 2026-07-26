@@ -151,13 +151,69 @@ namespace StiflingDark.Engine.Tests
         }
 
         [Fact]
-        public void Severe_heat_records_the_sprint_surcharge_and_names_its_missing_read_site()
+        public void Severe_heat_makes_every_sprint_cost_an_extra_stamina()
         {
             var game = NewSawmillGame();
             DrawEventNextRound(game, "severe-heat");
             Assert.Equal(1, game.RoundModifier(Game.SprintStaminaSurchargeKey));
-            Assert.Contains(game.State.Log, e => e.Type == "todo" &&
-                e.Detail.Contains(Game.SprintStaminaSurchargeKey) && e.Detail.Contains("Game.Sprint"));
+
+            var aira = Inv(game, "aira");
+            int stamina = aira.Stamina;
+            game.BeginInvestigatorTurn("aira");
+            game.Sprint();
+
+            Assert.Equal(stamina - 2, aira.Stamina);
+        }
+
+        [Fact]
+        public void Cold_front_trips_the_stamina_tracks_wound_icons_a_space_early_when_sprinting()
+        {
+            var game = NewSawmillGame();
+            DrawEventNextRound(game, "cold-front");
+            Assert.Equal(1, game.RoundModifier(Game.SprintWoundIconShiftKey));
+
+            var aira = Inv(game, "aira");
+            var track = TestData.Db.Investigator("aira").StaminaTrack;
+            // Stand 1 above a Wound icon: a Sprint's single Stamina lands on icon+1, which is
+            // only a Wound because Cold Front shifted the icons.
+            aira.Stamina = track.WoundIconSpaces.Max() + 2;
+            game.BeginInvestigatorTurn("aira");
+            game.Sprint();
+
+            Assert.Single(aira.Wounds);
+        }
+
+        [Fact]
+        public void Pyrocumulus_rolls_a_d6_for_every_sprint_and_wounds_on_four_plus()
+        {
+            var game = NewSawmillGame();
+            DrawEventNextRound(game, "pyrocumulus");
+
+            int wounded = 0;
+            foreach (string id in new[] { "aira", "lucy-belle", "mitchell", "vincent" })
+            {
+                game.BeginInvestigatorTurn(id);
+                game.Sprint();
+                game.EndTurnWithoutFinalAction();
+                wounded += Inv(game, id).Wounds.Count;
+            }
+
+            Assert.Contains(game.State.Log, e => e.Type == "event" && e.Detail.Contains("rolled"));
+            Assert.True(wounded > 0, "4 Sprints against a 4+ threshold should have wounded someone");
+        }
+
+        [Fact]
+        public void Muddy_and_interference_take_their_actions_off_the_table()
+        {
+            var game = NewSawmillGame();
+            DrawEventNextRound(game, "muddy");
+            Assert.Contains("muddy", string.Join("|", game.ActionBlockers("aira", Game.ActionPickUpPoi)));
+            Assert.Empty(game.ActionBlockers("aira", Game.ActionCharge));
+
+            DrawEventNextRound(game, "interference");
+            Assert.Contains("interference", string.Join("|", game.ActionBlockers("aira", Game.ActionCharge)));
+            game.BeginInvestigatorTurn("aira");
+            Assert.Throws<InvalidOperationException>(() => game.ChargeFlashlight());
         }
 
         [Fact]
@@ -197,13 +253,20 @@ namespace StiflingDark.Engine.Tests
         // ---------- Moderate Events ----------
 
         [Fact]
-        public void Heavy_smoke_records_the_blocked_rest_stamina_and_names_its_missing_read_site()
+        public void Heavy_smoke_blocks_the_stamina_a_rest_would_have_gained()
         {
             var game = NewSawmillGame();
             DrawEventNextRound(game, "heavy-smoke");
             Assert.Equal(1, game.RoundModifier(Game.NoRestStaminaKey));
-            Assert.Contains(game.State.Log, e => e.Type == "todo" &&
-                e.Detail.Contains(Game.NoRestStaminaKey) && e.Detail.Contains("Game.EndTurn"));
+
+            var aira = Inv(game, "aira");
+            aira.Stamina = 2; // below the track maximum, so Resting would normally add 1
+            game.BeginInvestigatorTurn("aira");
+            game.Rest();
+            game.EndTurnWithoutFinalAction();
+
+            Assert.Equal(2, aira.Stamina);
+            Assert.Contains(game.State.Log, e => e.Type == "event" && e.Detail.Contains("no Stamina from Resting"));
         }
 
         [Fact]

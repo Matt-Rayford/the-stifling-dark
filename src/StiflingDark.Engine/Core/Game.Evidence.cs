@@ -17,6 +17,7 @@ namespace StiflingDark.Engine.Core
         {
             var inv = ActiveInv();
             RequireNoPendingWindow();
+            RequireActionAllowed(inv, ActionInvolved);
             RequireNoFinalAction(inv);
 
             var requiredKind = State.ScenarioId switch
