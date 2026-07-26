@@ -1,0 +1,124 @@
+{
+  "_icons": {
+    "{lungs}": "Stamina (lungs icon)",
+    "{wound-facedown}": "face-down Wound card",
+    "{wound-faceup}": "face-up Wound card",
+    "{major-ability}": "Major Ability token",
+    "{blood}": "Blood drop token",
+    "{poppet}": "Poppet special token (Cursed Poppet)",
+    "{footprint}": "Footprint (movement cost/noise)",
+    "{charge}": "Flashlight Charge",
+    "{obstruction}": "Obstruction token (X)",
+    "{secret-passage}": "Secret Passage token",
+    "{supply-small}": "small Supply token placed on the board",
+    "_typeIcon": "All Cursed Item cards carry a pentagram type icon in the top-right corner",
+    "_supply": "Supply icon (stacked cubes) with a number or infinity = number of uses"
+  },
+  "cards": [
+    {
+      "id": "binding-tablet",
+      "name": "Binding Tablet",
+      "count": 1,
+      "supply": null,
+      "involvedAction": false,
+      "text": "Lose 4 {lungs}, incurring {wound-facedown} if applicable. You may not use this Item if you have fewer than 4 {lungs}\nThe Adversary may take only the Move Action on their next turn"
+    },
+    {
+      "id": "blood-chalice",
+      "name": "Blood Chalice",
+      "count": 1,
+      "supply": "infinity",
+      "involvedAction": false,
+      "text": "Gain a {wound-faceup} to use any other Investigator's Major Ability without using a {major-ability} token. If their Ability uses special tokens, take those tokens even if they are on the board\nYou may choose Investigators that are not in play\nYou may not Trade this Item after using it"
+    },
+    {
+      "id": "cursed-poppet",
+      "name": "Cursed Poppet",
+      "count": 1,
+      "supply": null,
+      "involvedAction": false,
+      "text": "Reduce your {lungs} to 0 (do not incur any {wound-facedown}), then give another Investigator the {poppet} (Poppet) token\nEach time the Poppet gains a {blood}, you may remove a {wound-facedown}\nEach time the Poppet loses 1 or more {lungs}, you may gain 1 {lungs}\nYou may not Trade this Item after using it",
+      "notes": "Card shows the Poppet special-token icon next to the pentagram type icon in the top-right corner"
+    },
+    {
+      "id": "diablerie-book",
+      "name": "Diablerie Book",
+      "count": 1,
+      "supply": null,
+      "involvedAction": false,
+      "text": "After using this card, permanently increase your {footprint} by 2\nAt the start of each of your turns, flip a random {wound-facedown} face-up\nIf you do not have a {wound-facedown}, gain a {wound-facedown}\nYou may not Trade this Item after using it"
+    },
+    {
+      "id": "foul-spell-bag",
+      "name": "Foul Spell Bag",
+      "count": 1,
+      "supply": null,
+      "involvedAction": false,
+      "text": "Roll a D6:\n1-2: Permanently increase your {footprint} by 1\n3-4: Your Flashlight may never drop below 1 {charge} for the rest of the game\n5-6: You no longer gain {wound-facedown} from Sprinting\nRoll again. Another Investigator must:\n1-2: Place an {obstruction} (Obstruction) token on the highest space of their Stamina track\n3-4: Place an {obstruction} (Obstruction) token on the highest space of their Charge track\n5-6: Gain the Paranoid Condition"
+    },
+    {
+      "id": "hexed-mirror",
+      "name": "Hexed Mirror",
+      "count": 1,
+      "supply": null,
+      "involvedAction": false,
+      "text": "After another Investigator gains a {blood} from the Adversary, you may change places with them"
+    },
+    {
+      "id": "mystery-syringe",
+      "name": "Mystery Syringe",
+      "count": 1,
+      "supply": 2,
+      "involvedAction": false,
+      "text": "Roll a D6:\n1: You may not Move or Sprint next round\n2: You may not gain/lose {lungs} for the next 2 rounds\n3: Lose 2 {lungs} (incurring {wound-facedown} if applicable) then flip a {wound-faceup} face-down\n4: Regain all of your {lungs}\n5: Increase your {footprint} by 2 for 2 rounds\n6: The next time you Sprint, roll 2 Sprint dice and add them together"
+    },
+    {
+      "id": "phantom-amulet",
+      "name": "Phantom Amulet",
+      "count": 1,
+      "supply": null,
+      "involvedAction": false,
+      "text": "Gain the Mauled Condition to place a {secret-passage} (Secret Passage) token between any two spaces on the main board\nIf you already have the Mauled Condition, gain a {wound-facedown} instead"
+    },
+    {
+      "id": "summoning-stones",
+      "name": "Summoning Stones",
+      "count": 1,
+      "supply": null,
+      "involvedAction": false,
+      "text": "You may look through the General Item deck and take 2 cards, then shuffle the deck\nAll Investigators must decrease their {lungs} by 1, incurring {wound-facedown} if applicable"
+    },
+    {
+      "id": "lorgnette",
+      "name": "Lorgnette",
+      "count": 1,
+      "supply": 6,
+      "involvedAction": false,
+      "text": "Place up to 3 {supply-small} tokens on any space your Flashlight touches. These spaces count as if they have line of sight and have the same effect as your current Flashlight, even if they are obstructed or are not fully covered\nEach time you use this Item, have the Adversary give another Investigator the Darkness Condition"
+    },
+    {
+      "id": "witch-bells",
+      "name": "Witch Bells",
+      "count": 1,
+      "supply": null,
+      "involvedAction": false,
+      "text": "You may choose to make the Adversary either not use a Sprint die or place their Shadow token on the main board where they begin their next turn\nGain the Darkness Condition when you use this Item"
+    },
+    {
+      "id": "ravens-wing",
+      "name": "Raven's Wing",
+      "count": 1,
+      "supply": "infinity",
+      "involvedAction": false,
+      "text": "You may Move through Map Hazards with no negative effects. If you do this, you may not use your Flashlight this round\nYou may not Trade this Item after using it"
+    },
+    {
+      "id": "inscribed-axe",
+      "name": "Inscribed Axe",
+      "count": 1,
+      "supply": null,
+      "involvedAction": false,
+      "text": "When the Adversary Attacks you, you may discard this card to choose another Investigator to suffer the effects of the Attack instead\nReduce your {lungs} to 0 (do not incur any {wound-facedown}) and place an {obstruction} (Obstruction) token on the highest space of your Stamina track"
+    }
+  ]
+}

@@ -1,0 +1,485 @@
+{
+ "_status": "Transcribed and visually verified from game-assets/player-boards/investigator-fronts.pdf and investigator-backs.pdf (12 pages each, one Investigator per page, same order in both files). The PDFs contain 12 Investigators: the 10 from the rulebook plus Kya Prosser and Winston Pitts.",
+ "_icons": {
+  "{footprint}": "Movement Point (MP)",
+  "{lungs}": "Stamina",
+  "{charge}": "Charge (battery)",
+  "{involvedaction}": "Involved Action",
+  "{majorability}": "Major Ability (gear symbol; requires discarding a Major Ability token)",
+  "{blood}": "Wound slot (blood drop) on the Wound area",
+  "{faceupwound}": "Face-up Wound",
+  "{facedownwound}": "Face-down Wound",
+  "{can}": "Can token (Brielle), Can side",
+  "{noise}": "Noise side of a Can token",
+  "{escapeartist}": "Escape Artist token (Dylan)",
+  "{barricade}": "Barricade token (Lucy Belle)",
+  "{smile}": "Smile side of Mada's Coin token",
+  "{frown}": "Frown side of Mada's Coin token",
+  "{pointofinterest}": "Point of Interest token",
+  "{item}": "Item card",
+  "{curseditemtype}": "Cursed Item card",
+  "{campfire}": "Campfire token (Winston)"
+ },
+ "shared": {
+  "startingStamina": 5,
+  "startingCharge": 3,
+  "startingMajorAbilityTokens": 1,
+  "startingEquipment": [
+   "Small Flashlight",
+   "Sprint die",
+   "Investigator Actions player aid",
+   "Investigator-specific Ability tokens (if any)"
+  ],
+  "minorAbility": "Usable any number of times when its conditions are met (free).",
+  "majorAbility": "Requires discarding a Major Ability token. Tokens cannot be given away or Traded; max 1 held at a time.",
+  "staminaTrackLayout": "6 circular spaces numbered 0-5. Space 5 is the solid (heavy black ring, fully saturated) starting space. Space 0 is drawn with a dashed outline; spaces 1-4 are pink with dashed-segment rings. Spaces bearing a printed face-down Wound icon inflict a face-down Wound when landed ON (all Investigators: spaces 0 and 1, except Marci Jo: space 0 only). All other Stamina spaces show a lungs icon.",
+  "chargeTrackLayout": "4 circular battery spaces numbered 0-3 next to a flashlight illustration. Space 3 is the solid (heavy black ring, fully saturated) starting space; space 0 has a dashed outline.",
+  "woundArea": "4 slots below the tracks; the first 3 are marked with a blood-drop icon, the 4th with a Skull (death).",
+  "turnSidebar": "Generic on every board: Turn (Move, Sprint, Interact, Flashlight, Charge, Inv. Action) / Round (Start Phase, Investigators, Adversary, End Phase). Minor Abilities are tagged 'Turn', Major Abilities 'Round' on the boards."
+ },
+ "backs": {
+  "relationship": "investigator-backs.pdf pages 1-12 are the reverse sides of the same 12 boards, in the same order as investigator-fronts.pdf. Each back has the character name, a full-body portrait, a flavor bio, and a summary block: Playstyle tag plus one-phrase descriptors of the Minor and Major Abilities. Backs have no rules text, stats, or tracks.",
+  "summaries": [
+   {
+    "id": "aira",
+    "playstyle": "Objectives",
+    "minorAbilityTag": "Involved Action Mitigation",
+    "majorAbilityTag": "Finding the Adversary",
+    "bio": "When people meet Aira, the first thing they realize is how perceptive she is. But she's not just observant; she's gifted. She finds things before other people even realize there is something to look for. Even when it's pitch black, Aira always seems able to find what she is seeking."
+   },
+   {
+    "id": "asher",
+    "playstyle": "Survival",
+    "minorAbilityTag": "Wound Management",
+    "majorAbilityTag": "Increased Movement",
+    "bio": "Pain is just a sign to keep going. And Asher only knows how to push harder. To those who have seen him in action, his tolerance for enduring pain can seem almost inhuman."
+   },
+   {
+    "id": "brielle",
+    "playstyle": "Support",
+    "minorAbilityTag": "Area Control - Alarms",
+    "majorAbilityTag": "Event Mitigation",
+    "bio": "Living on the streets makes a person grow up fast. Brielle has learned to watch her back any way she can, whether that's using simple tools or modifying more complex mechanisms. After all, you never know what's creeping around out there in the darkness."
+   },
+   {
+    "id": "dylan",
+    "playstyle": "Objectives",
+    "minorAbilityTag": "Increased Movement",
+    "majorAbilityTag": "Reposition",
+    "bio": "Dylan has an exceptional knack for navigating in the dark. It's possible he has always been this way, but then again, experience can teach a person to do extraordinary things. Especially when you make your living \"reappropriating\" luxury goods. Another thing experience will teach you is to always have an escape plan. You never know when you'll need to make yourself scarce in a hurry."
+   },
+   {
+    "id": "ibraheem",
+    "playstyle": "Objectives",
+    "minorAbilityTag": "Sustained Movement",
+    "majorAbilityTag": "Enhanced Trade",
+    "bio": "Ibraheem's whole life has revolved around working hard to climb to the top. There are no days off when you are a world-class athlete. He is constantly striving for perfection, never letting anything slow him down. He is a veritable force of nature, both on the field and off it."
+   },
+   {
+    "id": "lucy-belle",
+    "playstyle": "Survival",
+    "minorAbilityTag": "Increased Movement",
+    "majorAbilityTag": "Area Control - Barriers",
+    "bio": "An indomitable will and relentless resolve make quick work of whatever life throws at a person. And that's just how Lucy is determined to deal with anything that tries to slow her down. She's always been one to push through obstacles and keep adversity at bay. Bad weather, tough terrain and countless hours on the trail have never been able to stop her, and she isn't going to start letting a little difficulty get to her now."
+   },
+   {
+    "id": "mada",
+    "playstyle": "Support",
+    "minorAbilityTag": "Ability Mitigation",
+    "majorAbilityTag": "Increased Movement",
+    "bio": "Time and time again people referred to him as lucky. In the most unlikely of situations, Mada appears with the trickiest of timings. Found anywhere that plays can be made, Mada makes a point to show that everyone has luck... and often, skill is just when luck becomes habit."
+   },
+   {
+    "id": "marci",
+    "playstyle": "Support",
+    "minorAbilityTag": "Sustained Sprint",
+    "majorAbilityTag": "Move Investigators",
+    "bio": "Coach always said she could be one of the best. But despite surpassing her friends' abilities, Marci has kept herself grounded. She knows it takes everyone to succeed, and she's always willing to take a back seat so that the whole team can win."
+   },
+   {
+    "id": "mitchell",
+    "playstyle": "Scout",
+    "minorAbilityTag": "Finding the Adversary",
+    "majorAbilityTag": "Finding the Adversary",
+    "bio": "Being an experienced woodsman, Mitchell always keeps his head on a swivel. Anyone he has been in the field with will tell you, he seems to have a knack for seeing dangerous situations before they even appear. Knowing your surroundings prevents missteps and can often mean the difference between life and death."
+   },
+   {
+    "id": "vincent",
+    "playstyle": "Support",
+    "minorAbilityTag": "Finding Items",
+    "majorAbilityTag": "Finding Cursed Items",
+    "bio": "Some kids are blessed with physical ability; others use their aptitude for gaining knowledge to succeed. Vincent's mechanical knowledge has always been his greatest asset and he is at his best when using whatever is at hand to solve his problems."
+   },
+   {
+    "id": "kya",
+    "playstyle": "Survival",
+    "minorAbilityTag": "Swap Stamina and Charge",
+    "majorAbilityTag": "Invert Light Levels",
+    "bio": "Most people understand the usefulness of focus and mental concentration, but only a handful understand these tools like Kya. When a person truly fixates their mind on a task, that focus can take on a quality of its own. Of course, once you master how to direct your concentration, you become able to manipulate the energy in and around you as you see fit.",
+    "set": "promo"
+   },
+   {
+    "id": "winston",
+    "playstyle": "Support",
+    "minorAbilityTag": "Sustained Flashlight",
+    "majorAbilityTag": "Stamina Recharge",
+    "bio": "Winston always felt at home in the woods, and his years of outdoors experience have taught him to make the most of every situation. When people think of survival skills, it always seems like having the right gear and skills are the first things they think of. But Winston knows better. Survival is a state of mind. It's an attitude that welcomes change and venerates adaptability above all else, even when it seems like there is no light left in the world.",
+    "set": "promo"
+   }
+  ]
+ },
+ "investigators": [
+  {
+   "id": "aira",
+   "name": "Aira Willson",
+   "mp": 4,
+   "minorAbility": {
+    "name": null,
+    "text": "You may take the Involved Action {involvedaction} Final Action at any point during your turn (without ending your turn), but you may not perform any other {involvedaction} during that turn.\nYou may still choose to take a different Final Action to end your turn, and if you choose to Rest you gain {lungs} at the end of your turn."
+   },
+   "majorAbility": {
+    "name": null,
+    "text": "Choose 2 spaces anywhere on the board. If the Adversary is on or adjacent to those spaces they must Reveal themself.\nThis is an immediate and one-time effect that does not make the spaces Bright."
+   },
+   "abilityTokens": [],
+   "staminaTrack": {
+    "spaces": 6,
+    "start": 5,
+    "woundIconSpaces": [
+     0,
+     1
+    ]
+   },
+   "chargeTrack": {
+    "spaces": 4,
+    "start": 3
+   },
+   "set": "base"
+  },
+  {
+   "id": "asher",
+   "name": "Asher Palacios",
+   "mp": 4,
+   "minorAbility": {
+    "name": null,
+    "text": "Ignore the effects of any {faceupwound} in your first {blood} slot.\nThis {blood} may still be flipped face-up, but it will have no adverse effect."
+   },
+   "majorAbility": {
+    "name": null,
+    "text": "Gain 1 {lungs}. During this turn, gain 2 {footprint} and ignore the effects of any {faceupwound} you have."
+   },
+   "abilityTokens": [],
+   "staminaTrack": {
+    "spaces": 6,
+    "start": 5,
+    "woundIconSpaces": [
+     0,
+     1
+    ]
+   },
+   "chargeTrack": {
+    "spaces": 4,
+    "start": 3
+   },
+   "set": "base"
+  },
+  {
+   "id": "brielle",
+   "name": "Brielle Easton",
+   "mp": 4,
+   "minorAbility": {
+    "name": null,
+    "text": "You start the game with 6 {can} (Can) tokens.\nPlace any number of {can} tokens on the main board within 3 spaces of yourself. When the Adversary moves onto a {can} token, they flip it to the {noise} (Noise) side."
+   },
+   "majorAbility": {
+    "name": null,
+    "text": "All Investigators may ignore the effects of an Event this round."
+   },
+   "abilityTokens": [
+    {
+     "name": "Can",
+     "count": 6
+    }
+   ],
+   "staminaTrack": {
+    "spaces": 6,
+    "start": 5,
+    "woundIconSpaces": [
+     0,
+     1
+    ]
+   },
+   "chargeTrack": {
+    "spaces": 4,
+    "start": 3
+   },
+   "set": "base"
+  },
+  {
+   "id": "dylan",
+   "name": "Dylan J. Lee",
+   "mp": 4,
+   "minorAbility": {
+    "name": null,
+    "text": "You may treat up to 3 Dark spaces as Dim when you Move or Sprint onto them."
+   },
+   "majorAbility": {
+    "name": null,
+    "text": "Place an {escapeartist} (Escape Artist) token on an adjacent space on the main board. You may place your figure back on the {escapeartist} token for free at any point this round or the next round.\nRemove the {escapeartist} token when it is used or at the end of your next turn."
+   },
+   "abilityTokens": [
+    {
+     "name": "Escape Artist",
+     "count": 1
+    }
+   ],
+   "staminaTrack": {
+    "spaces": 6,
+    "start": 5,
+    "woundIconSpaces": [
+     0,
+     1
+    ]
+   },
+   "chargeTrack": {
+    "spaces": 4,
+    "start": 3
+   },
+   "set": "base"
+  },
+  {
+   "id": "ibraheem",
+   "name": "Ibraheem Hess",
+   "mp": 4,
+   "minorAbility": {
+    "name": null,
+    "text": "Your {footprint} for the Move Action can never drop below 4.\nIf a card would normally lower your {footprint}, those effects apply to your Sprint roll if you decide to Sprint. Effects that prevent you from taking the Move Action still apply."
+   },
+   "majorAbility": {
+    "name": null,
+    "text": "You may Trade with an Investigator that is up to 5 spaces away."
+   },
+   "abilityTokens": [],
+   "staminaTrack": {
+    "spaces": 6,
+    "start": 5,
+    "woundIconSpaces": [
+     0,
+     1
+    ]
+   },
+   "chargeTrack": {
+    "spaces": 4,
+    "start": 3
+   },
+   "set": "base"
+  },
+  {
+   "id": "lucy-belle",
+   "name": "Lucy Belle",
+   "mp": 4,
+   "minorAbility": {
+    "name": null,
+    "text": "When you roll 2 {footprint} on the Sprint die, it counts as 3 {footprint}."
+   },
+   "majorAbility": {
+    "name": null,
+    "text": "Place 2 {barricade} (Barricade) tokens adjacent to yourself on the main board. They do not need to be adjacent to each other but must be placed at the same time.\nThey work like Doors for the Adversary, except when they are Destroyed the {barricade} token is removed. Investigators may Move through them and they do not block line of sight."
+   },
+   "abilityTokens": [
+    {
+     "name": "Barricade",
+     "count": 2
+    }
+   ],
+   "staminaTrack": {
+    "spaces": 6,
+    "start": 5,
+    "woundIconSpaces": [
+     0,
+     1
+    ]
+   },
+   "chargeTrack": {
+    "spaces": 4,
+    "start": 3
+   },
+   "set": "base"
+  },
+  {
+   "id": "mada",
+   "name": "Mada K. Rorrim",
+   "mp": 4,
+   "minorAbility": {
+    "name": null,
+    "text": "Gain your {smile} / {frown} (Coin) token whenever you Reveal an Adversary figure. You may only have 1 Coin token at a time. When an Investigator within 4 spaces of you is the target of an Adversary Ability (not Attack), you may move adjacent to that Investigator and flip your Coin.\nOn a {smile} (Smile), you may choose new target(s) for the Ability, ignoring range. On a {frown} (Frown), the Adversary may choose new target(s), also ignoring range."
+   },
+   "majorAbility": {
+    "name": null,
+    "text": "Lose 5 {lungs} in order to roll the Sprint die 3 times during this turn.\nYou may not use this Ability unless you have 5 {lungs}, and losing {lungs} in this way does not incur {facedownwound}."
+   },
+   "abilityTokens": [
+    {
+     "name": "Coin",
+     "count": 1
+    }
+   ],
+   "staminaTrack": {
+    "spaces": 6,
+    "start": 5,
+    "woundIconSpaces": [
+     0,
+     1
+    ]
+   },
+   "chargeTrack": {
+    "spaces": 4,
+    "start": 3
+   },
+   "set": "base"
+  },
+  {
+   "id": "marci",
+   "name": "Marci Jo",
+   "mp": 4,
+   "minorAbility": {
+    "name": null,
+    "text": "You only gain a {facedownwound} when your {lungs} reaches 0 instead of 1."
+   },
+   "majorAbility": {
+    "name": null,
+    "text": "Choose up to 2 other Investigators within 8 spaces of you. You may move each of them up to 2 spaces in any direction, treating Dark spaces as Dim. Map Hazards retain their effects."
+   },
+   "abilityTokens": [],
+   "staminaTrack": {
+    "spaces": 6,
+    "start": 5,
+    "woundIconSpaces": [
+     0
+    ]
+   },
+   "chargeTrack": {
+    "spaces": 4,
+    "start": 3
+   },
+   "notes": "Unique Stamina track: space 1 is printed with a lungs icon (no face-down Wound icon), matching her Minor Ability; only space 0 bears the Wound icon. Verified visually.",
+   "set": "base"
+  },
+  {
+   "id": "mitchell",
+   "name": "Mitchell Carter",
+   "mp": 4,
+   "minorAbility": {
+    "name": "Sweep",
+    "text": "You may Sweep when you place your Flashlight.\nSweep: Place your Flashlight and check if anything is Revealed. Then, move it to a new position. It will stay in the 2nd position until the end of the round."
+   },
+   "majorAbility": {
+    "name": null,
+    "text": "Choose an Investigator (including yourself). If the Adversary is within 2 spaces of that Investigator, the Adversary must Reveal themself."
+   },
+   "abilityTokens": [],
+   "staminaTrack": {
+    "spaces": 6,
+    "start": 5,
+    "woundIconSpaces": [
+     0,
+     1
+    ]
+   },
+   "chargeTrack": {
+    "spaces": 4,
+    "start": 3
+   },
+   "set": "base"
+  },
+  {
+   "id": "vincent",
+   "name": "Vincent Campbell",
+   "mp": 4,
+   "minorAbility": {
+    "name": "Scout",
+    "text": "While on a Point of Interest space, you may Scout.\nScout: If there are any {pointofinterest} (Point of Interest) tokens within 2 spaces, the Adversary must place them face-down on the main board."
+   },
+   "majorAbility": {
+    "name": null,
+    "text": "If you have a {item} card in your inventory, draw a {curseditemtype} card."
+   },
+   "abilityTokens": [],
+   "staminaTrack": {
+    "spaces": 6,
+    "start": 5,
+    "woundIconSpaces": [
+     0,
+     1
+    ]
+   },
+   "chargeTrack": {
+    "spaces": 4,
+    "start": 3
+   },
+   "set": "base"
+  },
+  {
+   "id": "kya",
+   "name": "Kya Prosser",
+   "mp": 4,
+   "minorAbility": {
+    "name": null,
+    "text": "Lose a {lungs} to gain a {charge}, or lose a {charge} to gain a {lungs}.\nYou may only use this Ability once per round, and you may not recover {lungs} or {charge} at the end of your turn if you use this Ability."
+   },
+   "majorAbility": {
+    "name": null,
+    "text": "For the remainder of the round, all Dim spaces are treated as Dark spaces and all Dark spaces are treated as Dim spaces.\nThis applies to all players, including the Adversary."
+   },
+   "abilityTokens": [],
+   "staminaTrack": {
+    "spaces": 6,
+    "start": 5,
+    "woundIconSpaces": [
+     0,
+     1
+    ]
+   },
+   "chargeTrack": {
+    "spaces": 4,
+    "start": 3
+   },
+   "notes": "Not among the 10 rulebook-listed Investigators; presumably an expansion/promo character included in these print files.",
+   "set": "promo"
+  },
+  {
+   "id": "winston",
+   "name": "Winston Pitts",
+   "mp": 4,
+   "minorAbility": {
+    "name": null,
+    "text": "When you place a Flashlight as your Final Action, you may choose to spend 0 {charge}. If you do, you can only use the single center line of your Flashlight for line of sight.\nCards and Abilities that modify Flashlights still impact this Ability, and you may not use this Ability if you have 0 {charge}."
+   },
+   "majorAbility": {
+    "name": null,
+    "text": "Place a {campfire} (Campfire) token on an adjacent space on the main board. That space counts as Bright and all spaces within 2 of the token are Dim. Investigators gain 1 {lungs} when ending their turn within 2 spaces of the token.\nRemove the token at the end of the next round."
+   },
+   "abilityTokens": [
+    {
+     "name": "Campfire",
+     "count": 1
+    }
+   ],
+   "staminaTrack": {
+    "spaces": 6,
+    "start": 5,
+    "woundIconSpaces": [
+     0,
+     1
+    ]
+   },
+   "chargeTrack": {
+    "spaces": 4,
+    "start": 3
+   },
+   "notes": "Not among the 10 rulebook-listed Investigators; presumably an expansion/promo character included in these print files.",
+   "set": "promo"
+  }
+ ],
+ "_v1Scope": "v1 includes only the 10 base Investigators. Kya Prosser and Winston Pitts (set: promo) are excluded from v1 per designer decision (2026-07-26)."
+}

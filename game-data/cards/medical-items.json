@@ -1,0 +1,14 @@
+{
+  "_icons": {
+    "{face-up-wound}": "Face-up Wound card"
+  },
+  "cards": [
+    {
+      "id": "medkit",
+      "name": "Medkit",
+      "count": 3,
+      "supply": null,
+      "text": "Flip 1 {face-up-wound} face-down on yourself or an adjacent Investigator"
+    }
+  ]
+}

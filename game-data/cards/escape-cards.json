@@ -1,0 +1,124 @@
+{
+  "_icons": {
+    "{saw}": "Saw (table saw) token",
+    "{escape-locked}": "Locked Escape token",
+    "{lockbox}": "Lockbox token",
+    "{truck}": "Truck token",
+    "{battery}": "Battery token",
+    "{repair-kit}": "Repair Kit token",
+    "{spark-plug}": "Spark Plug token",
+    "{ride-parts}": "Ride Parts token",
+    "{angle-grinder}": "Angle Grinder token",
+    "{flare-gun}": "Flare Gun token",
+    "{ammo}": "Ammo token",
+    "{grave-faceup}": "face-up Grave token",
+    "{grave-facedown}": "face-down Grave token",
+    "{ritual-knife}": "Ritual Knife token",
+    "{rope-circle}": "Rope Circle token",
+    "{altar}": "Altar token",
+    "{egg-sac}": "Egg Sac token",
+    "_typeIcon": "All Escape cards carry a running-figure type icon in the top-right corner, next to an association icon: Lockbox = Power The Gate, Truck = Fix The Truck, Angle Grinder = Service Tunnels, Flare Gun = Fire The Flare, hatted face = The Butcher, hooded figure = The Cult, tentacle coil = The Horror"
+  },
+  "cards": [
+    {
+      "id": "north-gate",
+      "name": "North Gate",
+      "count": 1,
+      "owner": "sawmill",
+      "objective": "power-the-gate",
+      "setup": "Place the {saw} (Saw) token on space S-17 and the {escape-locked} (Locked Escape) token on space 10 on the main board\nRoll a D6 to determine where the {lockbox} (Lockbox) token is placed:\n1-2: S-1\n3-4: 104\n5-6: S-41",
+      "notes": "Setup-only card; no additional rules text"
+    },
+    {
+      "id": "south-gate",
+      "name": "South Gate",
+      "count": 1,
+      "owner": "sawmill",
+      "objective": "power-the-gate",
+      "setup": "Place the {saw} (Saw) token on space S-28 and the {escape-locked} (Locked Escape) token on space 306 on the main board\nRoll a D6 to determine where the {lockbox} (Lockbox) token is placed:\n1-2: 101\n3-4: S-33\n5-6: 222",
+      "notes": "Setup-only card; no additional rules text"
+    },
+    {
+      "id": "garage",
+      "name": "Garage",
+      "count": 1,
+      "owner": "sawmill",
+      "objective": "fix-the-truck",
+      "setup": "Place the {truck} (Truck) token on space G-6 on the main board\nRoll a D6 to determine where the {battery} (Battery), {repair-kit} (Repair Kit), and {spark-plug} (Spark Plug) tokens are placed, respectively:\n1-2: S-37, 308, and 313\n3-4: 50, 134, and 159\n5-6: 12, L-7, and L-19",
+      "notes": "Setup-only card; no additional rules text"
+    },
+    {
+      "id": "sawmill",
+      "name": "Sawmill",
+      "count": 1,
+      "owner": "sawmill",
+      "objective": "fix-the-truck",
+      "setup": "Place the {truck} (Truck) token on space 220 on the main board\nRoll a D6 to determine where the {battery} (Battery), {repair-kit} (Repair Kit), and {spark-plug} (Spark Plug) tokens are placed, respectively:\n1-2: G-5, 121, and 191\n3-4: L-5, 36, and O-2\n5-6: K-7, K-9, and S-1",
+      "notes": "Setup-only card; no additional rules text"
+    },
+    {
+      "id": "tunnel-of-love",
+      "name": "Tunnel of Love",
+      "count": 1,
+      "owner": "amusement-park",
+      "objective": "service-tunnels",
+      "setup": "Place the {escape-locked} (Locked Escape) token on space T-18 and the {ride-parts} (Ride Parts) tokens on spaces 175 and 86 on the main board\nRoll a D6 to determine where the {angle-grinder} (Angle Grinder) token is placed:\n1-2: M-6\n3-4: 80\n5-6: 182",
+      "notes": "Setup-only card; no additional rules text"
+    },
+    {
+      "id": "mirror-maze",
+      "name": "Mirror Maze",
+      "count": 1,
+      "owner": "amusement-park",
+      "objective": "service-tunnels",
+      "setup": "Place the {escape-locked} (Locked Escape) token on space M-20 and the {ride-parts} (Ride Parts) tokens on spaces C-9 and 57 on the main board\nRoll a D6 to determine where the {angle-grinder} (Angle Grinder) token is placed:\n1-2: 268\n3-4: T-36\n5-6: 196",
+      "notes": "Setup-only card; no additional rules text"
+    },
+    {
+      "id": "the-zipper",
+      "name": "The Zipper",
+      "count": 1,
+      "owner": "amusement-park",
+      "objective": "fire-the-flare",
+      "setup": "Place the {escape-locked} (Locked Escape) token on space 71 on the main board\nRoll a D6 to determine where the {flare-gun} (Flare Gun) and two {ammo} (Ammo) tokens are placed, respectively:\n1-2: M-36, M-20, and 149\n3-4: 257, 188, and 293\n5-6: 19, 6, and 27",
+      "notes": "Setup-only card; no additional rules text"
+    },
+    {
+      "id": "ferris-wheel",
+      "name": "Ferris Wheel",
+      "count": 1,
+      "owner": "amusement-park",
+      "objective": "fire-the-flare",
+      "setup": "Place the {escape-locked} (Locked Escape) token on space 65 on the main board\nRoll a D6 to determine where the {flare-gun} (Flare Gun) and two {ammo} (Ammo) tokens are placed, respectively:\n1-2: 31, G-7, and M-32\n3-4: C-10, 105, and 240\n5-6: 301, 282, and 257",
+      "notes": "Setup-only card; no additional rules text"
+    },
+    {
+      "id": "the-grave",
+      "name": "The Grave",
+      "count": 1,
+      "owner": "butcher",
+      "objective": "banish",
+      "setup": "Have the Adversary place the {grave-faceup} (face-up Grave) token on any space on their mini-map within 10 spaces of any Investigator\nThen, have the Adversary place the {grave-facedown} (face-down Grave) token on any space on the main board within 3 spaces of the actual {grave-faceup} token",
+      "text": "See the Banish The Butcher player aid for more details",
+      "notes": "The face-up Grave is placed hidden on the Adversary's mini-map; the face-down Grave on the main board acts as a decoy marker within 3 spaces of the real one"
+    },
+    {
+      "id": "the-altar",
+      "name": "The Altar",
+      "count": 1,
+      "owner": "cult",
+      "objective": "banish",
+      "setup": "Have the Adversary place the {ritual-knife} (Ritual Knife) and {rope-circle} (Rope Circle) tokens on any space on the main board within 10 spaces of the {altar} (Altar) token",
+      "text": "See the Banish The Cult player aid for more details"
+    },
+    {
+      "id": "the-eggs",
+      "name": "The Eggs",
+      "count": 1,
+      "owner": "horror",
+      "objective": "banish",
+      "setup": "Have the Adversary take 4 {egg-sac} (Egg Sac) tokens. The Adversary must place 1 {egg-sac} token within 3 spaces of themself on any space on the main board at any time during each of their next 4 turns",
+      "text": "See the Banish The Horror player aid for more details"
+    }
+  ]
+}

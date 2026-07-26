@@ -1,0 +1,227 @@
+{
+  "_icons": {
+    "{lungs}": "Stamina (lungs icon)",
+    "{charge}": "Flashlight charge (battery icon)",
+    "{footprint}": "Movement/footprint",
+    "{facedown-wound}": "Face-down Wound token",
+    "{faceup-wound}": "Face-up Wound token",
+    "{blood}": "Blood token",
+    "{poi}": "Point of Interest token",
+    "{false-door}": "False Door token",
+    "{false-window}": "False Window token",
+    "{destroyed-door}": "Destroyed Door token",
+    "{open-window}": "Open Window token",
+    "{infinity}": "Effect lasts for the rest of the game"
+  },
+  "cards": [
+    {
+      "id": "cold-front",
+      "name": "Cold Front",
+      "count": 1,
+      "scenario": "amusement-park",
+      "severity": "minor",
+      "text": "Gain a {facedown-wound} 1 space earlier than your Stamina track indicates when Sprinting during this round"
+    },
+    {
+      "id": "foggy",
+      "name": "Foggy",
+      "count": 1,
+      "scenario": "amusement-park",
+      "severity": "minor",
+      "text": "Placing a Flashlight costs 1 extra {charge} during this round"
+    },
+    {
+      "id": "muddy",
+      "name": "Muddy",
+      "count": 1,
+      "scenario": "amusement-park",
+      "severity": "minor",
+      "text": "Investigators may not pick up {poi} (Point of Interest) tokens during this round"
+    },
+    {
+      "id": "rainy",
+      "name": "Rainy",
+      "count": 1,
+      "scenario": "amusement-park",
+      "severity": "minor",
+      "text": "Investigators have 1 less {footprint} during this round"
+    },
+    {
+      "id": "squall",
+      "name": "Squall",
+      "count": 1,
+      "scenario": "amusement-park",
+      "severity": "minor",
+      "text": "Sprinting costs 1 extra {lungs} during this round"
+    },
+    {
+      "id": "the-storm-grows",
+      "name": "The Storm Grows",
+      "count": 2,
+      "scenario": "amusement-park",
+      "severity": "minor",
+      "text": "The storm grows in strength, but is manageable for now\n\nThis card has no effect"
+    },
+    {
+      "id": "heavy-winds",
+      "name": "Heavy Winds",
+      "count": 1,
+      "scenario": "amusement-park",
+      "severity": "moderate",
+      "text": "Investigators may not gain {lungs} as part of their Final Action (even if they choose to Rest) this round"
+    },
+    {
+      "id": "interference",
+      "name": "Interference",
+      "count": 1,
+      "scenario": "amusement-park",
+      "severity": "moderate",
+      "text": "Investigators may not take the Charge Final Action this round"
+    },
+    {
+      "id": "misty",
+      "name": "Misty",
+      "count": 1,
+      "scenario": "amusement-park",
+      "severity": "moderate",
+      "text": "Your Flashlight only has line of sight to spaces within 3 of your Investigator during this round\n\nAnything more than 3 spaces away is not visible, even if it is fully covered and unobstructed"
+    },
+    {
+      "id": "eerie-calm",
+      "name": "Eerie Calm",
+      "count": 1,
+      "scenario": "amusement-park",
+      "severity": "moderate",
+      "text": "The winds come to a standstill, and the sky darkens\n\nThis card has no effect"
+    },
+    {
+      "id": "downpour",
+      "name": "Downpour",
+      "count": 1,
+      "scenario": "amusement-park",
+      "severity": "major",
+      "text": "Investigators may utilize only the single center line of their Flashlights for line of sight for the rest of the game\n\n{infinity}"
+    },
+    {
+      "id": "hail-storm",
+      "name": "Hail Storm",
+      "count": 1,
+      "scenario": "amusement-park",
+      "severity": "major",
+      "text": "All Investigators that do not have a {blood} immediately gain 1 {faceup-wound}. Additionally, all existing {facedown-wound} get flipped face-up\n\nCards and Abilities that ignore Event cards delay the effects of this Event by 1 round insted of ignoring it\n\nDiscard this card after applying its effects",
+      "notes": "'insted' is a printed typo on the physical card (should be 'instead'); transcribed as printed"
+    },
+    {
+      "id": "tornado",
+      "name": "Tornado",
+      "count": 1,
+      "scenario": "amusement-park",
+      "severity": "major",
+      "text": "Investigators may not gain {lungs} as part of their Final Action (even if they choose to Rest) for the rest of the game\n\n{infinity}"
+    },
+    {
+      "id": "fallen-tree",
+      "name": "Fallen Tree",
+      "count": 1,
+      "scenario": "sawmill",
+      "severity": "minor",
+      "text": "The Adversary may immediately place a {false-door} (False Door) token on any empty Door space or a {false-window} (False Window) token on any Window on the main board"
+    },
+    {
+      "id": "flare-up",
+      "name": "Flare-Up",
+      "count": 1,
+      "scenario": "sawmill",
+      "severity": "minor",
+      "text": "The Adversary may immediately lower the {charge} of up to two Investigators by 1"
+    },
+    {
+      "id": "hazy",
+      "name": "Hazy",
+      "count": 1,
+      "scenario": "sawmill",
+      "severity": "minor",
+      "text": "Investigators may utilize only the single center line of their Flashlights for line of sight during this round"
+    },
+    {
+      "id": "severe-heat",
+      "name": "Severe Heat",
+      "count": 1,
+      "scenario": "sawmill",
+      "severity": "minor",
+      "text": "Sprinting costs 1 extra {lungs} during this round"
+    },
+    {
+      "id": "updraft",
+      "name": "Updraft",
+      "count": 1,
+      "scenario": "sawmill",
+      "severity": "minor",
+      "text": "Investigators have 1 less {footprint} during this round"
+    },
+    {
+      "id": "creeping-fire",
+      "name": "Creeping Fire",
+      "count": 2,
+      "scenario": "sawmill",
+      "severity": "minor",
+      "text": "The fire slowly gets larger, but is manageable for now\n\nThis card has no effect"
+    },
+    {
+      "id": "heavy-smoke",
+      "name": "Heavy Smoke",
+      "count": 1,
+      "scenario": "sawmill",
+      "severity": "moderate",
+      "text": "Investigators may not gain {lungs} as part of their Final Action (even if they choose to Rest) this round"
+    },
+    {
+      "id": "pyrocumulus",
+      "name": "Pyrocumulus",
+      "count": 1,
+      "scenario": "sawmill",
+      "severity": "moderate",
+      "text": "Any Investigators who Sprint this round must roll a D6. On a 4+, they take a {facedown-wound}"
+    },
+    {
+      "id": "roll-vortex",
+      "name": "Roll Vortex",
+      "count": 1,
+      "scenario": "sawmill",
+      "severity": "moderate",
+      "text": "The Adversary may immediately choose a Zone and place {destroyed-door} (Destroyed Door) tokens on up to 2 Doors and an {open-window} (Open Window) token on 1 Window in that Zone on the main board\n\nAll Investigators currently in that Zone lose 1 {lungs} and 1 {charge}. Losing {lungs} in this way does not incur {facedown-wound}"
+    },
+    {
+      "id": "firebreak",
+      "name": "Firebreak",
+      "count": 1,
+      "scenario": "sawmill",
+      "severity": "moderate",
+      "text": "The buildings keep the fire at bay for now\n\nThis card has no effect"
+    },
+    {
+      "id": "firestorm",
+      "name": "Firestorm",
+      "count": 1,
+      "scenario": "sawmill",
+      "severity": "major",
+      "text": "The Move Action now costs 1 {lungs} for the rest of the game\n\nInvestigators may still gain {lungs} as part of their Final Action if they choose to Rest\n\n{infinity}"
+    },
+    {
+      "id": "fire-tornado",
+      "name": "Fire Tornado",
+      "count": 1,
+      "scenario": "sawmill",
+      "severity": "major",
+      "text": "Roll a D6 now and at the start of each round:\n\n1–3: All Investigators lose 1 {lungs} and 1 {charge}. Losing {lungs} in this way does not incur {facedown-wound}\n\n4–6: The Adversary may place {destroyed-door} (Destroyed Door) tokens on all Doors in a Zone on the main board. They may also flip 1 {destroyed-door} token on an otherwise empty space to the {false-door} (False Door) side. All Investigators currently in that Zone must flip 1 random {facedown-wound} face-up\n\n{infinity}"
+    },
+    {
+      "id": "toxic-gasses",
+      "name": "Toxic Gasses",
+      "count": 1,
+      "scenario": "sawmill",
+      "severity": "major",
+      "text": "Now and at the start of each round, each Investigator must roll their Sprint die. On a 3, they must flip a random {facedown-wound} face-up or gain a {facedown-wound} if they have no {facedown-wound}\n\nThis does not count as a Sprint Action, nor does it affect their movement or {lungs}\n\n{infinity}"
+    }
+  ]
+}

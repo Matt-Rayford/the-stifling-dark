@@ -1,0 +1,151 @@
+{
+  "_icons": {
+    "{truck}": "Truck token",
+    "{escape-locked}": "Locked Escape token",
+    "{escape}": "Escape token (flipped side of Locked Escape)",
+    "{saw}": "Saw (table saw) token",
+    "{altar}": "Altar token",
+    "{ammo}": "Ammo token",
+    "{ride-parts}": "Ride Parts token",
+    "{shadow-facedown}": "face-down Shadow token",
+    "{burning-grave-facedown}": "face-down Burning (Grave) token",
+    "{wound-facedown}": "face-down Wound card",
+    "{supply-small}": "small Supply token placed on a player aid",
+    "_typeIcon": "All Objective Item cards carry a crosshair/target type icon in the top-right corner; most also show their own token icon beside it",
+    "_involvedAction": "Black oval with three dots at the bottom of the card = Involved Action",
+    "_supply": "Supply icon (stacked cubes) with a number or infinity = number of uses"
+  },
+  "cards": [
+    {
+      "id": "battery",
+      "name": "Battery",
+      "count": 1,
+      "supply": null,
+      "involvedAction": true,
+      "owner": "sawmill",
+      "objective": "fix-the-truck",
+      "text": "To install in the Truck, bring to the {truck} (Truck) token. Only 1 Part may be installed per round (not 1 Part per Investigator)\nSee the Fix The Truck player aid for more details"
+    },
+    {
+      "id": "frayed-ropes",
+      "name": "Frayed Ropes",
+      "count": 1,
+      "supply": 3,
+      "involvedAction": false,
+      "owner": "butcher",
+      "objective": "banish",
+      "text": "The Butcher must place a {shadow-facedown} (face-down Shadow) token within 3 spaces of himself on the main board\nSee the Banish The Butcher player aid for more details"
+    },
+    {
+      "id": "fuse",
+      "name": "Fuse",
+      "count": 1,
+      "supply": null,
+      "involvedAction": true,
+      "owner": "sawmill",
+      "objective": "power-the-gate",
+      "text": "Bring to the {escape-locked} (Locked Escape) token to flip the token to the {escape} (Escape) side\nSee the Power The Gate player aid for more details"
+    },
+    {
+      "id": "lockbox",
+      "name": "Lockbox",
+      "count": 1,
+      "supply": null,
+      "involvedAction": true,
+      "owner": "sawmill",
+      "objective": "power-the-gate",
+      "text": "To cut open the Lockbox, bring to the {saw} (Saw) token. You may only use the Saw once per round (not once per Investigator)\nSee the Power The Gate player aid for more details"
+    },
+    {
+      "id": "repair-kit",
+      "name": "Repair Kit",
+      "count": 1,
+      "supply": null,
+      "involvedAction": true,
+      "owner": "sawmill",
+      "objective": "fix-the-truck",
+      "text": "To repair the Truck, bring to the {truck} (Truck) token. Only 1 Part may be installed per round (not 1 Part per Investigator)\nSee the Fix The Truck player aid for more details"
+    },
+    {
+      "id": "the-hook",
+      "name": "The Hook",
+      "count": 1,
+      "supply": "infinity",
+      "involvedAction": true,
+      "owner": "butcher",
+      "objective": "banish",
+      "text": "Once the {burning-grave-facedown} (face-down Burning) token is removed, you may choose an adjacent space. If The Butcher is on this space, you kill him and win the game. This card may only be used once per round (not once per Investigator)\nSee the Banish The Butcher player aid for more details"
+    },
+    {
+      "id": "spark-plugs",
+      "name": "Spark Plugs",
+      "count": 1,
+      "supply": null,
+      "involvedAction": true,
+      "owner": "sawmill",
+      "objective": "fix-the-truck",
+      "text": "To install in the Truck, bring to the {truck} (Truck) token. Only 1 Part may be installed per round (not 1 Part per Investigator)\nSee the Fix The Truck player aid for more details",
+      "notes": "Card name is plural 'Spark Plugs'; the matching board token is named 'Spark Plug' on the Sawmill/Garage escape cards"
+    },
+    {
+      "id": "ritual-knife",
+      "name": "Ritual Knife",
+      "count": 1,
+      "supply": null,
+      "involvedAction": true,
+      "owner": "cult",
+      "objective": "banish",
+      "text": "When on the {altar} (Altar) token, flip one of your {wound-facedown} face-up or give yourself a {wound-facedown} to place 1 {supply-small} token on the Banish The Cult player aid. This card may only be used once per round (not once per Investigator)\nSee the Banish The Cult player aid for more details"
+    },
+    {
+      "id": "rope-circle",
+      "name": "Rope Circle",
+      "count": 1,
+      "supply": null,
+      "involvedAction": false,
+      "owner": "cult",
+      "objective": "banish",
+      "text": "All surviving Investigators must be in a single group, adjacent to at least 1 other Investigator, and at least 1 must be adjacent to the {altar} (Altar) token\nWhen there are 3 {supply-small} tokens on the Banish The Cult player aid, you may banish The Cult and win the game\nSee the Banish The Cult player aid for more details"
+    },
+    {
+      "id": "flare-gun",
+      "name": "Flare Gun",
+      "count": 1,
+      "supply": null,
+      "involvedAction": true,
+      "owner": "amusement-park",
+      "objective": "fire-the-flare",
+      "text": "With an {ammo} (Ammo) token in your inventory, bring to the {escape-locked} (Locked Escape) token to signal for help\nSee the Fire The Flare player aid for more details"
+    },
+    {
+      "id": "ammo",
+      "name": "Ammo",
+      "count": 2,
+      "supply": null,
+      "involvedAction": false,
+      "owner": "amusement-park",
+      "objective": "fire-the-flare",
+      "text": "One Investigator must bring an {ammo} (Ammo) token and the Flare Gun to the {escape-locked} (Locked Escape) token\nSee the Fire The Flare player aid for more details"
+    },
+    {
+      "id": "angle-grinder",
+      "name": "Angle Grinder",
+      "count": 1,
+      "supply": null,
+      "involvedAction": true,
+      "owner": "amusement-park",
+      "objective": "service-tunnels",
+      "text": "With a {ride-parts} (Ride Parts) token in your inventory, bring to the {escape-locked} (Locked Escape) token to begin cutting open the lock\nSee the Service Tunnels player aid for more details"
+    },
+    {
+      "id": "ride-parts",
+      "name": "Ride Parts",
+      "count": 2,
+      "supply": null,
+      "involvedAction": false,
+      "owner": "amusement-park",
+      "objective": "service-tunnels",
+      "text": "One Investigator must bring a {ride-parts} (Ride Parts) token and the Angle Grinder to the {escape-locked} (Locked Escape) token\nSee the Service Tunnels player aid for more details"
+    }
+  ]
+}

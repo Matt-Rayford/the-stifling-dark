@@ -1,0 +1,328 @@
+{
+  "_icons": {
+    "{charge}": "Flashlight charge",
+    "{lungs}": "Lungs (Sprint stamina)",
+    "{stalk}": "Stalk (the Butcher's Stalk track resource; eye icon)",
+    "{wound-faceup}": "Face-up Wound card",
+    "{wound-facedown}": "Face-down Wound card",
+    "{footprint}": "Movement speed (footprint icon)",
+    "{shadow}": "Shadow token. Printed as the owning Adversary's own icon (Butcher face, Mor'gonnod demon head, Insatiable Horror coil). In a card's cost row it means using the card requires placing/updating your Shadow token; the costs field value 'faceup' means the Butcher's Shadow token is updated face-up",
+    "{supply}": "Supply token",
+    "{evil-eye}": "Evil Eye token",
+    "{hellfire}": "Hellfire token",
+    "{desecrated-ground}": "Desecrated Ground token",
+    "{occluded-lights}": "Occluded Lights token",
+    "{mucus}": "Mucus token",
+    "{tunnel}": "Tunnel token",
+    "{hatchling}": "Hatchling token",
+    "{involved-action}": "Involved Action"
+  },
+  "cards": [
+    {
+      "id": "decay",
+      "name": "Decay",
+      "owner": "butcher",
+      "type": "ability",
+      "cooldown": 1,
+      "costs": { "stalks": 1 },
+      "text": "Using a Flashlight costs 1 extra {charge} next round"
+    },
+    {
+      "id": "disturbed-presence",
+      "name": "Disturbed Presence",
+      "owner": "butcher",
+      "type": "ability",
+      "cooldown": 1,
+      "text": "If you end your turn within 4 spaces of 1 or more Investigators, you may reduce each of their {lungs} by 1. Losing {lungs} in this way does not incur {wound-facedown}\nIf you remove 2 or more {lungs} at once, gain 1 {stalk}"
+    },
+    {
+      "id": "escalating-terror",
+      "name": "Escalating Terror",
+      "owner": "butcher",
+      "type": "ability",
+      "cooldown": 2,
+      "text": "The next time you gain 1 or more {stalk} from the Stalk Action, double the amount gained"
+    },
+    {
+      "id": "evil-eye",
+      "name": "Evil Eye",
+      "owner": "butcher",
+      "type": "ability",
+      "cooldown": 1,
+      "text": "Place 2 {evil-eye} (Evil Eye) tokens on any General spaces on the main board. If an Investigator Moves onto or ends their turn on an {evil-eye} token, gain 1 {stalk} and remove the token\nRemove all {evil-eye} tokens at the beginning of your next turn"
+    },
+    {
+      "id": "sinister-gaze",
+      "name": "Sinister Gaze",
+      "owner": "butcher",
+      "type": "ability",
+      "cooldown": 1,
+      "costs": { "stalks": 1 },
+      "text": "Give 2 different Investigators 1 of the following Conditions each:\nChoking Fear\nDarkness"
+    },
+    {
+      "id": "vengeful-darkness",
+      "name": "Vengeful Darkness",
+      "owner": "butcher",
+      "type": "ability",
+      "cooldown": 1,
+      "text": "Place a {supply} token on this card for each Flashlight on the board at the beginning of your next turn\n{supply} tokens remain on this card and are not lost during Cooldown. Remove 2 {supply} tokens to gain 1 {stalk}"
+    },
+    {
+      "id": "eviscerate",
+      "name": "Eviscerate",
+      "owner": "butcher",
+      "type": "attack",
+      "cooldown": null,
+      "costs": { "stalks": 1, "shadow": "faceup" },
+      "text": "When adjacent to an Investigator, give them the Bleeding Condition. If they already have the Bleeding Condition, give them a {wound-faceup} instead"
+    },
+    {
+      "id": "onslaught",
+      "name": "Onslaught",
+      "owner": "butcher",
+      "type": "attack",
+      "cooldown": null,
+      "costs": { "stalks": 1, "shadow": "faceup" },
+      "text": "When adjacent to an Investigator:\nIf they are within 4 spaces of another Investigator: gain 2 additional {footprint} this turn. Give them 1 {wound-facedown} and the Mauled Condition. You may repeat this Attack for 0 {stalk} any number of times this turn but cannot Attack the same Investigator twice\nIf they are not within 4 spaces of another Investigator: give them 2 {wound-faceup}"
+    },
+    {
+      "id": "rend",
+      "name": "Rend",
+      "owner": "butcher",
+      "type": "attack",
+      "cooldown": null,
+      "costs": { "stalks": 1, "shadow": "faceup" },
+      "text": "When adjacent to an Investigator, draw 3 {wound-faceup}. Give them 1 of the {wound-faceup} and the Mauled Condition, then discard the remaining {wound-faceup}"
+    },
+    {
+      "id": "burning-heart",
+      "name": "Burning Heart",
+      "owner": "cult",
+      "type": "ability",
+      "cooldown": null,
+      "text": "Starting on your next turn: For each Flashlight on the board at the start of your turn, your Cultists' and Mor'gonnod's {footprint} is increased by 1 this round\nThis card stays in effect until no Investigators gain {charge} or {lungs} from any source during their turns\nIf this happens, place this card face-down in your Cooldown 2 area",
+      "notes": "No cooldown icon printed; the card text itself sends it to Cooldown 2 only when its end condition triggers"
+    },
+    {
+      "id": "cleft-hoof",
+      "name": "Cleft Hoof",
+      "owner": "cult",
+      "type": "ability",
+      "cooldown": 1,
+      "costs": { "shadow": "update" },
+      "text": "Flip 1 {wound-faceup} face-down on any Investigator to place 3 {hellfire} (Hellfire) tokens within 5 spaces of Mor'gonnod. The tokens must be on General spaces on the main board\nInvestigators must take a {wound-faceup} if they Move onto a {hellfire} token. The tokens remain on the board until you use this Ability again to move them",
+      "notes": "Cost row shows Mor'gonnod's demon-head icon (his Shadow token); interpreted as requiring a Shadow token update since it appears only on position-dependent Abilities"
+    },
+    {
+      "id": "dried-tongue",
+      "name": "Dried Tongue",
+      "owner": "cult",
+      "type": "ability",
+      "cooldown": 1,
+      "text": "Next round, Bloodletting gives a {wound-faceup} instead of a {wound-facedown}"
+    },
+    {
+      "id": "razor-like-talons",
+      "name": "Razor-like Talons",
+      "owner": "cult",
+      "type": "ability",
+      "cooldown": 1,
+      "costs": { "shadow": "update" },
+      "text": "When you are adjacent to an Investigator, flip 1 of their {wound-facedown} face-up",
+      "notes": "Cost row shows Mor'gonnod's demon-head icon (his Shadow token); interpreted as requiring a Shadow token update"
+    },
+    {
+      "id": "severed-ear",
+      "name": "Severed Ear",
+      "owner": "cult",
+      "type": "ability",
+      "cooldown": 1,
+      "costs": { "shadow": "update" },
+      "text": "Give an adjacent Investigator the Possessed Condition\nOnly 1 Investigator may be Possessed at a time, but you may move the Condition to a new Investigator if you use this Ability again\nYou may not use this Ability on the first round",
+      "notes": "Cost row shows Mor'gonnod's demon-head icon (his Shadow token); interpreted as requiring a Shadow token update"
+    },
+    {
+      "id": "shriveled-hand",
+      "name": "Shriveled Hand",
+      "owner": "cult",
+      "type": "ability",
+      "cooldown": null,
+      "text": "Next round, you may take the Bloodletting Action with 2 different Cultists\nIf you do, remove this card from the game. If you don't, place this card face-down in your Cooldown 1 area",
+      "notes": "No cooldown icon printed; the card text handles it (removed from game if used, otherwise Cooldown 1)"
+    },
+    {
+      "id": "spiked-vertebrae",
+      "name": "Spiked Vertebrae",
+      "owner": "cult",
+      "type": "ability",
+      "cooldown": null,
+      "text": "Choose 1 Investigator to make a deal with. You may alter any aspect of the game (except the win conditions) as long as the Investigator agrees. You may use this Ability even if you have been Revealed this round\nAs an example, you could remove a {wound-facedown} from two Investigators in order to give a {wound-faceup} to another Investigator. The Investigator you are dealing with could counter-offer and demand an extra {lungs}, and you can decide to accept or decline",
+      "notes": "No cooldown icon or cost printed at all. Also unusual: it may be used even while Revealed, overriding the Cult's Revealed card restriction, and it can alter any aspect of the game except win conditions"
+    },
+    {
+      "id": "twisted-horn",
+      "name": "Twisted Horn",
+      "owner": "cult",
+      "type": "ability",
+      "cooldown": 1,
+      "costs": { "shadow": "update" },
+      "text": "Place up to 3 {desecrated-ground} (Desecrated Ground) tokens within 5 spaces of Mor'gonnod. They must be on General spaces on the main board\nIf an Investigator Moves onto one or more {desecrated-ground} tokens, they must roll a D6 at the end of their turn. On a 1-3, gain a {wound-facedown}\nIf the {desecrated-ground} token is Bright when the Investigator Moves onto it, they may ignore it. The tokens remain on the board until you use this Ability again to move them",
+      "notes": "Cost row shows Mor'gonnod's demon-head icon (his Shadow token); interpreted as requiring a Shadow token update"
+    },
+    {
+      "id": "unblinking-eye",
+      "name": "Unblinking Eye",
+      "owner": "cult",
+      "type": "ability",
+      "cooldown": 1,
+      "text": "Investigators who do not place a Flashlight next round gain the Paranoid Condition"
+    },
+    {
+      "id": "flagellate",
+      "name": "Flagellate",
+      "owner": "cult",
+      "type": "attack",
+      "cooldown": null,
+      "text": "You may move an Investigator that is 2 spaces away from you adjacent to yourself\nAdditionally, you may give an adjacent Investigator 1 {wound-faceup} and the Bleeding Condition"
+    },
+    {
+      "id": "immolate",
+      "name": "Immolate",
+      "owner": "cult",
+      "type": "attack",
+      "cooldown": null,
+      "text": "Give an adjacent Investigator 2 {wound-faceup}\nYou may repeat this Attack on a different Investigator once per turn"
+    },
+    {
+      "id": "ravage",
+      "name": "Ravage",
+      "owner": "cult",
+      "type": "attack",
+      "cooldown": null,
+      "text": "Give an adjacent Investigator 3 {wound-faceup}"
+    },
+    {
+      "id": "devour",
+      "name": "Devour",
+      "owner": "horror",
+      "type": "ability",
+      "cooldown": 2,
+      "text": "On your next turn, instead of Ambushing you may use your Attack card on 1 adjacent Investigator at any point during your turn (updating your {shadow} token if you do), as long as you do not Move onto any Bright spaces before doing so"
+    },
+    {
+      "id": "fuming-fissure",
+      "name": "Fuming Fissure",
+      "owner": "horror",
+      "type": "ability",
+      "cooldown": 2,
+      "text": "Next round, Investigators inside of Zones lose a {charge} at the end of their turn\nInvestigators outside of Zones must spend an extra {charge} to use their Flashlight"
+    },
+    {
+      "id": "occluded-lights",
+      "name": "Occluded Lights",
+      "owner": "horror",
+      "type": "ability",
+      "cooldown": null,
+      "text": "Either: give 2 Investigators the Darkness Condition\nOr: give 1 Investigator Darkness and place an {occluded-lights} (Occluded Lights) token on any Zone. Bright or Dim tokens may not be placed on this Zone next round\nPut this card in front of the Adversary screen when you use it. At the end of the next round, place it face-down in your Cooldown 2 area and remove the {occluded-lights} token (if placed)",
+      "notes": "No cooldown icon printed; the card text delays its move to Cooldown 2 until the end of the next round"
+    },
+    {
+      "id": "projectile-adhesive",
+      "name": "Projectile Adhesive",
+      "owner": "horror",
+      "type": "ability",
+      "cooldown": 2,
+      "costs": { "shadow": "update" },
+      "text": "Give all Investigators within 5 spaces of you the Gear Jam Condition",
+      "notes": "Cost row shows the Insatiable Horror's coil icon (its Shadow token); interpreted as requiring a Shadow token update since it appears only on position-dependent Abilities"
+    },
+    {
+      "id": "thick-mucus",
+      "name": "Thick Mucus",
+      "owner": "horror",
+      "type": "ability",
+      "cooldown": 2,
+      "costs": { "shadow": "update" },
+      "text": "Place 2 {mucus} (Mucus) tokens within 5 spaces of you on empty General spaces on the main board\nNeither the Investigators nor the Adversary may Move onto these tokens, but they do not block line of sight\nRemove the tokens at the end of the next round",
+      "notes": "Cost row shows the Insatiable Horror's coil icon (its Shadow token); interpreted as requiring a Shadow token update"
+    },
+    {
+      "id": "tunnel",
+      "name": "Tunnel",
+      "owner": "horror",
+      "type": "ability",
+      "cooldown": 2,
+      "text": "Place 1 {tunnel} (Tunnel) token on any space on the main board. At any point during your next turn, you may Move on or adjacent to the {tunnel} token. You do not need to notify the Investigators if you do\nRemove the token at the end of the next round"
+    },
+    {
+      "id": "bufotoxin",
+      "name": "Bufotoxin",
+      "owner": "horror",
+      "type": "attack",
+      "cooldown": null,
+      "text": "Give the Investigator 1 {wound-facedown}, the Bufotoxin Condition, and the Mauled Condition"
+    },
+    {
+      "id": "gastric-secretions",
+      "name": "Gastric Secretions",
+      "owner": "horror",
+      "type": "attack",
+      "cooldown": null,
+      "text": "Give the Investigator 1 {wound-facedown} and the Mauled Condition\nImmediately place 1 {hatchling} (Hatchling) token on an adjacent space on the main board and draw the Hatchling card\nYou may have a max of 3 Hatchlings at a time"
+    },
+    {
+      "id": "neurotoxin",
+      "name": "Neurotoxin",
+      "owner": "horror",
+      "type": "attack",
+      "cooldown": null,
+      "text": "Give the Investigator 1 {wound-facedown}, the Neurotoxin Condition, and the Mauled Condition"
+    },
+    {
+      "id": "enraged",
+      "name": "Enraged",
+      "owner": "horror",
+      "type": "condition",
+      "cooldown": null,
+      "text": "You cannot Ambush and are always Revealed. Your movement speed is 4, Bright spaces cost an extra movement, and you may not roll the Sprint die\nOnce per turn, you may move any number of Investigators within 2 spaces adjacent to yourself and use your Attack card on them\nAdjacent Investigators can take an {involved-action} (Involved Action) to place a {supply} token on the Banish The Horror player aid. When there are 3 {supply} tokens on the player aid, you lose",
+      "notes": "Not an Attack/Ability card: back reads CONDITION with a pulse icon. Adversary Condition card for the Insatiable Horror; changes core movement/Ambush rules while in effect"
+    },
+    {
+      "id": "hatchling",
+      "name": "Hatchling",
+      "owner": "horror",
+      "type": "reference",
+      "cooldown": null,
+      "text": "Each Hatchling may Move up to 4 spaces each round, ignoring Map Hazards\nWhen adjacent to an Investigator, you may flip a {wound-facedown} face-up. If they have no {wound-facedown}, give them one. The same Investigator may not be targeted by the Hatchlings twice in the same turn\nWhen a {hatchling} (Hatchling) token is in a Bright space, an adjacent Investigator may take an {involved-action} (Involved Action) to remove it",
+      "notes": "Not an Attack/Ability card: back reads HATCHLING. Rules reference drawn when Gastric Secretions creates a Hatchling"
+    },
+    {
+      "id": "revealed-butcher",
+      "name": "Revealed",
+      "owner": "butcher",
+      "type": "revealed",
+      "cooldown": null,
+      "text": "You may not use Stalk or an Attack card\nFlip this card face-down if you end your turn Hidden",
+      "notes": "Not an Attack/Ability card: back reads REVEALED with the Butcher's icon"
+    },
+    {
+      "id": "revealed-cult",
+      "name": "Revealed",
+      "owner": "cult",
+      "type": "revealed",
+      "cooldown": null,
+      "text": "Individual Cultists may not use Bloodletting during any turn in which their standee was on the main board. Other Cultists that were not Revealed may still use Bloodletting\nMor'gonnod may not use his Abilities during any turn in which his standee was on the main board\nFlip this card face-down if all of your figures end your turn Hidden",
+      "notes": "Not an Attack/Ability card: back reads REVEALED with the Cult's icon"
+    },
+    {
+      "id": "revealed-horror",
+      "name": "Revealed",
+      "owner": "horror",
+      "type": "revealed",
+      "cooldown": null,
+      "text": "You may not use Ambush or an Attack card\nFlip this card face-down if you end your turn Hidden",
+      "notes": "Not an Attack/Ability card: back reads REVEALED with the Insatiable Horror's icon"
+    }
+  ]
+}

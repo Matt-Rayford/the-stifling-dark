@@ -1,0 +1,174 @@
+{
+  "_icons": {
+    "{lungs}": "Stamina (lungs/moth icon)",
+    "{footprint}": "Movement Point (MP)",
+    "{charge}": "Flashlight Charge (battery icon)",
+    "{blood}": "Wound (blood-drop icon; on these cards 'this {blood}' refers to this Wound card itself)",
+    "{faceUpWound}": "face-up Wound",
+    "{faceDownWound}": "face-down Wound",
+    "{obstruction}": "Obstruction token (X icon)",
+    "{involvedAction}": "Involved Action (small eye icon)",
+    "{majorAbility}": "Major Ability token",
+    "{item}": "Item card (box icon)",
+    "{cursedItem}": "Cursed Item card (pentagram icon)",
+    "{pointOfInterest}": "Point of Interest token (circled ! icon)"
+  },
+  "cards": [
+    {
+      "id": "breathless",
+      "name": "Breathless",
+      "count": 1,
+      "text": "At the end of each of your turns, lose 1 {lungs}\nLosing {lungs} in this way does not incur {faceDownWound}"
+    },
+    {
+      "id": "broken-battery",
+      "name": "Broken Battery",
+      "count": 1,
+      "text": "Place an {obstruction} (Obstruction) token on the highest space of your Charge track, decreasing your {charge} if necessary\nYou may no longer fully recover {charge}"
+    },
+    {
+      "id": "claustrophobia",
+      "name": "Claustrophobia",
+      "count": 1,
+      "text": "You may not Lock or Open Doors"
+    },
+    {
+      "id": "collapsed-lung",
+      "name": "Collapsed Lung",
+      "count": 1,
+      "text": "Place an {obstruction} (Obstruction) token on the highest space of your Stamina track, decreasing your {lungs} if necessary\nYou may no longer fully recover {lungs}"
+    },
+    {
+      "id": "commiserate",
+      "name": "Commiserate",
+      "count": 1,
+      "text": "When adjacent to another Investigator, you may discard this {blood} if the other Investigator takes 2 {faceDownWound}"
+    },
+    {
+      "id": "discharge",
+      "name": "Discharge",
+      "count": 1,
+      "text": "When you receive or flip this {blood} face-up, set your {charge} to 0\nYou may still gain {charge} while this {blood} is face-up\nYou do not regain lost {charge} if this {blood} is flipped face-down"
+    },
+    {
+      "id": "dislocated-hip",
+      "name": "Dislocated Hip",
+      "count": 1,
+      "text": "You may not travel through Map Hazards"
+    },
+    {
+      "id": "disoriented",
+      "name": "Disoriented",
+      "count": 1,
+      "text": "You may not use your Major or Minor Ability"
+    },
+    {
+      "id": "drain",
+      "name": "Drain",
+      "count": 1,
+      "text": "You may no longer take the Charge Final Action"
+    },
+    {
+      "id": "dying-battery",
+      "name": "Dying Battery",
+      "count": 1,
+      "text": "At the end of each of your turns, lose 1 {charge}"
+    },
+    {
+      "id": "ergophobia",
+      "name": "Ergophobia",
+      "count": 1,
+      "text": "You may no longer take the Involved Action {involvedAction} Final Action"
+    },
+    {
+      "id": "fear",
+      "name": "Fear",
+      "count": 1,
+      "text": "When you receive or flip this {blood} face-up, you must use your Major Ability on your next turn\nIf you do not have a {majorAbility} token (or if you are unable to use it), there is no effect\nYou do not get the {majorAbility} token back if this {blood} is flipped face-down"
+    },
+    {
+      "id": "fractured-foot",
+      "name": "Fractured Foot",
+      "count": 1,
+      "text": "You have 1 less {footprint} when Moving"
+    },
+    {
+      "id": "fumble",
+      "name": "Fumble",
+      "count": 1,
+      "text": "When you receive or flip this {blood} face-up, discard a random {item} card (and any associated tokens)\nIf you do not have any {item} cards, there is no effect\nYou do not get the {item} card back if this {blood} is flipped face-down"
+    },
+    {
+      "id": "hemorrhage",
+      "name": "Hemorrhage",
+      "count": 1,
+      "text": "Other {faceUpWound} may not be flipped face-down until this {blood} is flipped face-down"
+    },
+    {
+      "id": "mangled-hands",
+      "name": "Mangled Hands",
+      "count": 1,
+      "text": "You may not use {item} or {cursedItem} cards"
+    },
+    {
+      "id": "mistrust",
+      "name": "Mistrust",
+      "count": 1,
+      "text": "You may not Trade or be Traded with, and you may not pick up {pointOfInterest} (Point of Interest) tokens"
+    },
+    {
+      "id": "nyctophilia",
+      "name": "Nyctophilia",
+      "count": 1,
+      "text": "You may no longer take the Place Flashlight Final Action\nYou may still gain {charge}"
+    },
+    {
+      "id": "nyctophobia",
+      "name": "Nyctophobia",
+      "count": 1,
+      "text": "You may not Move from a Bright or Dim space to a Dark space\nYou may still Move from one Dark space to another"
+    },
+    {
+      "id": "panic",
+      "name": "Panic",
+      "count": 1,
+      "text": "You may no longer gain {lungs} as part of your Final Action, even if you choose to Rest"
+    },
+    {
+      "id": "pulled-hammy",
+      "name": "Pulled Hammy",
+      "count": 1,
+      "text": "You have 2 less {footprint} when Moving"
+    },
+    {
+      "id": "punctured-lung",
+      "name": "Punctured Lung",
+      "count": 1,
+      "text": "{faceDownWound} gained from Sprinting are now {faceUpWound}"
+    },
+    {
+      "id": "slipped-disc",
+      "name": "Slipped Disc",
+      "count": 1,
+      "text": "You may carry only up to 2 total {item} and/or {cursedItem} cards\nIf you ever have more than 2 total {item} and/or {cursedItem} cards, choose cards to discard (along with any associated tokens) until only 2 remain"
+    },
+    {
+      "id": "spasm",
+      "name": "Spasm",
+      "count": 1,
+      "text": "When you receive or flip this {blood} face-up, lose 2 {lungs}. Losing {lungs} this way does not incur {faceDownWound}\nYou may still gain {lungs} while this {blood} is face-up\nYou do not regain lost {lungs} if this {blood} is flipped face-down"
+    },
+    {
+      "id": "torn-ligament",
+      "name": "Torn Ligament",
+      "count": 1,
+      "text": "Subtract 1 from your Sprint roll, down to a minimum of 1"
+    },
+    {
+      "id": "tunnel-vision",
+      "name": "Tunnel Vision",
+      "count": 1,
+      "text": "When you place your Flashlight, only the 3 center lines may be used for line of sight"
+    }
+  ]
+}

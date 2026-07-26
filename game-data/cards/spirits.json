@@ -1,0 +1,97 @@
+{
+  "_icons": {
+    "{ghost-orbs}": "Ghost Orbs token",
+    "{bright}": "Bright light-level token",
+    "{dim}": "Dim light-level token",
+    "{charge}": "Flashlight Charge",
+    "{point-of-interest}": "Point of Interest token (exclamation mark)",
+    "{ectoplasm}": "Ectoplasm token",
+    "{footprint}": "Footprint (movement cost)",
+    "{lungs}": "Stamina (lungs icon)",
+    "{objective-item}": "Objective Item token type icon",
+    "{medical-item}": "Medical Item token type icon",
+    "{evidence}": "Evidence token",
+    "{major-ability}": "Major Ability marker; abilities tagged with it on the card are Major Abilities",
+    "_typeIcon": "All Spirit cards carry a ghost type icon in the top-right corner"
+  },
+  "spirits": [
+    {
+      "id": "apparition",
+      "name": "Apparition",
+      "abilities": [
+        {
+          "name": "Ghost Orbs",
+          "type": "minor",
+          "text": "Place 1 {ghost-orbs} (Ghost Orbs) token adjacent to you on the main board. That space counts as Bright. Remove it at the end of the round"
+        },
+        {
+          "name": "Cold Spot",
+          "type": "minor",
+          "text": "The first time the Adversary Moves onto or adjacent to your space, they must place their Shadow token on the main board on the space they moved on"
+        },
+        {
+          "name": "Energy Transfer",
+          "type": "major",
+          "text": "Remove 1 {bright} (Bright) or {dim} (Dim) token from the board. Increase all Investigators' {charge} by 1"
+        },
+        {
+          "name": "Emergency Lights",
+          "type": "major",
+          "text": "Place a {dim} (Dim) token on the Zone you are in. Remove it at the end of the round"
+        }
+      ]
+    },
+    {
+      "id": "phantom",
+      "name": "Phantom",
+      "abilities": [
+        {
+          "name": "Clairvoyance",
+          "type": "minor",
+          "text": "Reveal the {point-of-interest} token from an adjacent point of interest"
+        },
+        {
+          "name": "Ectoplasm",
+          "type": "minor",
+          "text": "Place 2 {ectoplasm} (Ectoplasm) tokens adjacent to yourself on the main board. If the Adversary Moves onto an {ectoplasm} token, they cannot use 1 Ability card of your choice next round. Remove the tokens at the end of the current round"
+        },
+        {
+          "name": "Luring Lights",
+          "type": "major",
+          "text": "Move 1 adjacent Investigator up to 3 spaces, treating Dark spaces as Dim. Map Hazards retain their effects"
+        },
+        {
+          "name": "True Darkness",
+          "type": "major",
+          "text": "Spaces in the Zone you are in cost the Adversary 1 extra {footprint} this round"
+        }
+      ]
+    },
+    {
+      "id": "poltergeist",
+      "name": "Poltergeist",
+      "abilities": [
+        {
+          "name": "Whirlwind",
+          "type": "minor",
+          "text": "It costs the Adversary 1 extra {footprint} the first time they Move onto your space or an adjacent space this round"
+        },
+        {
+          "name": "Mysterious Passage",
+          "type": "minor",
+          "text": "While you are adjacent to a Map Hazard, Investigators may spend 1 {lungs} to ignore the effects of the Hazard this round"
+        },
+        {
+          "name": "Push",
+          "type": "major",
+          "text": "When adjacent to a {point-of-interest}, {objective-item}, {medical-item}, or {evidence} token, you may move that token up to 3 spaces in any direction"
+        },
+        {
+          "name": "Spectral Hand",
+          "type": "major",
+          "text": "Take 1 Investigator's Flashlight from the board, move it up to 3 spaces, and reorient it as you see fit"
+        }
+      ]
+    }
+  ]
+}

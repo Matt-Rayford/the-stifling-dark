@@ -1,0 +1,67 @@
+{
+  "_icons": {
+    "{lungs}": "Stamina (lungs/moth icon)",
+    "{footprint}": "Movement Point (MP)",
+    "{charge}": "Flashlight Charge (battery icon)",
+    "{blood}": "Wound (blood-drop icon)",
+    "{faceUpWound}": "face-up Wound",
+    "{faceDownWound}": "face-down Wound"
+  },
+  "cards": [
+    {
+      "id": "bleeding",
+      "name": "Bleeding",
+      "count": 2,
+      "text": "At the end of each of your turns, gain 1 {faceUpWound}\nOnce you've gained 2 {faceUpWound} from this card, discard it\nIf you already have Bleeding and a card instructs you to gain it, gain a {faceUpWound} instead"
+    },
+    {
+      "id": "bufotoxin",
+      "name": "Bufotoxin",
+      "count": 4,
+      "text": "Flip this card face-down when you receive it. The Adversary may flip it face-up on any of their turns, applying the following text:\nNext round, you can only use the center line of your Flashlight for line of sight. Discard this Condition at the end of the next round"
+    },
+    {
+      "id": "choking-fear",
+      "name": "Choking Fear",
+      "count": 2,
+      "text": "On your next turn, you may not Sprint and your {footprint} is reduced by 1\nDiscard this Condition at the end of your next turn"
+    },
+    {
+      "id": "darkness",
+      "name": "Darkness",
+      "count": 4,
+      "text": "On your next turn, you may not use your Flashlight\nDiscard this Condition at the end of your next turn\nIf you already have Darkness and a card instructs you to gain it, lose 1 {charge} instead"
+    },
+    {
+      "id": "gear-jam",
+      "name": "Gear Jam",
+      "count": 4,
+      "text": "You may not take the Charge Final Action unless you spend a {lungs}\nAt the end of each of your turns, roll a D6. On a 4+, discard this Condition"
+    },
+    {
+      "id": "mauled",
+      "name": "Mauled",
+      "count": 4,
+      "text": "Each time you gain 1 or more {blood} from the Adversary, gain 1 additional {faceDownWound}"
+    },
+    {
+      "id": "neurotoxin",
+      "name": "Neurotoxin",
+      "count": 4,
+      "text": "At the start of each of your turns, place a {faceUpWound} below this card. You suffer the effects of the {faceUpWound}, but it does not take up a Wound slot\nIf there are 2 {faceUpWound} below this card at the end of the round, discard this Condition and both {faceUpWound}"
+    },
+    {
+      "id": "paranoid",
+      "name": "Paranoid",
+      "count": 4,
+      "text": "Roll a D6 at the beginning of each of your turns:\n1–2: Halve your {footprint} (including Sprint) this round\n3–4: No effect\n5–6: Discard this Condition"
+    },
+    {
+      "id": "possessed",
+      "name": "Possessed",
+      "count": 1,
+      "text": "At the start of any Adversary turn, the Adversary may move you up to 4 spaces and take the Bloodletting Action with you, discarding this Condition afterwards\nAfter this card is used, you cannot gain {blood} and you cannot be the target of Bloodletting or Severed Ear for the rest of the Adversary's turn",
+      "notes": "Cult-specific: references Bloodletting (Cultist action) and Severed Ear (a Mor'gonnod ability; his abilities are named after body parts). Only 1 copy in the deck."
+    }
+  ]
+}

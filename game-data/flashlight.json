@@ -1,0 +1,230 @@
+{
+ "_status": "Outline/lines extracted from small-flashlight-transparent.png (880x1583 px). Physical dimensions confirmed by designer via other/flashlight-size.pdf (mm): 74.5 wide x 133.0 long, base notch 16.8 wide. Template max length covers ~5.2 space pitches (designer-confirmed), giving a space pitch of ~25.6 mm for LOS scaling.",
+ "imageFile": "game-assets/other/small-flashlight-transparent.png",
+ "imageSize": {
+  "w": 880,
+  "h": 1583
+ },
+ "origin": {
+  "x": 440,
+  "y": 1520,
+  "_note": "Center of the concave notch at the template base where the Investigator figure sits. Beam extends toward -y (the dome top)."
+ },
+ "outlinePolygon": [
+  [
+   396,
+   2
+  ],
+  [
+   342,
+   10
+  ],
+  [
+   265,
+   36
+  ],
+  [
+   230,
+   53
+  ],
+  [
+   163,
+   97
+  ],
+  [
+   102,
+   158
+  ],
+  [
+   79,
+   188
+  ],
+  [
+   52,
+   231
+  ],
+  [
+   19,
+   311
+  ],
+  [
+   3,
+   387
+  ],
+  [
+   0,
+   428
+  ],
+  [
+   1,
+   472
+  ],
+  [
+   6,
+   513
+  ],
+  [
+   15,
+   553
+  ],
+  [
+   344,
+   1580
+  ],
+  [
+   345,
+   1565
+  ],
+  [
+   351,
+   1546
+  ],
+  [
+   365,
+   1524
+  ],
+  [
+   379,
+   1510
+  ],
+  [
+   410,
+   1493
+  ],
+  [
+   428,
+   1489
+  ],
+  [
+   451,
+   1489
+  ],
+  [
+   475,
+   1495
+  ],
+  [
+   489,
+   1502
+  ],
+  [
+   514,
+   1524
+  ],
+  [
+   530,
+   1551
+  ],
+  [
+   536,
+   1582
+  ],
+  [
+   860,
+   568
+  ],
+  [
+   877,
+   483
+  ],
+  [
+   877,
+   396
+  ],
+  [
+   860,
+   311
+  ],
+  [
+   828,
+   233
+  ],
+  [
+   782,
+   164
+  ],
+  [
+   716,
+   97
+  ],
+  [
+   649,
+   53
+  ],
+  [
+   614,
+   36
+  ],
+  [
+   537,
+   10
+  ],
+  [
+   483,
+   2
+  ]
+ ],
+ "sightLines": {
+  "_note": "7 printed lines dividing the beam into 8 sectors. 3 straight verticals run the full length; 2 angled lines per side fan outward from near the base and merge into the beam edges higher up. Sampled x-positions by row (y: [x...]):",
+  "verticalX": [
+   343,
+   440,
+   536
+  ],
+  "sampledRows": {
+   "200": [
+    183,
+    343,
+    440,
+    536,
+    698
+   ],
+   "500": [
+    128,
+    239,
+    343,
+    440,
+    536,
+    642,
+    753
+   ],
+   "800": [
+    214,
+    294,
+    343,
+    440,
+    536,
+    587,
+    666
+   ],
+   "1100": [
+    301,
+    343,
+    440,
+    536,
+    579
+   ],
+   "1300": [
+    343,
+    440,
+    536
+   ]
+  }
+ },
+ "losRules": [
+  "A space has line of sight only if (1) it is ENTIRELY covered by the template outline and (2) at least one printed sight line connects from the Investigator to the space without crossing an Obstacle.",
+  "The Investigator's own space always has line of sight when the Flashlight is placed.",
+  "Partial coverage by two different Flashlights does not combine."
+ ],
+ "physicalMm": {
+  "width": 74.5,
+  "length": 133.0,
+  "notchWidth": 16.8
+ },
+ "scale": {
+  "pxPerMm": 11.9,
+  "lengthInSpacePitches": 5.2,
+  "spacePitchMm": 25.6,
+  "_note": "Canonical scale for LOS precompute: template length = 5.2 x board space pitch. Use relative scale (template vs pitch), not DPI assumptions."
+ }
+}

@@ -1,0 +1,148 @@
+{
+  "_icons": {
+    "{footprint}": "Movement Point (MP) / footprint pip on the Sprint die",
+    "{lungs}": "Stamina (lungs icon)",
+    "{charge}": "Flashlight Charge (battery icon)",
+    "{involved-action}": "Involved Action symbol",
+    "{poi}": "Point of Interest token",
+    "{medical-item}": "Medical Item type symbol/token",
+    "{evidence}": "Evidence token (magnifying glass)",
+    "{objective-item}": "Objective Item type symbol/token",
+    "{blood}": "Blood Wound (blood-drop icon); typically cannot be removed",
+    "{faceup-wound}": "face-up Wound token",
+    "{facedown-wound}": "face-down Wound token",
+    "{major-ability}": "Major Ability token (gear icon)",
+    "{supply-small}": "small Supply token (crate icon) used to track objective progress",
+    "{escape-locked}": "Escape point token, locked side",
+    "{escape}": "Escape point token, escape (unlocked) side / running-figure icon",
+    "{flare-gun}": "Flare Gun token (Amusement Park - Fire the Flare)",
+    "{ammo}": "Ammo token (Amusement Park - Fire the Flare)",
+    "{angle-grinder}": "Angle Grinder token (Amusement Park - Service Tunnels)",
+    "{ride-parts}": "Ride Parts token (Amusement Park - Service Tunnels)",
+    "{lockbox}": "Lockbox token (Sawmill - Power the Gate)",
+    "{table-saw}": "Table Saw token (Sawmill - Power the Gate)",
+    "{truck}": "Truck token (Sawmill - Fix the Truck)",
+    "{car-battery}": "Car Battery Part token (Sawmill - Fix the Truck)",
+    "{repair-kit}": "Repair Kit Part token (Sawmill - Fix the Truck)",
+    "{spark-plug}": "Spark Plug Part token (Sawmill - Fix the Truck)",
+    "{grave-faceup}": "Grave token, face-up/revealed side (Butcher banish)",
+    "{grave-facedown}": "Grave token, face-down side (Butcher banish)",
+    "{burning-grave-faceup}": "Burning Grave token, face-up side (Butcher banish)",
+    "{burning-grave-facedown}": "Burning Grave token, face-down side (Butcher banish)",
+    "{ritual-dagger}": "Ritual Dagger token (Cult banish)",
+    "{rope-circle}": "Rope Circle token (Cult banish)",
+    "{altar}": "Altar token (Cult banish)",
+    "{egg-sac}": "Egg Sac token (Horror banish)"
+  },
+  "aids": [
+    {
+      "id": "investigator-front",
+      "name": "Investigator Actions",
+      "for": "investigator",
+      "text": "Move\n• Once per turn, Move up to your MP {footprint}\n• May be interrupted by other actions\nSprint (or Rest)\n• Once per turn, lose 1 {lungs} and roll the Sprint die. Gain 1 MP per {footprint} rolled\n• You may choose to Rest instead of Sprint\nInteract (may take unlimited Interact Actions)\n• Take {poi}, {medical-item}, {evidence}, or {objective-item} tokens on your space\n• Interact on an Interaction space\n• Lock or Open an adjacent Door\n• Trade with an adjacent Investigator\n• Use an Item\nFinal Actions\nThese are special actions that immediately end your turn if/when taken. Choose 1 or none*:\n• Spend 1 {charge} to place your Flashlight*\n• Gain 1 {charge}*\n• Perform an {involved-action} (Involved Action)\n*Also gain 1 {lungs} if you take one of these Final Actions and chose to Rest",
+      "supplySlots": null,
+      "notes": "Card bolds 'on' (take tokens on your space, Interact on an Interaction space) and 'adjacent' (Door, Investigator). The asterisk footnote is printed exactly as shown, including the typo 'chose to Rest' (sic). The asterisk marks the two Final Actions (place Flashlight, gain Charge) that also grant 1 Stamina if the Investigator Rested; the Involved Action bullet has no asterisk."
+    },
+    {
+      "id": "investigator-back",
+      "name": "Investigator Rules",
+      "for": "investigator",
+      "text": "Involved Actions {involved-action}\n{involved-action} are Final Actions that do not gain {lungs}, {charge}, or allow Investigators to place a Flashlight.\nLine of Sight\nThe following conditions must be met in order for a space to be visible in a Flashlight:\n• Flashlight fully covers the space\n• 1 line touches the space without hitting an Obstacle\nWounds {blood}\nThese are the ways to flip {faceup-wound} face-down:\n• Medical Items: One-time use, can flip {faceup-wound}\n• Other: Some Abilities and cards can flip {faceup-wound}\n{facedown-wound} still take up Wound slots, and you die when all of your Wound slots are full. {blood} typically cannot be removed once gained, so be careful!",
+      "supplySlots": null,
+      "notes": "The two Line of Sight conditions ('Flashlight fully covers the space' / '1 line touches the space without hitting an Obstacle') are printed side by side in a rounded callout box, with 'fully' and '1 line ... the space' bolded — both conditions must be met. The two wound-flip methods (Medical Items / Other) share a second side-by-side callout box."
+    },
+    {
+      "id": "spirit",
+      "name": "Investigator Death",
+      "for": "spirit",
+      "text": "When an Investigator dies, check if the Adversary's win condition is satisfied. If not, the Investigator may choose a Spirit card.\nSpirits keep their Items, Evidence, and their standee, but remove their player board and associated tokens. Each Spirit starts with 2 {major-ability} tokens and has the following in common:\nMove\n• 4 {footprint} plus Sprint die\n• Spirits can Sprint every round\n• Spirits are not affected by Dark spaces, Map Hazards, or anything that affects movement\nAbilities\n• Each Spirit has 4 total Abilities and can use up to 2 Abilities each turn\n• Major Abilities cost 1 {major-ability} token to use\n• Minor Abilities have no cost\nTrade\n• Spirits may Trade Evidence and Items to Investigators\n• Spirits may not receive any Evidence or Items, nor may they Trade to other Spirits",
+      "supplySlots": null,
+      "notes": "'Spirit' is bolded in the opening paragraph. No token slots."
+    },
+    {
+      "id": "sawmill-stage-1",
+      "name": "Initial Objective (Sawmill)",
+      "for": "sawmill",
+      "text": "Collect Evidence\n• Use Flashlights and Light Switches to Reveal {evidence} tokens\n• There is 1 {evidence} token per Zone\nTurn In Evidence\n• Interact on {evidence} tokens to pick them up\n• Bring them to a Computer space\n• Take an {involved-action} (Involved Action) to turn them in and place them below, from left to right:\nChoose 1 Reward Per Evidence Turned In\nOne-time rewards:\n• 1 Cursed Item card\n• 1 Dim token\n• 1 Secret Passage token\n• 1 Medical Item card\n• 1 Major Ability token\nMulti-use rewards:\n• Reveal 1 {poi} token\n• 1 Open Window token\n• 1 General Item card\nSelect Escape Card\n• Once the appropriate number of {evidence} tokens are turned in, select an Escape card and its associated player aid",
+      "supplySlots": null,
+      "notes": "Header carries a magnifying-glass (Evidence) icon left and a sawblade (Sawmill scenario) icon right. Below 'Turn In Evidence' is a row of 5 evidence turn-in slots (Investigator-silhouette outlines), each stamped with a player-count number, left to right: 2, 2, 3, 4, 4 — i.e. the number of Investigators at which that slot's Evidence is required. One-time and Multi-use reward lists are printed side by side in a callout box."
+    },
+    {
+      "id": "sawmill-gate",
+      "name": "Power the Gate",
+      "for": "sawmill",
+      "text": "Place the Tokens\n• Roll a D6 and consult the Escape card\n• Place the {lockbox}, {table-saw}, and {escape-locked} tokens\nCollect the Lockbox\n• Interact on {lockbox} to pick it up\nOpen the Lockbox\n• Once per round with {lockbox}, take {involved-action} (Involved Action) on the {table-saw} token to place a {supply-small} token\nPush Your Luck\n• You can roll a D6 to try to place another {supply-small}\n{table-saw} is Bright:\n• 1-2: Gain a {faceup-wound}\n• 3+: Place another {supply-small}\n{table-saw} is Dim/Dark:\n• 1-4: Gain a {faceup-wound}\n• 5+: Place another {supply-small}\nEscape\n• When there are 4 {supply-small} tokens, gain the Fuse\n• With the Fuse, take an {involved-action} on the {escape-locked} token to flip it to the {escape} side\n• Interact on the {escape} token to escape!",
+      "supplySlots": 4,
+      "notes": "Header carries a lockbox icon left and a sawblade (Sawmill) icon right. A row of 4 dashed-circle supply-token slots (each showing the supply-crate icon) sits between 'Open the Lockbox' and 'Push Your Luck'. The two Push Your Luck D6 tables (Bright vs Dim/Dark) are printed side by side in a callout box."
+    },
+    {
+      "id": "sawmill-truck",
+      "name": "Fix the Truck",
+      "for": "sawmill",
+      "text": "Place the Tokens\n• Roll a D6 and consult the Escape card\n• Place the {truck}, {car-battery}, {repair-kit}, and {spark-plug} tokens\nCollect the Parts\n• Interact on {car-battery}, {repair-kit}, and {spark-plug} to pick them up\nFix the Truck\n• Once per round, take an {involved-action} (Involved Action) on the {truck} token to install a Part\n• Place Part tokens below, from left to right\nStart the Truck\n• Once at least 1 Part is installed, one Investigator per round may try to start it\n• Take an {involved-action} when on or adjacent to the {truck} token and roll a D6, succeeding on the lowest number with a token above\nEscape\n• Investigators on or adjacent to {truck} escape\n• Place an {escape} token on space 10 or 306\n• Other Investigators may escape from {escape}",
+      "supplySlots": null,
+      "notes": "Header carries a truck icon left and a sawblade (Sawmill) icon right. A row of 3 dashed-circle Part-token slots sits under 'Fix the Truck'; each slot is labeled at its lower right with the D6 start-the-truck target, left to right: 6, 4+, 1+ (with 1 Part installed you start the truck only on a 6; with 2 Parts on 4+; with 3 Parts on 1+). Slots hold Part tokens (Car Battery, Repair Kit, Spark Plug), not supply tokens."
+    },
+    {
+      "id": "amusement-park-stage-1",
+      "name": "Initial Objective (Amusement Park)",
+      "for": "amusement-park",
+      "text": "Collect Evidence\n• Use Flashlights and Light Switches to Reveal {evidence} tokens\n• There is 1 {evidence} token per Zone\nTurn In Evidence\n• Interact on {evidence} tokens to pick them up\n• Bring them to a Ticket Booth space\n• Take an {involved-action} (Involved Action) to turn them in and place them below, from left to right:\nChoose 1 Reward Per Evidence Turned In\nOne-time rewards:\n• 1 Cursed Item card\n• 1 Secret Passage token\n• 1 Medical Item card\n• 1 Major Ability token\nMulti-use rewards:\n• Reveal 1 {poi} token\n• 1 Open Window token\n• 1 General Item card\n• Select Mirror Maze Color\nSelect Escape Card\n• Once the appropriate number of {evidence} tokens are turned in, select an Escape card and its associated player aid",
+      "supplySlots": null,
+      "notes": "Header carries a magnifying-glass (Evidence) icon left and a ride-carriage (Amusement Park scenario) icon right. Same 5 evidence turn-in slots as the Sawmill stage-1 aid, stamped 2, 2, 3, 4, 4 left to right. Differences from Sawmill: turn-in location is a Ticket Booth (not Computer), the one-time rewards omit '1 Dim token', and the multi-use rewards add 'Select Mirror Maze Color'."
+    },
+    {
+      "id": "amusement-park-flare",
+      "name": "Fire the Flare",
+      "for": "amusement-park",
+      "text": "Place the Tokens\n• Roll a D6 and consult the Escape card\n• Place the {flare-gun}, {ammo}, and {escape-locked} tokens\nCollect the Flare and Ammo\n• Interact on {flare-gun} and {ammo} to pick them up\nFire the Flare\n• With the {flare-gun} and {ammo}, take an {involved-action} (Involved Action) on the {escape-locked} token to fire the flare\n• Place an {escape} token 2 rounds from now on the round tracker\nEscape\n• When the round with the {escape} token is reached, the Investigators may escape\n• Interact while in any carriage of the Ride listed on your Escape card to escape!",
+      "supplySlots": null,
+      "notes": "Source file is spelled 'amusement-park-flair-aid.pdf' (sic). Header carries a flare-gun icon left and a ride-carriage (Amusement Park) icon right. No token slots; the lower third is a decorative ink illustration of the flare gun and ammo box."
+    },
+    {
+      "id": "amusement-park-tunnels",
+      "name": "Service Tunnels",
+      "for": "amusement-park",
+      "text": "Place the Tokens\n• Roll a D6 and consult the Escape card\n• Place the {angle-grinder}, {ride-parts}, and {escape-locked} tokens\nCollect the Angle Grinder\n• Interact on {angle-grinder} to pick it up\nCollect the Ride Parts\n• Take an {involved-action} (Involved Action) on {ride-parts} to pick it up, then roll a D6:\n{ride-parts} is Bright:\n• 1: Gain a {faceup-wound}\n• 2+: No effect\n{ride-parts} is Dim/Dark:\n• 1-4: Gain a {faceup-wound}\n• 5+: No effect\nCut Open the Tunnels\n• With the {angle-grinder} and {ride-parts}, take an {involved-action} on the {escape-locked} token to begin cutting open the lock\n• Place an {escape} token on the next round of the round tracker\nEscape\n• When the round with the {escape} token is reached, flip the {escape-locked} token to the {escape} side\n• Interact on the {escape} token to escape!",
+      "supplySlots": null,
+      "notes": "Header carries an angle-grinder icon left and a ride-carriage (Amusement Park) icon right. The two Ride Parts D6 tables (Bright vs Dim/Dark) are printed side by side in a callout box. No token slots."
+    },
+    {
+      "id": "horror-banish",
+      "name": "Banish The Horror",
+      "for": "horror",
+      "text": "Place the Egg Sacs\n• Once per round for the next 4 rounds, the Adversary must place 1 {egg-sac} token within 3 spaces of themself on the main board\nDestroy the Egg Sacs\n• Take an {involved-action} (Involved Action) on {egg-sac} to destroy it\nBanish The Horror\n• Once all 4 {egg-sac} have been destroyed, give the Adversary the Enraged Condition\n• When adjacent to The Horror, take an {involved-action} to place a {supply-small} token below\n• Once there are 3 {supply-small} tokens, The Horror is banished and the Investigators win!",
+      "supplySlots": 3,
+      "notes": "Header carries The Horror's creature icon on both sides. A row of 3 dashed-circle supply-token slots (supply-crate icon in each) sits below the text; the bottom corner has a decorative ink illustration of tools. 'Enraged' is bolded on the card."
+    },
+    {
+      "id": "butcher-banish",
+      "name": "Banish The Butcher",
+      "for": "butcher",
+      "text": "Place the Tokens\n• Adversary places the {grave-faceup} token on the mini-map within 10 spaces of any Investigator\n• Adversary places the {grave-facedown} token on the main board within 3 spaces of the {grave-faceup} token\nFind and Burn the Grave\n• Investigators must Reveal the {grave-faceup} token by making its space Bright\n• Take an {involved-action} (Involved Action) on {grave-faceup} to gain the Frayed Ropes and Hook Objective Items\n• Replace the {grave-faceup} token with the {burning-grave-faceup} token\n• At the end of each round, flip the {burning-grave-faceup} token\n• If it is already on the {burning-grave-facedown} side, remove it\nBanish The Butcher\n• Once the {burning-grave-facedown} is removed, The Butcher is vulnerable to The Hook\n• Once per round, an Investigator with The Hook may take an {involved-action} to attempt to banish The Bucher and win!",
+      "supplySlots": null,
+      "notes": "Header carries a grave icon left and The Butcher's hat-silhouette icon right. Final bullet's 'The Bucher' typo is printed on the physical card (sic). No token slots; the bottom corners have decorative ink illustrations of the Hook and the coiled Frayed Ropes."
+    },
+    {
+      "id": "cult-banish",
+      "name": "Banish The Cult",
+      "for": "cult",
+      "text": "Place the Tokens\n• Adversary places the {ritual-dagger} and {rope-circle} tokens on the main board within 10 spaces of the {altar} token\nCollect the Tokens\n• Interact on {ritual-dagger} and {rope-circle} to pick them up\nPerform the Ritual\n• Investigators must Reveal the {altar} token by making its space Bright\n• Once per round, with the {ritual-dagger}, take an {involved-action} (Involved Action) on the {altar} token to place a {supply-small} token below\n• Then, flip a {facedown-wound} face-up or give yourself a {faceup-wound}\nBanish The Cult\n• When there are 3 {supply-small} tokens, move all suviving Investigators on or adjacent to {altar}\n• Use the {rope-circle} to banish The Cult and win!",
+      "supplySlots": 3,
+      "notes": "Header carries a rope-circle icon left and the Cult's hooded-figure icon right. A row of 3 dashed-circle supply-token slots (supply-crate icon in each) sits between 'Perform the Ritual' and 'Banish The Cult'. 'suviving' typo is printed on the physical card (sic)."
+    }
+  ],
+  "sprintDie": {
+    "faces": [2, 2, 3, 3, 3, 4],
+    "notes": "Values are footprint icons per face (each footprint = 1 bonus MP). Counted from the die net in game-assets/other/sprint-die-template.pdf (red footprints on black, cruciform unfold: middle row of 4 faces plus one face above and one below the third column): top face = 3, middle row left to right = 2, 2, 4, 3, bottom face = 3. Distribution: no 0 or 1 faces; 2 appears twice, 3 three times, 4 once; average roll 17/6 ≈ 2.83."
+  },
+  "roundTracker": {
+    "spaces": 18,
+    "notes": "Rounded-rectangle board, 3 rows of 6 circular spaces (pale green on dark forest-silhouette background). Spaces 1-17 are numbered in a jagged horror numeral font; the 18th (final) space bears a skull icon instead of a number, marking the last round."
+  },
+  "flashlightTemplate": {
+    "description": "Teardrop/keyhole-shaped beam template (Small Flashlight): a wide rounded dome at the top tapering smoothly to a narrow base, with a concave semicircular notch cut into the center of the bottom edge where the template butts against the Investigator's space. Two renderings exist: small-flashlight.png (solid yellow fill, white sight lines, transparent background) and small-flashlight-transparent.png (pale semi-transparent yellow fill, black sight lines, transparent background — an overlay version). Both are 880x1583 px.",
+    "imagePixels": { "w": 880, "h": 1583 },
+    "notes": "7 printed sight lines (each ~5-6 px wide at this resolution) divide the beam into 8 sectors. The central 3 are straight parallel vertical lines at x ≈ 343, 440, 536 (roughly 96 px apart, symmetric about the 440 centerline), running from the bottom notch all the way to the top dome edge. The outer 4 are angled lines, 2 per side, that fan outward toward the top/side edges; each angled line originates on its side's outer vertical line just above the base (they merge into the verticals between roughly y = 1030 and y = 1240) rather than at a single common origin point. Per the Investigator Rules aid, a space is visible if the flashlight fully covers it AND at least 1 of these lines touches the space without hitting an Obstacle."
+  }
+}

@@ -1,0 +1,181 @@
+{
+  "_icons": {
+    "{damaged-door}": "Damaged Door token (door with cracks)",
+    "{locked-door}": "Locked Door token",
+    "{destroyed-door}": "Destroyed Door token",
+    "{shadow-faceup}": "face-up Shadow token (The Butcher's hidden-location token, meat hook symbol)",
+    "{spine-chill}": "Spine Chill token",
+    "{stalk}": "Stalk icon (eye symbol, marks progress on the Stalks track)",
+    "{cultist}": "Cultist token (robed figure symbol)",
+    "{wound-facedown}": "face-down Wound token",
+    "{blood}": "Blood icon (dripping ritual knife, marks progress on the Blood track)",
+    "{demon}": "Mor'gonnod token (demon symbol)",
+    "{horror}": "Insatiable Horror token (spiral symbol)",
+    "{footprint}": "Footprint icon (movement point)"
+  },
+  "boards": [
+    {
+      "id": "butcher",
+      "name": "The Butcher",
+      "page": "fronts p1 (back: fronts pairing, backs p1 is full-art lore page)",
+      "actions": [
+        {
+          "name": "Move",
+          "text": "Move up to 5 spaces plus the Sprint die"
+        },
+        {
+          "name": "Break Door",
+          "text": "When adjacent to a Door space, you may place a {damaged-door} (Damaged Door) token on it. When adjacent to a {locked-door} (Locked Door) token, you may flip it to the {damaged-door} side. If it is already on the {damaged-door} side, replace it with a {destroyed-door} (Destroyed Door) token"
+        },
+        {
+          "name": "Disappear",
+          "text": "If you are Revealed and in a Dim or Dark space, you may move your figure from the main board to the corresponding space on the mini-map, placing a {shadow-faceup} token where you Disappeared. After Disappearing, you may not Stalk or use your Attack card"
+        },
+        {
+          "name": "Stalk",
+          "text": "You must be Hidden, be within 8 spaces, and have line of sight to 1 or more Investigators. You may give these Investigators a {spine-chill} (Spine Chill) token. If they already have a {spine-chill} token, increase your {stalk} once per Investigator and take their token"
+        }
+      ],
+      "track": {
+        "name": "Stalks",
+        "spaces": 9,
+        "specialSpaces": "Numbered 0-8, each space bears the {stalk} eye icon. Space 0 is a plain white circle; spaces 1-8 are poker-chip-style circles that shade progressively redder with an increasingly solid black rim. Decorative escalation only; no functionally distinct spaces"
+      },
+      "cardSlots": {
+        "attack": 1,
+        "active": 2,
+        "cooldown1": 1,
+        "cooldown2": 1
+      },
+      "notes": "Three rounded-rectangle card slots along the bottom edge, partially bleeding off the board: leftmost marked with a claw-scratch icon (Attack card), the other two marked with spiral icons (Active Ability cards). 'Cooldown 2' is printed vertically on the left edge and 'Cooldown 1' vertically on the right edge as labeled zones (no discrete slot outlines). Meat hook symbol in the top-right corner is the Butcher's board icon. The physical back of this board (backs p1) is a full-art narrative page telling the Butcher's origin legend (The Faceless Man / Black Eyes); no rules content"
+    },
+    {
+      "id": "cultists",
+      "name": "The Cultists",
+      "page": "fronts p2 (backs p2 is full-art lore page)",
+      "actions": [
+        {
+          "name": "Move",
+          "text": "Move up to 3 spaces plus the Sprint die"
+        },
+        {
+          "name": "Break Door (only 1 Cultist per round)",
+          "text": "When adjacent to a Door space, you may place a {damaged-door} (Damaged Door) token on it. When adjacent to a {locked-door} (Locked Door) token, you may flip it to the {damaged-door} side. If it is already on the {damaged-door} side, replace it with a {destroyed-door} (Destroyed Door) token"
+        },
+        {
+          "name": "Disappear",
+          "text": "If you are Revealed and in a Dim or Dark space, you may move your figure from the main board to the corresponding space on the mini-map, updating your {cultist} token to where you Disappeared. See your Revealed card for impacts of being Revealed"
+        },
+        {
+          "name": "Bloodletting (only 1 Cultist per round)",
+          "text": "When a Cultist is adjacent to an Investigator, update their {cultist} token to their current space, give the Investigator a {wound-facedown}, and increase your {blood} track by 1. Additionally, if Mor'gonnod has any face-down Abilities you may flip 1 of them face-up. This Ability is now available for use by Mor'gonnod. You may not Bloodlet on the first round"
+        },
+        {
+          "name": "The Final Sacrifice",
+          "text": "Once the {blood} track reaches 5, you may perform The Final Sacrifice. All Cultists and Mor'gonnod must be adjacent to each other. Reveal all Cultists, remove them from the game, and place Mor'gonnod on the main board. Mor'gonnod is now Corporeal"
+        }
+      ],
+      "track": {
+        "name": "Blood",
+        "spaces": 6,
+        "specialSpaces": "Numbered 0-5, each space bears the {blood} dripping-knife icon. Space 0 is a plain white circle; spaces 1-5 are poker-chip-style circles that shade progressively redder with an increasingly solid black rim. Decorative escalation only; no functionally distinct spaces"
+      },
+      "cardSlots": {
+        "attack": 0,
+        "active": 0,
+        "cooldown1": 0,
+        "cooldown2": 0
+      },
+      "notes": "No card slots and no Cooldown areas are printed on this board; the Cultists have no Attack or Ability cards of their own. A wavy-bladed ritual dagger illustration sits at the bottom-left. Cultist (robed figure) symbol in the top-right corner is the board icon. The physical back of this board (backs p2) is a full-art narrative page describing the town of Hunlow; no rules content"
+    },
+    {
+      "id": "morgonnod-ethereal",
+      "name": "Mor'gonnod (Ethereal)",
+      "page": "fronts p3 (physical reverse side is backs p3, Mor'gonnod Corporeal)",
+      "actions": [
+        {
+          "name": "Move",
+          "text": "Your movement is the same as The Cultists' (3 plus the same Sprint roll)"
+        },
+        {
+          "name": "Disappear",
+          "text": "If you are Revealed and in a Dim or Dark space, you may move your figure from the main board to the corresponding space on the mini-map, updating your {demon} token to where you Disappeared. After Disappearing, you may not use your Ability cards"
+        },
+        {
+          "name": "Ethereal vs. Corporeal",
+          "text": "Mor'gonnod begins the game Ethereal and may not use his Attack card. He also begins with a single face-up Ability and cannot use his other Abilities until they are flipped face-up by The Cultists"
+        },
+        {
+          "name": "The Final Sacrifice",
+          "text": "Once The Final Sacrifice is performed, Mor'gonnod becomes Corporeal and may flip his player board to the other side. He is now Revealed for the rest of the game, he can use his Attack card, and he may ignore the Revealed card"
+        }
+      ],
+      "track": null,
+      "cardSlots": {
+        "attack": 1,
+        "active": 3,
+        "cooldown1": 1,
+        "cooldown2": 1
+      },
+      "notes": "Notably has NO Break Door action (visible whitespace gap on the board between Move and Disappear where it would sit). Four rounded-rectangle card slots along the bottom edge: leftmost marked with a claw-scratch icon (Attack card), the other three marked with spiral icons (Active Ability cards; Mor'gonnod starts with only 1 face-up). 'Cooldown 2' printed vertically on the left edge and 'Cooldown 1' vertically on the right edge as labeled zones (no discrete slot outlines). A sketch of a sacrificial altar with candles appears on the left edge. Demon symbol in the top-right corner is the board icon"
+    },
+    {
+      "id": "morgonnod-corporeal",
+      "name": "Mor'gonnod (Corporeal)",
+      "page": "backs p3 (physical reverse side of fronts p3, Mor'gonnod Ethereal)",
+      "actions": [
+        {
+          "name": "Move",
+          "text": "You may Move up to 10 spaces. You must spend 2 {footprint} to Move onto Bright spaces"
+        },
+        {
+          "name": "Break Door",
+          "text": "When adjacent to a Door space, you may place a {damaged-door} (Damaged Door) token on it. When adjacent to a {locked-door} (Locked Door) token, you may flip it to the {damaged-door} side. If it is already on the {damaged-door} side, replace it with a {destroyed-door} (Destroyed Door) token"
+        },
+        {
+          "name": "Attacks And Abilities",
+          "text": "You may now use your Attack card, and you may use any of your Abilities, ignoring the Revealed card"
+        }
+      ],
+      "track": null,
+      "cardSlots": {
+        "attack": 0,
+        "active": 0,
+        "cooldown1": 0,
+        "cooldown2": 0
+      },
+      "notes": "Header instruction above the actions reads: 'Use this side once The Final Sacrifice has been completed. You are always Revealed and may ignore the Revealed card'. No Sprint die is used on this side (flat 10-space Move). No track, no card slots, and no Cooldown areas are printed; the left two-thirds of the page is full-art of Mor'gonnod looming over a floating cultist. Below the actions is a short italic in-character quote from Mor'gonnod addressing his disciples about ending humankind (contains the spelling 'millenia' as printed)"
+    },
+    {
+      "id": "horror",
+      "name": "The Insatiable Horror",
+      "page": "fronts p4 (backs p4 is full-art lore page)",
+      "actions": [
+        {
+          "name": "Move",
+          "text": "Move up to 4 spaces plus the Sprint die. You cannot be Revealed while Moving. If you Move onto a Bright space, update your {horror} token to that space, updating it for each Bright space you move through. Note that you can still be Revealed if you end your turn on a Bright space or if your space becomes Bright during an Investigator's turn"
+        },
+        {
+          "name": "Break Door",
+          "text": "When within 3 of a Door space, you may place a {damaged-door} (Damaged Door) token on it. When within 3 of a {locked-door} (Locked Door) token, you may flip it to the {damaged-door} side. If it is already on the {damaged-door} side, replace it with a {destroyed-door} (Destroyed Door) token"
+        },
+        {
+          "name": "Disappear",
+          "text": "If you are Revealed, you may move your figure from the main board to the same space on the mini-map, updating your {horror} token to where you Disappeared (even if the space is Bright). After Disappearing, you may not Ambush or Attack"
+        },
+        {
+          "name": "Ambush",
+          "text": "At the start of each of your turns, you may move any number of Investigators within 5 spaces of yourself adjacent to yourself, counting Bright spaces as 2. You may then use your Attack card on each adjacent Investigator. If you are Revealed or unable to reach any Investigators, there is no effect. You may not Ambush on the first round"
+        }
+      ],
+      "track": null,
+      "cardSlots": {
+        "attack": 1,
+        "active": 2,
+        "cooldown1": 1,
+        "cooldown2": 1
+      },
+      "notes": "Three rounded-rectangle card slots along the bottom edge: leftmost marked with a claw-scratch icon (Attack card), the other two marked with spiral icons (Active Ability cards). 'Cooldown 2' printed vertically on the left edge and 'Cooldown 1' vertically on the right edge as labeled zones (no discrete slot outlines). Spiral symbol in the top-right corner is the board icon. Unlike other Adversaries, its Break Door works within 3 spaces rather than requiring adjacency, and its Disappear does not require a Dim or Dark space. The physical back of this board (backs p4) is a full-art narrative page about people vanishing into unexplored places; no rules content"
+    }
+  ]
+}

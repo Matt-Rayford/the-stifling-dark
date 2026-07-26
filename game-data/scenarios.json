@@ -1,0 +1,152 @@
+{
+  "_status": "Both base-game Scenarios from the Core Rules. Board-specific space IDs referenced here (e.g. 220, 248, 10, 306) will resolve against future board data.",
+  "shared": {
+    "evidence": "Each of the 5 Zones has 1 Evidence token Hidden in it. Investigators must collect the required number for their player count and turn them in at any turn-in space.",
+    "turnInAction": "Turning in Evidence is an Involved Action; any number of Evidence tokens may be turned in during a single Action. For each token turned in, that Investigator chooses 1 reward.",
+    "rewardsRepeatable": [
+      "Reveal any 1 Point of Interest's token",
+      "Gain 1 Open Window token",
+      "Draw 1 General Item card"
+    ],
+    "rewardsOncePerGame": [
+      "Draw 1 Cursed Item card",
+      "Gain 1 Dim token",
+      "Gain 1 Secret Passage token",
+      "Draw 1 Medical Item card",
+      "Give any Investigator 1 Major Ability token"
+    ],
+    "objectiveUnlock": "Once ALL required Evidence has been turned in, the Investigators take 1 random card for each of the two Scenario escape Objectives plus the Banish card matching the Adversary in play, and must select 1 of these Escape cards, completing its setup steps.",
+    "gameEnd": "Any Investigators who have not escaped and are still on the board after the final round count as being killed."
+  },
+  "scenarios": [
+    {
+      "id": "sawmill",
+      "name": "The Sawmill",
+      "icon": "sawmill",
+      "eventDeckTheme": "Forest Fire",
+      "zones": [
+        { "letter": "L", "name": "Lumber Shed" },
+        { "letter": "K", "name": "Kiln" },
+        { "letter": "G", "name": "Garage" },
+        { "letter": "S", "name": "Sawmill" },
+        { "letter": "O", "name": "Office" }
+      ],
+      "evidenceTurnIn": { "feature": "Computer", "count": 5 },
+      "objectives": [
+        {
+          "id": "power-the-gate",
+          "name": "Power the Gate",
+          "setupTokens": ["Saw", "Lockbox", "LockedEscape"],
+          "steps": [
+            "Collect the Lockbox token with an Interact Action and carry it to the Saw token.",
+            "Involved Action 'Open Lockbox' (only while carrying the Lockbox, on the Saw token; once per round for the whole team): place 1 Supply token on the Power the Gate player aid, then MAY push your luck with a D6 — Bright space: 1-2 gain a face-up Wound, 3-6 place 1 additional Supply; Dim/Dark space: 1-4 gain a face-up Wound, 5-6 place 1 additional Supply.",
+            "At 4 Supply tokens the Lockbox opens: gain the Fuse Objective Item card.",
+            "On the Locked Escape token's space, the Investigator with the Fuse takes an Involved Action to flip the token to its Escape side.",
+            "Every Investigator may now take an Interact Action on this space to escape."
+          ]
+        },
+        {
+          "id": "fix-the-truck",
+          "name": "Fix the Truck",
+          "setupTokens": ["Battery", "RepairKit", "SparkPlug", "Truck"],
+          "steps": [
+            "Collect 1 or more Part tokens (Battery, Repair Kit, Spark Plug) with Interact Actions and bring them to the Truck token.",
+            "Involved Action 'Install 1 Part' (on the Truck's space, requires carrying a Part; once per round for the whole team): install one Part on the player aid, left to right.",
+            "Involved Action 'Start the Truck' (on or adjacent to the Truck; once per round for the whole team): roll a D6 — 1 Part installed: succeed on 6; 2 Parts: 4+; 3 Parts: automatic success.",
+            "On success, every Investigator ON or ADJACENT to the Truck escapes immediately.",
+            "If not all Investigators escaped: place an Escape token on space 10 or 306; remaining Investigators may take an Interact Action there to escape (the driver rams the gate open)."
+          ]
+        },
+        {
+          "id": "banish-the-adversary",
+          "name": "Banish the Adversary",
+          "reference": "See adversaries.json banish section for the Adversary in play."
+        }
+      ]
+    },
+    {
+      "id": "amusement-park",
+      "name": "The Amusement Park",
+      "icon": "amusement-park",
+      "eventDeckTheme": "The Storm",
+      "zones": [
+        { "letter": "G", "name": "Gift Shop" },
+        { "letter": "M", "name": "Mirror Maze" },
+        { "letter": "C", "name": "Carousel" },
+        { "letter": "T", "name": "Tunnel of Love" },
+        { "letter": "F", "name": "Food Stand" }
+      ],
+      "evidenceTurnIn": { "feature": "TicketBooth", "count": 6 },
+      "extraRepeatableReward": "Flip all Mirror Maze Door tokens face-up and rearrange them",
+      "setupExtras": [
+        "Place 1 Duck token on space 220 and 1 on space 248",
+        "The Adversary places the Mirror Maze tokens"
+      ],
+      "features": {
+        "mirrorMaze": {
+          "doorColors": [
+            { "color": "red", "shape": "square" },
+            { "color": "green", "shape": "circle" },
+            { "color": "blue", "shape": "triangle" }
+          ],
+          "rules": [
+            "At the start of each round, the Adversary may rearrange the 3 Mirror Maze Door tokens face-down on the three colored spaces at the top of the Mirror Maze (choosing which color is open).",
+            "Investigators may not Move or Trade through Mirror Maze Doors without first taking an Interact Action (while adjacent to a doorway) to flip the corresponding token face-up.",
+            "Open icon: all Doors of that color/shape CAN be moved and traded through this round. Closed icon: cannot.",
+            "The Adversary may move through Open Doors without flipping tokens.",
+            "Mirror Maze Doors never block line of sight (mirrors reflect light in every direction)."
+          ]
+        },
+        "tunnelOfLove": {
+          "waterSpaces": "The FIRST time an Investigator moves onto a Water space during their turn, they are immediately moved 2 spaces clockwise along the wavy Movement Lines. If this would end on another Investigator, they move as far as they can (possibly not at all)."
+        },
+        "gameBooths": {
+          "rules": [
+            "Interact Action while ON the game's space; each Investigator may use each Booth once per turn.",
+            "When a General Item is won from a Booth, remove its Duck token; that Booth cannot be used again."
+          ],
+          "games": {
+            "testYourStrength": "Spend any number of Stamina and roll a D6; +2 per Stamina spent. Gain a General Item on 5+. A natural 1 always fails.",
+            "duckHunt": "Roll a D6; gain a General Item on 5+. +2 to the roll if your space is Bright.",
+            "ringToss": "Roll 3 Sprint dice; may roll 1 extra die by spending 1 Stamina. May re-roll any number of dice by spending 1 Charge per re-roll. Gain a General Item on at least three 3's."
+          }
+        },
+        "ferrisWheelZipper": {
+          "rules": [
+            "Once per round, if a figure (Investigator or Adversary) starts on or moves onto a carriage space, they are immediately moved to the same position on the next carriage in line (if empty), following the pink arrows. This forced movement does not count as a Move or cost MP.",
+            "Figures cannot Move or Trade from carriage to carriage by themselves.",
+            "Carriage spaces connected by yellow dashed lines count as adjacent ONLY for Adversary Abilities and Attacks."
+          ]
+        }
+      },
+      "objectives": [
+        {
+          "id": "fire-the-flare",
+          "name": "Fire the Flare",
+          "setupTokens": ["FlareGun", "Ammo", "LockedEscape"],
+          "steps": [
+            "Collect the Flare Gun token and at least 1 Ammo token with Interact Actions; bring them to the Locked Escape token.",
+            "Involved Action 'Fire Flare Gun' (requires carrying the Flare Gun AND Ammo, while on the Locked Escape token): place an Escape token 2 rounds out on the round tracker.",
+            "When that round is reached, help arrives: Investigators may take an Interact Action while in any carriage of the Ride listed on the Escape card to escape."
+          ]
+        },
+        {
+          "id": "service-tunnels",
+          "name": "Service Tunnels",
+          "setupTokens": ["AngleGrinder", "RideParts", "LockedEscape"],
+          "steps": [
+            "Collect the Angle Grinder token with an Interact Action.",
+            "Involved Action 'Pick Up Ride Parts' (on the Ride Parts space): roll a D6 — Bright: gain a face-up Wound on a 1; Dim/Dark: gain a face-up Wound on 4 or less. The Ride Parts are picked up regardless of the roll.",
+            "Involved Action 'Open Service Tunnel' (requires carrying 1 Ride Part AND the Angle Grinder, while on the Locked Escape token): place an Escape token on the NEXT round of the round tracker.",
+            "At the start of the next round the lock is cut: flip the Locked Escape token to its Escape side; Investigators take an Interact Action on it to escape."
+          ]
+        },
+        {
+          "id": "banish-the-adversary",
+          "name": "Banish the Adversary",
+          "reference": "See adversaries.json banish section for the Adversary in play."
+        }
+      ]
+    }
+  ]
+}

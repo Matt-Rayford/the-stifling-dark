@@ -1,0 +1,197 @@
+{
+  "_status": "All three base Adversaries from the Adversary Rules booklet. Attack/Ability card texts are on the 35 adversary cards (pending scans); known card names are listed with todo flags.",
+  "generalRules": {
+    "hiddenRevealed": {
+      "startsHidden": true,
+      "revealedBy": ["Moving onto or being on a Bright space", "Special Item or Action effects"],
+      "whenRevealed": "Move figure from mini-map to the matching main-board space; flip Revealed card face-up.",
+      "whenHidden": "Remove figure from main board, place on matching mini-map space, place a Shadow token on the space you became Hidden on."
+    },
+    "movement": {
+      "darkSpaceCost": 1,
+      "sprintDie": "Free, once per turn.",
+      "mayMoveThroughAndEndOnInvestigators": true,
+      "windows": "1 extra MP and place a Noise token on that Window (once per Window per round).",
+      "hiddenFromInvestigators": "Tracked on the mini-map while Hidden."
+    },
+    "cards": {
+      "attackCards": 1,
+      "usage": "Each Attack/Ability card may be resolved once per Adversary turn if its requirements are met.",
+      "cooldown": [
+        "A used card with the Cooldown icon goes face-down in the matching Cooldown slot (1 or 2).",
+        "At end of the Adversary's turn, in order: (1) move all face-up Cooldown-1 cards to the Active slots; (2) move all face-up Cooldown-2 cards to Cooldown 1; (3) flip all face-down cards in both Cooldown areas face-up.",
+        "Some cards have no Cooldown icon and instead say when they go on Cooldown."
+      ]
+    },
+    "breakDoor": "When adjacent to an empty Open Door space or a Locked Door token, place a Damaged Door token; if already Damaged, replace with Destroyed.",
+    "shadowTokens": "Placed face-up on the Adversary's current space unless stated otherwise; face-down Shadow tokens go within a stated distance of the current space. If your Shadow token is already on the board when you must place it, update it to the new location. Cultist Shadow tokens are numbered to match their Cultist.",
+    "revealedDuringOwnTurn": "If Revealed during their own turn, the Adversary cannot Attack for the remainder of their turn."
+  },
+  "adversaries": [
+    {
+      "id": "insatiable-horror",
+      "name": "The Insatiable Horror",
+      "tokenColor": "green",
+      "objective": { "type": "kill", "count": 2, "description": "Kill 2 Investigators." },
+      "setup": {
+        "attackCards": 1,
+        "abilityCards": 2,
+        "byInvestigatorCount": {
+          "2": { "abilityCards": 1, "bannedAbilities": ["Projectile Adhesive", "Occluded Lights"] },
+          "3": { "abilityCards": 1 }
+        },
+        "placement": "Standee anywhere on the mini-map, Hidden. Revealed card face-down."
+      },
+      "startOfTurn": [
+        "Remove all Noise tokens on the main board",
+        "Update Shadow token to your current location on the main board",
+        "Then, if Hidden, you may Ambush once"
+      ],
+      "coreActions": ["Move", "Disappear", "BreakDoor"],
+      "move": {
+        "mp": 4,
+        "sprintDie": true,
+        "special": [
+          "Cannot be Revealed while Moving. For each Bright space moved through, place a Shadow token on that main-board space, updating it in order.",
+          "Still Revealed if you END your turn on a Bright space, or if your space becomes Bright during an Investigator's turn."
+        ]
+      },
+      "breakDoorSpecial": "Does not need to be adjacent; may Break any Door within 3 spaces.",
+      "disappear": "If Revealed, move figure from main board to the same mini-map space, updating the Shadow token to where you Disappeared (even if the space is Bright). Afterward you may not Ambush or use your Attack card for the rest of the round.",
+      "ambush": {
+        "timing": "Start of your turn only (after Shadow update), only while Hidden, never during round 1, once per turn.",
+        "effect": "Move any number of Investigators within 5 spaces of you so they are adjacent to you. Bright spaces count as 2 when measuring the 5-space range. Moved Investigators ignore Map Hazards. Investigators cannot be stacked (limited by empty adjacent spaces). Then you may use your Attack card on ALL adjacent Investigators (whether or not you moved them).",
+        "attackRequiresAmbush": "You may not use your Attack card without Ambushing first."
+      },
+      "banish": {
+        "drawIfTimeRunsOut": true,
+        "steps": [
+          "When all Evidence is collected and this Objective chosen: Adversary takes 4 Egg Sac tokens and must place 1 within 3 spaces of their figure on the main board each round for the next 4 rounds (any time during their turn).",
+          "An Investigator ON an Egg Sac token may take an Involved Action to destroy it.",
+          "When all 4 Egg Sacs are destroyed, The Horror gains the Enraged Condition.",
+          "Once Enraged, an Investigator ADJACENT to The Horror's figure may take an Involved Action to place 1 Supply token on the Banish The Horror player aid. At 3 Supply tokens, the Investigators win."
+        ],
+        "enraged": {
+          "effects": [
+            "Cannot Ambush; Revealed for the remainder of the game (no Disappear).",
+            "Move changes to: 4 MP, no Sprint die, Bright spaces cost 2 MP.",
+            "Once per turn: may move any number of Investigators within 2 spaces adjacent to itself (no Bright-space penalty), then may use its Attack card on each adjacent Investigator."
+          ]
+        }
+      }
+    },
+    {
+      "id": "butcher",
+      "name": "The Butcher of Manchac Swamp",
+      "tokenColor": "red",
+      "objective": { "type": "kill", "count": 1, "description": "Wins immediately when 1 Investigator dies (Spirits never in play against The Butcher)." },
+      "setup": {
+        "attackCards": 1,
+        "abilityCards": 2,
+        "byInvestigatorCount": { "2": { "abilityCards": 1 } },
+        "placement": "Standee anywhere on the mini-map, Hidden. Stalk token on space 0 of the Stalk track. Revealed card face-down.",
+        "knownCards": { "attack": ["Eviscerate"], "abilities": ["Sinister Gaze", "Escalating Terror"], "_todo": "Full card list and texts from card scans." }
+      },
+      "startOfTurn": ["Remove all Noise AND Shadow tokens from the board"],
+      "coreActions": ["Move", "Disappear", "BreakDoor", "Stalk"],
+      "move": { "mp": 5, "sprintDie": true },
+      "disappear": "Only if Revealed AND in a Dim or Dark space. Remove figure to the mini-map; place a Shadow token on the space you Disappeared.",
+      "stalk": {
+        "requirements": [
+          "Within 8 spaces of the Investigator",
+          "Line of sight: a straight line from any part of your space's circle to any part of the target's circle without hitting any Obstacles (straightedge on the mini-map)"
+        ],
+        "effect": "May Stalk any number of Investigators during a single Stalk Action. Place a Shadow token on the space you Stalked from; you may continue Moving afterward.",
+        "perInvestigator": {
+          "noSpineChill": "Give them a Spine Chill token.",
+          "hasSpineChill": "They discard the Spine Chill token and The Butcher increases his Stalk track by 1."
+        },
+        "spineChill": "Spine Chill tokens last until the end of the NEXT round; The Butcher must Stalk the same Investigator 2 consecutive rounds to gain a Stalk. If he fails to re-Stalk them the following round, the token returns to The Butcher.",
+        "stalkTrack": "Attacks/Abilities showing a large Stalk icon cost 1 from the Stalk track."
+      },
+      "banish": {
+        "drawIfTimeRunsOut": true,
+        "steps": [
+          "When all Evidence is collected and this Objective chosen: The Butcher places a face-up Grave token on the mini-map within 10 spaces of any Investigator (the actual Grave), then places a face-down Grave token on the main board within 3 spaces of the actual Grave's space.",
+          "Investigators must Reveal the actual Grave by making its space Bright.",
+          "Once found, an Involved Action on the Grave grants the Frayed Ropes and The Hook Objective Item cards; replace the Grave token with the face-up Burning token.",
+          "At the end of each round: flip the Burning token face-down; if already face-down, remove it from the board (the Grave is burned).",
+          "The Hook (only after the Grave is burned; once per round for the whole team): Involved Action, choose an adjacent space — if it contains The Butcher, he is Banished and the Investigators win; if wrong, all The Butcher must say is that he is not on that space.",
+          "Frayed Ropes (Supply 3): when used, The Butcher must immediately place a face-down Shadow token within 3 spaces of his current location."
+        ]
+      }
+    },
+    {
+      "id": "cult-of-hunlow",
+      "name": "The Cult of Hunlow",
+      "tokenColor": "purple",
+      "objective": { "type": "kill", "count": "all", "description": "Wins immediately when ALL Investigators are dead. Bloodlet 5 times to perform The Final Sacrifice and summon Mor'gonnod in the flesh." },
+      "groups": ["Cultists", "Mor'gonnod"],
+      "setup": {
+        "attackCards": 1,
+        "abilityCards": 3,
+        "abilityFaceUp": 1,
+        "abilityNote": "Remaining Ability cards start face-down below Mor'gonnod's player board (Ethereal side). Each Bloodletting flips 1 face-up. Each Ability is named after a body part.",
+        "cultists": 4,
+        "byInvestigatorCount": {
+          "3": { "cultists": 3, "abilityCards": 2 },
+          "2": { "cultists": 2, "abilityCards": 1 }
+        },
+        "placement": [
+          "All Cultist standees anywhere on the mini-map, Hidden; each Cultist must start adjacent to at least 1 other Cultist, forming a single group.",
+          "Mor'gonnod adjacent to one of the Cultists, Hidden.",
+          "Blood token on space 0 of the Blood track.",
+          "Altar token in any Zone, on a General space of choice, on the mini-map. If the Altar's space is ever made Bright, move it to the main board."
+        ]
+      },
+      "startOfTurn": [
+        "Update each Cultist's numbered Shadow token and Mor'gonnod's Shadow token to their current locations on the main board (locations FIRST, then act)",
+        "Remove all Noise tokens on the main board"
+      ],
+      "cultists": {
+        "coreActions": "Each Cultist may take Move and Disappear up to once each per Adversary turn. Bloodletting and Break Door may each be taken only ONCE per round total (not per Cultist). Each Cultist fully completes their Actions before the next Cultist acts.",
+        "move": { "mp": 3, "sprintDie": "Rolled once per Adversary turn; the result applies to all Cultists and Mor'gonnod." },
+        "disappear": "If Revealed and in a Dim or Dark space. A Cultist who Disappears may not Bloodlet this turn (another Cultist still may).",
+        "bloodletting": {
+          "limit": "1 Cultist per Adversary turn; not during round 1; counts as an Ability, not an Attack.",
+          "effect": "When adjacent to an Investigator: update that Cultist's Shadow token to their location on the main board, give the Investigator a face-down Wound, increase the Blood track by 1, and if Mor'gonnod has face-down Abilities flip 1 face-up (now usable)."
+        }
+      },
+      "morgonnod": {
+        "states": ["Ethereal", "Corporeal"],
+        "ethereal": {
+          "actions": "Move (3 MP + shared Sprint die) and Disappear, each once per Adversary turn. No Break Door. May NEVER use the Attack card while Ethereal.",
+          "disappear": "If Revealed and in a Dim or Dark space. After Disappearing, may not use any Abilities for the rest of the turn.",
+          "abilities": "Must be Hidden to use Ability cards (unless Corporeal). Only Mor'gonnod uses the Attack and Ability cards; Cultists have separate Actions."
+        },
+        "finalSacrifice": {
+          "requirements": [
+            "Blood track at 5",
+            "Each Cultist adjacent to at least 1 other Cultist, forming a single group",
+            "Mor'gonnod adjacent to at least 1 Cultist"
+          ],
+          "effect": "Reveal the Cultists, place Mor'gonnod on the main board on his current space, remove ALL Cultists from the game (consumed), flip Mor'gonnod's player board to Corporeal, flip his Attack card face-up, and end your turn."
+        },
+        "corporeal": {
+          "effects": [
+            "Revealed for the remainder of the game; ignores the Revealed card; no Disappear.",
+            "Move: up to 10 MP; must spend 2 MP to move onto Bright spaces.",
+            "Break Door: normal rules.",
+            "May use the Attack card plus each face-up Ability once per Adversary turn."
+          ]
+        }
+      },
+      "banish": {
+        "drawIfTimeRunsOut": false,
+        "timeoutResult": "If time runs out with this Objective selected, the Adversary wins as usual (NOT a draw).",
+        "steps": [
+          "When all Evidence is collected and this Objective chosen: the Adversary places the Ritual Knife and Rope Circle tokens on any General spaces within 10 spaces of the Altar token on the main board.",
+          "Investigators pick up the Ritual Knife and Rope Circle with an Interact Action.",
+          "Investigators must Reveal the Altar (by making its space Bright) before the Ritual Knife or Rope Circle can be used.",
+          "Ritual Knife (on the Altar token; once per round for the whole team): Involved Action to flip a face-down Wound face-up on yourself OR give yourself a face-down Wound, in order to place 1 Supply token on the Banish The Cult player aid.",
+          "Rope Circle: with 3 Supply tokens on the player aid, all surviving Investigators in a single group (each adjacent to at least 1 other Investigator, at least 1 adjacent to the Altar) may take an Interact Action to cut the Rope Circle — Banishing the Cultists and Mor'gonnod. The Investigators win."
+        ]
+      }
+    }
+  ]
+}

@@ -1,0 +1,57 @@
+{
+  "_status": "Space types, doors, hazards, and gainable map tokens from the Core Rules. Actual board geometry (spaces, adjacency, zones, obstacles) must come from board data files.",
+  "spaceTypes": {
+    "start": { "representation": "solid green circle", "note": "Counts as a General space. Investigators begin here in any order." },
+    "general": { "representation": "gray circle, no icons", "note": "Valid target for Hidden Evidence / POI / Altar placement." },
+    "movement": { "representation": "numbered circle" },
+    "interaction": { "representation": "non-gray circle with an icon (Light Switch, Computer, Ticket Booth, Medical Item, Door, Game Booth, etc.)" },
+    "dim": { "representation": "solid-border circle" },
+    "dark": { "representation": "dashed-border circle" },
+    "water": { "representation": "double-blue wavy Movement Lines (Amusement Park: Tunnel of Love)" },
+    "carriage": { "representation": "Ferris Wheel / Zipper carriage spaces (Amusement Park)" }
+  },
+  "obstacles": {
+    "standard": { "outline": "light gray", "blocks": ["movement", "lineOfSight"], "note": "Walls typically only have the gray outline on the outside but still block line of sight from any direction." },
+    "movementOnly": { "outline": "orange", "blocks": ["movement"], "note": "Denoted between spaces that would otherwise be adjacent." },
+    "curtains": { "representation": "squiggly pink line (Amusement Park)", "blocks": ["lineOfSight"] }
+  },
+  "doors": {
+    "states": ["Open", "Locked", "Damaged", "Destroyed"],
+    "open": { "blocks": [], "note": "Door space with no token on it." },
+    "locked": { "blocks": ["movement", "lineOfSight"], "note": "No figure may move onto or through it. If a Locked Door is placed on the Adversary's space, the Adversary is Revealed and must Move to an adjacent space of their choice." },
+    "damaged": { "blocks": ["movement", "lineOfSight"] },
+    "destroyed": { "blocks": [], "note": "Can be moved onto/through by any figure; can never be Locked again." },
+    "investigatorInteracts": {
+      "lockDoor": "Place a Locked Door token on an ADJACENT empty Door space.",
+      "openDoor": "Remove a Locked Door token from an adjacent space; OR remove a Damaged Door token from an adjacent space and replace it with a Destroyed Door token."
+    },
+    "adversaryBreakDoor": "When adjacent to an empty Open Door space or a Locked Door token, place a Damaged Door token on it. If it already has a Damaged Door token, replace it with a Destroyed Door token. (Adversary-specific variations exist, e.g. The Horror breaks any Door within 3 spaces.)",
+    "securityBar": "A Door with a Security Bar can be Opened as usual; the Security Bar token is discarded."
+  },
+  "windows": {
+    "representation": "light blue lines with a blood drop",
+    "investigatorMovesThrough": {
+      "keepMoving": "Immediately gain 1 face-down Wound.",
+      "stopMovingForRestOfTurn": "May lose 1 Stamina instead of gaining the Wound."
+    },
+    "adversaryMovesThrough": "Spend 1 extra MP and place a Noise token on that Window (direction not indicated; max 1 Noise token per Window per round).",
+    "tradingThroughWindows": "Allowed, no Wound.",
+    "blocksLineOfSight": false
+  },
+  "lightSwitches": {
+    "interact": "Place a Bright token on the connected Zone; all spaces in that Zone become Bright for the remainder of the round.",
+    "afterRound": "Flip the Bright token to its Faltering Lights side; that Zone's lights can never be turned on again."
+  },
+  "mapTokens": {
+    "bright": { "scope": "Zone", "effect": "All spaces in the Zone are Bright.", "burnsOut": "Typically flipped to Faltering Lights after the current round ends." },
+    "falteringLights": { "scope": "Zone", "effect": "Bright tokens cannot be placed on this Zone. No other effect." },
+    "dim": { "scope": "Zone", "placement": "Zone you are in or adjacent to", "effect": "All spaces in the Zone are Dim; typically remains for the rest of the game. Bright overrides Dim." },
+    "openWindow": { "placement": "any adjacent Window", "effect": "No longer a Map Hazard; all players (including the Adversary) move through with no penalty and no Noise." },
+    "secretPassage": { "placement": "any adjacent space, connecting to any other space of your choice", "effect": "Those spaces now count as adjacent and can be moved through by all players. Does not change line of sight or light levels.", "componentCount": 2 },
+    "falseDoor": { "placement": "any empty Door space", "effect": "Counts as an Obstacle (blocks line of sight); no figure can move through it." },
+    "falseWindow": { "placement": "any empty Window", "effect": "Counts as an Obstacle (blocks line of sight); no figure can move through it; no Trading through it." }
+  },
+  "medicalItemSpaces": {
+    "note": "Medical Item tokens placed here at setup based on Investigator count; pick up with an Interact Action."
+  }
+}

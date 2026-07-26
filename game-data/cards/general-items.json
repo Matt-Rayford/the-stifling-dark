@@ -1,0 +1,382 @@
+{
+ "_icons": {
+  "{lungs}": "Stamina",
+  "{charge}": "Flashlight charge",
+  "{blood}": "Blood (health/damage)",
+  "{face-up-wound}": "Face-up Wound card",
+  "{face-down-wound}": "Face-down Wound card",
+  "{footprint}": "Footprint (sound level)",
+  "{supply}": "Supply token",
+  "{point-of-interest}": "Point of Interest token",
+  "{medical-item}": "Medical Item token",
+  "{involved-action}": "Involved Action",
+  "{noise}": "Noise token",
+  "{obstruction}": "Obstruction token",
+  "{flame}": "Flame token",
+  "{dirty-rag}": "Dirty Rag token",
+  "{glowstick}": "Glowstick token",
+  "{lantern}": "Lantern token",
+  "{torch}": "Torch token",
+  "{security-bar}": "Security Bar token",
+  "{locked-door}": "Locked Door token",
+  "{damaged-door}": "Damaged Door token",
+  "{ghillie-suit}": "Ghillie Suit token",
+  "{reflector}": "Reflector token"
+ },
+ "cards": [
+  {
+   "id": "adrenaline-shot",
+   "name": "Adrenaline Shot",
+   "count": 1,
+   "supply": 2,
+   "text": "The next time you Sprint you do not need to roll the Sprint die and may Move 4 spaces",
+   "set": "base"
+  },
+  {
+   "id": "blueprints",
+   "name": "Blueprints",
+   "count": 1,
+   "supply": null,
+   "text": "Select a Point of Interest. The Adversary must reveal any {point-of-interest} (Point of Interest) tokens that are within 2 spaces of it",
+   "set": "base"
+  },
+  {
+   "id": "cross",
+   "name": "Cross",
+   "count": 1,
+   "supply": null,
+   "text": "The Adversary may not use any of their Ability cards during their next turn. They may still use Attacks and Core Actions on their player board",
+   "set": "base"
+  },
+  {
+   "id": "dirty-rag",
+   "name": "Dirty Rag",
+   "count": 1,
+   "supply": null,
+   "text": "Place the {dirty-rag} (Dirty Rag) token on the main board on an adjacent Map Hazard\nThis Map Hazard no longer affects the Investigators or the Adversary for the remainder of the game",
+   "set": "base"
+  },
+  {
+   "id": "emergency-flare",
+   "name": "Emergency Flare",
+   "count": 1,
+   "supply": null,
+   "text": "Place a Flashlight on an adjacent space. Cards and Abilities that modify Flashlights still impact this Item\nThis never costs any {charge} and does not count as a Final Action, and you may still use your regular Flashlight if there is a template left",
+   "set": "base"
+  },
+  {
+   "id": "energy-bar",
+   "name": "Energy Bar",
+   "count": 1,
+   "supply": null,
+   "text": "Gain 2 {lungs}",
+   "set": "base"
+  },
+  {
+   "id": "energy-drink",
+   "name": "Energy Drink",
+   "count": 1,
+   "supply": null,
+   "text": "You may take the Move Action twice this turn",
+   "set": "base"
+  },
+  {
+   "id": "firecrackers",
+   "name": "Firecrackers",
+   "count": 1,
+   "supply": null,
+   "text": "Select a space within 3 spaces of your current position. All Adversary figures must immediately Move 2 spaces towards that space\nThe Adversary may still Move normally on their turn",
+   "set": "base"
+  },
+  {
+   "id": "fresh-batteries",
+   "name": "Fresh Batteries",
+   "count": 1,
+   "supply": null,
+   "text": "Gain 2 {charge}",
+   "set": "base"
+  },
+  {
+   "id": "glowstick",
+   "name": "Glowstick",
+   "count": 1,
+   "supply": 3,
+   "text": "Place the {glowstick} (Glowstick) token on the main board within 4 spaces. That space and all spaces within 2 of it are now Dim\nYou may only use this Item once per round. Remove the token at the end of the round",
+   "set": "base"
+  },
+  {
+   "id": "journal",
+   "name": "Journal",
+   "count": 1,
+   "supply": null,
+   "text": "You may use this Item when turning in a piece of Evidence to gain an additional reward, as if you had turned in one extra piece of Evidence",
+   "set": "base"
+  },
+  {
+   "id": "kerosene",
+   "name": "Kerosene",
+   "count": 1,
+   "supply": null,
+   "text": "Place 2 {flame} (Flame) tokens on the main board adjacent to yourself and each other. The Adversary may not Move onto these tokens, and any Investigators that Move onto these tokens gain a {face-up-wound}\nRemove the tokens at the end of the round",
+   "set": "base"
+  },
+  {
+   "id": "lantern",
+   "name": "Lantern",
+   "count": 1,
+   "supply": null,
+   "text": "Place the {lantern} (Lantern) token on the main board on an adjacent space. That space and all adjacent spaces are now Bright\nRemove the token at the end of the round",
+   "set": "base"
+  },
+  {
+   "id": "leather-jacket",
+   "name": "Leather Jacket",
+   "count": 1,
+   "supply": null,
+   "text": "If you gain 1 or more {face-up-wound}, you may use this Item to take {face-down-wound} instead",
+   "set": "base"
+  },
+  {
+   "id": "lucky-dice",
+   "name": "Lucky Dice",
+   "count": 1,
+   "supply": 2,
+   "text": "You may re-roll any of your dice rolls and choose which roll to keep",
+   "set": "base"
+  },
+  {
+   "id": "makeshift-iv",
+   "name": "Makeshift IV",
+   "count": 1,
+   "supply": null,
+   "text": "If an adjacent Investigator agrees, you may transfer 1 {blood} from yourself to that Investigator or from that Investigator to you",
+   "set": "base"
+  },
+  {
+   "id": "motion-detector",
+   "name": "Motion Detector",
+   "count": 1,
+   "supply": 3,
+   "text": "The Adversary must show the Investigators what they roll on the Sprint die on their next turn",
+   "set": "base"
+  },
+  {
+   "id": "painkillers",
+   "name": "Painkillers",
+   "count": 1,
+   "supply": null,
+   "text": "You must have at least 1 {face-up-wound} card in order to use this Item\nDraw 2 new {face-up-wound} cards. You may replace 1 of your existing {face-up-wound} cards with 1 of the 2 new cards if you choose",
+   "set": "base"
+  },
+  {
+   "id": "rabbits-foot",
+   "name": "Rabbit's Foot",
+   "count": 1,
+   "supply": null,
+   "text": "If you take the final {blood} that would kill you, roll a D6\nOn a 5+, you still take the {blood} but do not die\nYou must roll again at the end of each of your turns, and you die immediately if you roll less than a 5 or if the Adversary Attacks you again",
+   "set": "base"
+  },
+  {
+   "id": "security-bar",
+   "name": "Security Bar",
+   "count": 1,
+   "supply": null,
+   "text": "Place the {security-bar} (Security Bar) token on the main board on top of an adjacent {locked-door} (Locked Door) or {damaged-door} (Damaged Door) token\nThe next time the Adversary takes the Break Door Action on this Door, remove the {security-bar} token rather than flipping or replacing the Door token",
+   "set": "base"
+  },
+  {
+   "id": "sedatives",
+   "name": "Sedatives",
+   "count": 1,
+   "supply": null,
+   "text": "Skip your next turn, then remove all {obstruction} (Obstruction) tokens from your Stamina track and set your {lungs} to its maximum",
+   "set": "base"
+  },
+  {
+   "id": "survival-kit",
+   "name": "Survival Kit",
+   "count": 1,
+   "supply": null,
+   "text": "You may ignore the effects of an Event card for this turn",
+   "set": "base"
+  },
+  {
+   "id": "torch",
+   "name": "Torch",
+   "count": 1,
+   "supply": null,
+   "text": "Place the {torch} (Torch) token on the main board on the Zone you are in. This Zone is now Dim for the rest of the round\nRemove the token at the end of the round\nYou may not use this Item if you are not in a Zone",
+   "set": "base"
+  },
+  {
+   "id": "tourniquet",
+   "name": "Tourniquet",
+   "count": 1,
+   "supply": 2,
+   "text": "You may ignore a {face-up-wound} this round, delaying its effects until next round",
+   "set": "base"
+  },
+  {
+   "id": "two-way-radio",
+   "name": "Two-way Radio",
+   "count": 1,
+   "supply": null,
+   "text": "You may use the Minor Ability of an Investigator that is not in play\nIf the Ability uses tokens, you may use 1 of them but cannot keep the rest",
+   "set": "base"
+  },
+  {
+   "id": "whiskey",
+   "name": "Whiskey",
+   "count": 1,
+   "supply": null,
+   "text": "Roll a D6:\n1-2: Decrease your {footprint} by 1 on your next turn\n3-4: Gain 1 {lungs} or {charge}\n5-6: Immediately gain 1 {lungs}, and increase your {footprint} by 1 on your next turn",
+   "set": "base"
+  },
+  {
+   "id": "crystal-amulet",
+   "name": "Crystal Amulet",
+   "count": 1,
+   "supply": null,
+   "text": "You may look at up to the top 3 cards of the Event deck and rearrange them in any order\nYou cannot move the Major Event card from the bottom of the deck",
+   "set": "base"
+  },
+  {
+   "id": "spare-tools",
+   "name": "Spare Tools",
+   "count": 1,
+   "supply": null,
+   "text": "Use this Item to make an {involved-action} (Involved Action) count as an Interact Action instead. This does not end your turn, but you may not take another {involved-action} this turn\nYou may still take a different Final Action and gain {lungs} if you Rest",
+   "set": "base"
+  },
+  {
+   "id": "stray-mutt",
+   "name": "Stray Mutt",
+   "count": 1,
+   "supply": 2,
+   "text": "You may pick up a Revealed {point-of-interest} (Point of Interest) or {medical-item} (Medical Item) token within 3 spaces of you as if you were on that space",
+   "set": "base"
+  },
+  {
+   "id": "tripod",
+   "name": "Tripod",
+   "count": 1,
+   "supply": null,
+   "text": "You may take the Place Flashlight Final Action at any point during your turn (without ending your turn). You may not take another Final Action this turn\nYour Flashlight remains on the board for the rest of the round, even if you Move after placing it. If you choose to Rest, you gain {lungs} at the end of your turn",
+   "set": "base"
+  },
+  {
+   "id": "whistle",
+   "name": "Whistle",
+   "count": 1,
+   "supply": null,
+   "text": "You may move up to 2 Investigators 2 spaces closer to yourself, treating Dark spaces as Dim. Map Hazards retain their effects",
+   "set": "base"
+  },
+  {
+   "id": "ghillie-suit",
+   "name": "Ghillie Suit",
+   "count": 1,
+   "supply": null,
+   "text": "At the start of your turn, remove your Investigator from the board, placing the {ghillie-suit} (Ghillie Suit) token in its place\nYou cannot take any other Actions this turn, but also cannot be affected by Attacks, Abilities, or Events. Return to the board at the end of the round",
+   "set": "base"
+  },
+  {
+   "id": "metal-detector",
+   "name": "Metal Detector",
+   "count": 1,
+   "supply": 2,
+   "text": "The Adversary must Reveal any Hidden tokens within 2 spaces of you each time you use this Item",
+   "set": "base"
+  },
+  {
+   "id": "spare-batteries",
+   "name": "Spare Batteries",
+   "count": 1,
+   "supply": 2,
+   "text": "You may spend a {supply} token from this card instead of spending a {charge} when using a Flashlight",
+   "set": "base"
+  },
+  {
+   "id": "adrenaline-shot-mi",
+   "name": "Adrenaline Shot",
+   "count": 1,
+   "supply": 2,
+   "text": "The next time you Sprint, roll a D6 twice instead of rolling the Sprint die. Use the higher of the two rolls as your Sprint movement",
+   "notes": "Alternate version of Adrenaline Shot with different rules text; card bears a circled 'MI' set mark (bottom-right), likely an expansion/variant set",
+   "set": "MI"
+  },
+  {
+   "id": "cross-mi",
+   "name": "Cross",
+   "count": 1,
+   "supply": 2,
+   "text": "The Adversary must place a {noise} (Noise) token on the main board on any Door spaces they Move onto this round",
+   "notes": "Alternate version of Cross with different rules text; card bears a circled 'MI' set mark (bottom-right)",
+   "set": "MI"
+  },
+  {
+   "id": "dirty-rag-mi",
+   "name": "Dirty Rag",
+   "count": 1,
+   "supply": 2,
+   "text": "You may ignore the effects of 1 Map Hazard",
+   "notes": "Alternate version of Dirty Rag with different rules text; card bears a circled 'MI' set mark (bottom-right)",
+   "set": "MI"
+  },
+  {
+   "id": "lantern-mi",
+   "name": "Lantern",
+   "count": 1,
+   "supply": 2,
+   "text": "Place the {lantern} (Lantern) token on the main board on an adjacent space. That space is Bright, and everything within 3 spaces of it is Dim\nYou may only use this Item once per round. Remove the token at the end of the round",
+   "notes": "Alternate version of Lantern with different rules text; card bears a circled 'MI' set mark (bottom-right)",
+   "set": "MI"
+  },
+  {
+   "id": "rabbits-foot-mi",
+   "name": "Rabbit's Foot",
+   "count": 1,
+   "supply": null,
+   "text": "You may look at the next 2 Event cards and replace 1 of them with any discarded Event card, then place the cards back on top of the Event deck in the same order\nYou may not replace the Major Event card",
+   "notes": "Alternate version of Rabbit's Foot with different rules text; card bears a circled 'MI' set mark (bottom-right)",
+   "set": "MI"
+  },
+  {
+   "id": "flashbang",
+   "name": "Flashbang",
+   "count": 1,
+   "supply": null,
+   "text": "If any Adversary figures are within 2 spaces of you when you use this Item, those figures may not take an Action against you on their next turn",
+   "notes": "Card bears a circled 'NF' set mark (bottom-right), likely an expansion/variant set",
+   "set": "NF"
+  },
+  {
+   "id": "lens-filter",
+   "name": "Lens Filter",
+   "count": 1,
+   "supply": null,
+   "text": "You may select a different Flashlight Augment to use this round, including one that another Investigator is using",
+   "notes": "Card bears a circled 'NF' set mark (bottom-right)",
+   "set": "NF"
+  },
+  {
+   "id": "reflector",
+   "name": "Reflector",
+   "count": 1,
+   "supply": 2,
+   "text": "Place the {reflector} (Reflector) token on the main board within 3 spaces of a space in your Flashlight's line of sight. This space also counts as if it has line of sight and has the same effect as your current Flashlight",
+   "notes": "Card bears a circled 'NF' set mark (bottom-right)",
+   "set": "NF"
+  },
+  {
+   "id": "spotlight",
+   "name": "Spotlight",
+   "count": 1,
+   "supply": null,
+   "text": "Use the straightedge as your Flashlight. Any space that is touched is considered Bright (even if it is not fully covered) as long as there are no Obstacles between the space and your Investigator\nThis still costs 1 {charge}",
+   "notes": "Card bears a circled 'NF' set mark (bottom-right)",
+   "set": "NF"
+  }
+ ],
+ "_v1Scope": "v1 includes base + MI cards; NF cards excluded per designer decision (2026-07-26)."
+}
