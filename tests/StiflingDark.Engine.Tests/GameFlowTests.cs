@@ -215,6 +215,15 @@ namespace StiflingDark.Engine.Tests
             game.State.Adversary.Space = "S-20"; // adjacent to the S-23 door
             game.AdversaryBreakDoor("S-23");
             Assert.Equal(DoorState.Damaged, game.State.Overlay.DoorState("S-23"));
+            // Break Door is once per adversary turn; a second break needs the next round.
+            Assert.Throws<InvalidOperationException>(() => game.AdversaryBreakDoor("S-23"));
+            game.AdversaryEndTurn();
+            foreach (var inv in game.State.Investigators.Where(i => !i.Dead && !i.Escaped))
+            {
+                game.BeginInvestigatorTurn(inv.DefId);
+                game.EndTurnWithoutFinalAction();
+            }
+            game.State.Adversary.Space = "S-20";
             game.AdversaryBreakDoor("S-23");
             Assert.Equal(DoorState.Destroyed, game.State.Overlay.DoorState("S-23"));
         }

@@ -78,11 +78,48 @@ namespace StiflingDark.Engine.Core
         public bool Collected { get; set; }
     }
 
+    public sealed class CooldownCard
+    {
+        public string CardId { get; set; } = "";
+        public bool FaceUp { get; set; }
+    }
+
+    /// <summary>An extra adversary figure (the Cult's Cultists; the main figure lives on AdversaryState).</summary>
+    public sealed class AdversaryFigure
+    {
+        public string Id { get; set; } = "";
+        public string Space { get; set; } = "";
+        public bool Revealed { get; set; }
+        public bool Alive { get; set; } = true;
+    }
+
     public sealed class AdversaryState
     {
         public string DefId { get; set; } = "";
         public string Space { get; set; } = "";
         public bool Revealed { get; set; }
+        /// <summary>Extra figures (Cultists). Empty for single-figure adversaries.</summary>
+        public List<AdversaryFigure> Figures { get; set; } = new List<AdversaryFigure>();
+
+        // Card loadout and cooldowns.
+        public string? AttackCard { get; set; }
+        public List<string> ActiveAbilities { get; set; } = new List<string>();
+        public List<string> FaceDownAbilities { get; set; } = new List<string>();
+        public List<CooldownCard> Cooldown1 { get; set; } = new List<CooldownCard>();
+        public List<CooldownCard> Cooldown2 { get; set; } = new List<CooldownCard>();
+
+        // Per-turn bookkeeping.
+        public bool TurnStarted { get; set; }
+        public int MpRemaining { get; set; }
+        public int SprintRolled { get; set; }
+        public bool AttackUsedThisTurn { get; set; }
+        public bool AttackLockedThisTurn { get; set; }
+        public HashSet<string> ActionsUsed { get; set; } = new HashSet<string>();
+
+        /// <summary>Adversary-specific tracks: "stalk" (Butcher 0-8), "blood" (Cult 0-5), etc.</summary>
+        public Dictionary<string, int> Counters { get; set; } = new Dictionary<string, int>();
+        /// <summary>Butcher: investigator def id -> round their Spine Chill token was given.</summary>
+        public Dictionary<string, int> SpineChill { get; set; } = new Dictionary<string, int>();
         /// <summary>Space id -> shadow token marker (single-token adversaries use key "main").</summary>
         public Dictionary<string, string> ShadowTokens { get; set; } = new Dictionary<string, string>();
         public List<string> NoiseTokens { get; set; } = new List<string>();

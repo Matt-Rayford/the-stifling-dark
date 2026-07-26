@@ -196,8 +196,26 @@ namespace StiflingDark.Engine.Core
                     throw new InvalidOperationException(
                         $"'{cardId}' is neither a '{State.ScenarioId}' Escape card nor the Banish card for '{State.Adversary.DefId}'.");
                 }
-                throw new NotImplementedException(
-                    $"Banish setup for '{cardId}' needs Adversary token placement; it lands with the adversary-abilities phase.");
+                // Banish setup is adversary-specific; the matching partial (Game.Butcher /
+                // Game.Horror / Game.Cult) implements the hook. An unimplemented hook is a no-op,
+                // so guard with a flag the hooks must set.
+                _banishSetupDone = false;
+                switch (cardId)
+                {
+                    case "the-grave": SetupGraveBanish(); break;
+                    case "the-eggs": SetupEggsBanish(); break;
+                    case "the-altar": SetupAltarBanish(); break;
+                }
+                if (!_banishSetupDone)
+                {
+                    throw new NotImplementedException($"Banish setup for '{cardId}' is not implemented.");
+                }
+                // Banish cards have no EscapeSetups entry (no scenario owner, no FixedTokens/D6
+                // roll) — the adversary-specific hook just run is entirely responsible for its
+                // own token placement, so commit the selection and stop here.
+                State.Objective.SelectedEscapeCard = cardId;
+                Log("objective", $"selected the Banish card '{cardId}'");
+                return;
             }
             if (setup.Owner != State.ScenarioId)
             {

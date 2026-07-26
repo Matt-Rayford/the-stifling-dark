@@ -574,10 +574,16 @@ namespace StiflingDark.Engine.Core
 
         public void AdversaryMoveStep(string to)
         {
-            RequirePhase(GamePhase.AdversaryTurn);
+            EnsureAdversaryTurnStarted();
             string from = State.Adversary.Space;
             var step = Graph.TryStep(FigureKind.Adversary, from, to, State.Overlay)
                 ?? throw new InvalidOperationException($"Adversary cannot move {from} -> {to}.");
+            if (step.Cost > State.Adversary.MpRemaining)
+            {
+                throw new InvalidOperationException($"Move costs {step.Cost} MP, only {State.Adversary.MpRemaining} left.");
+            }
+            State.Adversary.MpRemaining -= step.Cost;
+            State.Adversary.ActionsUsed.Add("move"); // Moving forecloses start-of-turn-only actions (e.g. Ambush).
             State.Adversary.Space = to;
             if (step.CrossesWindow)
             {
@@ -589,15 +595,28 @@ namespace StiflingDark.Engine.Core
             }
             if (!State.Adversary.Revealed && IsBright(to))
             {
-                RevealAdversary("moved onto a Bright space");
+                if (State.Adversary.DefId == "insatiable-horror")
+                {
+                    // The Horror cannot be Revealed while Moving; it drops a Shadow token
+                    // on each Bright space it moves through instead.
+                    State.Adversary.ShadowTokens[to] = to;
+                }
+                else
+                {
+                    RevealAdversary("moved onto a Bright space");
+                }
             }
             ApplyAdversaryCarriageRotation();
         }
 
         public void AdversaryDisappear()
         {
-            RequirePhase(GamePhase.AdversaryTurn);
+            EnsureAdversaryTurnStarted();
             var adv = State.Adversary;
+            if (!adv.ActionsUsed.Add("disappear"))
+            {
+                throw new InvalidOperationException("Disappear was already used this turn.");
+            }
             if (!adv.Revealed)
             {
                 throw new InvalidOperationException("Already Hidden.");
@@ -613,7 +632,11 @@ namespace StiflingDark.Engine.Core
 
         public void AdversaryBreakDoor(string doorSpace)
         {
-            RequirePhase(GamePhase.AdversaryTurn);
+            EnsureAdversaryTurnStarted();
+            if (!State.Adversary.ActionsUsed.Add("breakDoor"))
+            {
+                throw new InvalidOperationException("Break Door was already used this turn.");
+            }
             bool adjacent = Graph.Edge(State.Adversary.Space, doorSpace) != null;
             if (State.Adversary.DefId == "insatiable-horror")
             {
@@ -636,7 +659,9 @@ namespace StiflingDark.Engine.Core
 
         public void AdversaryEndTurn()
         {
-            RequirePhase(GamePhase.AdversaryTurn);
+            EnsureAdversaryTurnStarted();
+            AdvanceCooldowns();
+            State.Adversary.TurnStarted = false;
             EndRound();
         }
 
@@ -809,6 +834,14 @@ namespace StiflingDark.Engine.Core
             if (!State.Adversary.Revealed && brightSet.Contains(State.Adversary.Space))
             {
                 RevealAdversary("caught in the light");
+            }
+            foreach (var figure in State.Adversary.Figures)
+            {
+                if (figure.Alive && !figure.Revealed && brightSet.Contains(figure.Space))
+                {
+                    figure.Revealed = true;
+                    Log("reveal", $"{figure.Id} at {figure.Space} (caught in the light)");
+                }
             }
             foreach (var (zone, token) in State.Evidence.Select(kv => (kv.Key, kv.Value)))
             {

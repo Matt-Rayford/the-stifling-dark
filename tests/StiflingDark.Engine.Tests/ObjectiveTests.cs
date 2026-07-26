@@ -101,14 +101,17 @@ namespace StiflingDark.Engine.Tests
         [Fact]
         public void Selection_rejects_foreign_cards_and_defers_banish_setup()
         {
+            // All three Banish hooks (Game.Butcher/Horror/Cult) are implemented now, so this
+            // exercises the Butcher's Grave banish selection directly instead of the now-obsolete
+            // "hook not implemented yet" path.
             var game = NewGame("sawmill", seed: 3);
             Assert.Throws<InvalidOperationException>(() => game.SelectEscapeCard("mirror-maze"));
             Assert.Throws<InvalidOperationException>(() => game.SelectEscapeCard("the-altar")); // wrong adversary
-            Assert.Throws<NotImplementedException>(() => game.SelectEscapeCard("the-grave"));
             Assert.Null(game.State.Objective.SelectedEscapeCard);
 
-            game.SelectEscapeCard("north-gate");
-            Assert.Throws<InvalidOperationException>(() => game.SelectEscapeCard("south-gate"));
+            game.SelectEscapeCard("the-grave");
+            Assert.Equal("the-grave", game.State.Objective.SelectedEscapeCard);
+            Assert.Throws<InvalidOperationException>(() => game.SelectEscapeCard("north-gate"));
         }
 
         // ---------- Card setup ----------
