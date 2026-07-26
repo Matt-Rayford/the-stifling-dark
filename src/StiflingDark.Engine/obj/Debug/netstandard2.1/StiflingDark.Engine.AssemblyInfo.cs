@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("StiflingDark.Engine")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+e36c8758f4501501069053f7dff0d59959ea0f1b")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+f4e15e46a33f81c1dfb04cb1c7acaa1b2765ffd0")]
 [assembly: System.Reflection.AssemblyProductAttribute("StiflingDark.Engine")]
 [assembly: System.Reflection.AssemblyTitleAttribute("StiflingDark.Engine")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

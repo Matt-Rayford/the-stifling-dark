@@ -44,6 +44,8 @@ namespace StiflingDark.Engine.Core
         public List<string> Items { get; set; } = new List<string>();
         /// <summary>Zones whose Evidence token this Investigator is carrying.</summary>
         public List<string> EvidenceCarried { get; set; } = new List<string>();
+        /// <summary>Map tokens gained as rewards, awaiting placement: "open-window", "dim", "secret-passage".</summary>
+        public List<string> MapTokens { get; set; } = new List<string>();
         public bool Dead { get; set; }
         public bool Escaped { get; set; }
 
@@ -105,12 +107,39 @@ namespace StiflingDark.Engine.Core
         public string Detail { get; set; } = "";
     }
 
+    /// <summary>Progress through the evidence economy and the selected escape Objective.</summary>
+    public sealed class ObjectiveState
+    {
+        public int EvidenceTurnedIn { get; set; }
+        /// <summary>Once-per-game reward ids already taken (e.g. "cursed-item", "dim-token").</summary>
+        public List<string> OncePerGameRewardsUsed { get; set; } = new List<string>();
+        /// <summary>Escape card id once the Investigators have chosen; null before.</summary>
+        public string? SelectedEscapeCard { get; set; }
+        /// <summary>Objective token name -> board space (only while not carried).</summary>
+        public Dictionary<string, string> Tokens { get; set; } = new Dictionary<string, string>();
+        /// <summary>Objective token name -> carrying Investigator's def id.</summary>
+        public Dictionary<string, string> TokenCarriers { get; set; } = new Dictionary<string, string>();
+        /// <summary>Supply tokens on the objective player aid (gate: needs 4).</summary>
+        public int Supplies { get; set; }
+        /// <summary>Truck parts installed (0-3).</summary>
+        public int PartsInstalled { get; set; }
+        /// <summary>True once the Locked Escape token has been flipped to its Escape side.</summary>
+        public bool EscapeOpen { get; set; }
+        /// <summary>Round-tracker round at which help arrives / the lock is cut (flare, tunnels).</summary>
+        public int? EscapeReadyRound { get; set; }
+        // Once-per-round-per-team locks: the round number the action was last used (0 = never).
+        public int OpenLockboxUsedRound { get; set; }
+        public int InstallPartUsedRound { get; set; }
+        public int StartTruckUsedRound { get; set; }
+    }
+
     /// <summary>
     /// The complete authoritative state of one game. Pure data — Newtonsoft-serializable
     /// for saves, replays, and network sync. All mutation goes through <see cref="Game"/>.
     /// </summary>
     public sealed class GameState
     {
+        public ObjectiveState Objective { get; set; } = new ObjectiveState();
         public string ScenarioId { get; set; } = "";
         public ulong RngState { get; set; }
         public GamePhase Phase { get; set; }

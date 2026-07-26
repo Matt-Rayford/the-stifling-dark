@@ -22,7 +22,7 @@ namespace StiflingDark.Engine.Core
     /// action that validates, mutates, and logs. Illegal actions throw
     /// InvalidOperationException and leave the state untouched.
     /// </summary>
-    public sealed class Game
+    public sealed partial class Game
     {
         public GameDatabase Db { get; }
         public GameState State { get; }
