@@ -1,6 +1,6 @@
 using StiflingDark.Engine.Core;
 
-namespace BotArena;
+namespace StiflingDark.Bots;
 
 /// <summary>Shared adversary plumbing: figure movement, line of sight, target picking.</summary>
 public abstract class AdversaryBot
@@ -8,15 +8,15 @@ public abstract class AdversaryBot
     protected readonly Game G;
     protected readonly Actor Act;
     protected readonly DeterministicRng Rng;
-    protected readonly GameRun Run;
+    protected readonly IAnomalySink Sink;
     private readonly RasterLineOfSightBlocker? _mask;
 
-    protected AdversaryBot(Game g, Actor act, DeterministicRng rng, GameRun run)
+    protected AdversaryBot(Game g, Actor act, DeterministicRng rng, IAnomalySink sink)
     {
         G = g;
         Act = act;
         Rng = rng;
-        Run = run;
+        Sink = sink;
         _mask = g.Db.LosMask(g.State.ScenarioId);
     }
 
@@ -31,14 +31,14 @@ public abstract class AdversaryBot
     /// the placements a Banish objective needs, or that objective could never start). Used to
     /// prove the Investigator win path actually works before reading anything into win rates.
     /// </summary>
-    public static AdversaryBot CreatePassive(Game g, Actor act, DeterministicRng rng, GameRun run) =>
-        new PassiveBot(g, act, rng, run);
+    public static AdversaryBot CreatePassive(Game g, Actor act, DeterministicRng rng, IAnomalySink sink) =>
+        new PassiveBot(g, act, rng, sink);
 
-    public static AdversaryBot Create(Game g, Actor act, DeterministicRng rng, GameRun run) => g.State.Adversary.DefId switch
+    public static AdversaryBot Create(Game g, Actor act, DeterministicRng rng, IAnomalySink sink) => g.State.Adversary.DefId switch
     {
-        "butcher" => new ButcherBot(g, act, rng, run),
-        "insatiable-horror" => new HorrorBot(g, act, rng, run),
-        "cult-of-hunlow" => new CultBot(g, act, rng, run),
+        "butcher" => new ButcherBot(g, act, rng, sink),
+        "insatiable-horror" => new HorrorBot(g, act, rng, sink),
+        "cult-of-hunlow" => new CultBot(g, act, rng, sink),
         _ => throw new InvalidOperationException($"No bot for '{g.State.Adversary.DefId}'."),
     };
 
@@ -169,7 +169,7 @@ public abstract class AdversaryBot
 /// <summary>Close the distance while Hidden, Stalk on line of sight, Attack with Stalk when adjacent.</summary>
 public sealed class ButcherBot : AdversaryBot
 {
-    public ButcherBot(Game g, Actor act, DeterministicRng rng, GameRun run) : base(g, act, rng, run)
+    public ButcherBot(Game g, Actor act, DeterministicRng rng, IAnomalySink sink) : base(g, act, rng, sink)
     {
     }
 
@@ -336,7 +336,7 @@ public sealed class ButcherBot : AdversaryBot
         string? second = Act.TryMessage("stalk-retry", () => G.ButcherStalk(new List<string> { candidates[0] }));
         if (second != null && second.Contains("already used"))
         {
-            Run.Anomaly("state-leak-on-refusal",
+            Sink.Anomaly("state-leak-on-refusal",
                 $"ButcherStalk refused ({refusal}) but had already marked the Stalk action as used: " +
                 $"the retry was rejected with \"{second}\".");
         }
@@ -371,7 +371,7 @@ public sealed class ButcherBot : AdversaryBot
 /// <summary>Stay Hidden, Ambush the nearest cluster, Attack, then reposition.</summary>
 public sealed class HorrorBot : AdversaryBot
 {
-    public HorrorBot(Game g, Actor act, DeterministicRng rng, GameRun run) : base(g, act, rng, run)
+    public HorrorBot(Game g, Actor act, DeterministicRng rng, IAnomalySink sink) : base(g, act, rng, sink)
     {
     }
 
@@ -581,7 +581,7 @@ public sealed class HorrorBot : AdversaryBot
 /// <summary>Cultists swarm and Bloodlet toward The Final Sacrifice, then Mor'gonnod hunts.</summary>
 public sealed class CultBot : AdversaryBot
 {
-    public CultBot(Game g, Actor act, DeterministicRng rng, GameRun run) : base(g, act, rng, run)
+    public CultBot(Game g, Actor act, DeterministicRng rng, IAnomalySink sink) : base(g, act, rng, sink)
     {
     }
 
@@ -592,7 +592,7 @@ public sealed class CultBot : AdversaryBot
     public override void OnEscapeCardSelected(string cardId)
     {
         if (cardId != "the-altar" || S.Objective.Tokens.ContainsKey("ritual-knife") ||
-            !S.Objective.Tokens.TryGetValue("altar", out string altar))
+            !S.Objective.Tokens.TryGetValue("altar", out string? altar))
         {
             return;
         }
@@ -802,9 +802,9 @@ public sealed class PassiveBot : AdversaryBot
 {
     private readonly AdversaryBot _placer;
 
-    public PassiveBot(Game g, Actor act, DeterministicRng rng, GameRun run) : base(g, act, rng, run)
+    public PassiveBot(Game g, Actor act, DeterministicRng rng, IAnomalySink sink) : base(g, act, rng, sink)
     {
-        _placer = Create(g, act, rng, run);
+        _placer = Create(g, act, rng, sink);
     }
 
     public override void OnEscapeCardSelected(string cardId) => _placer.OnEscapeCardSelected(cardId);

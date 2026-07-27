@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <!-- The engine is netstandard2.1 so it can be dropped into Unity; the bots cannot follow it
+         there. InvestigatorTeam.CostField runs Dijkstra on System.Collections.Generic
+         .PriorityQueue<,>, which is .NET 6+. Hand-rolling a heap would change the (deliberately
+         unspecified) tie-break order of the BCL's, and with it the bots' pathing, so the bots
+         target net8.0 and the engine stays portable on its own. -->
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>StiflingDark.Bots</RootNamespace>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\StiflingDark.Engine\StiflingDark.Engine.csproj" />
+  </ItemGroup>
+
+</Project>

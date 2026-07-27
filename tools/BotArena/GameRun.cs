@@ -1,10 +1,11 @@
+using StiflingDark.Bots;
 using StiflingDark.Engine.Core;
 using StiflingDark.Engine.Data;
 
 namespace BotArena;
 
 /// <summary>Plays one seeded game to its conclusion and records what happened.</summary>
-public sealed class GameRun
+public sealed class GameRun : IAnomalySink
 {
     /// <summary>A game that needs more engine calls than this is recorded as a "stalled" anomaly.</summary>
     public const int ActionCap = 2000;

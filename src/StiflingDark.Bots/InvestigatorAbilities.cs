@@ -1,7 +1,7 @@
 using System.Globalization;
 using StiflingDark.Engine.Core;
 
-namespace BotArena;
+namespace StiflingDark.Bots;
 
 /// <summary>
 /// Composition-aware play of the ten printed Investigator Abilities. The passive Minors need
@@ -317,7 +317,7 @@ public sealed partial class InvestigatorTeam
     {
         foreach (string token in new[] { "locked-escape", "truck", "altar", "saw" })
         {
-            if (S.Objective.Tokens.TryGetValue(token, out string space))
+            if (S.Objective.Tokens.TryGetValue(token, out string? space))
             {
                 return space;
             }

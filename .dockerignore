@@ -1,0 +1,7 @@
+**/bin/
+**/obj/
+bot-results/
+game-assets/
+tests/
+tools/
+.git/

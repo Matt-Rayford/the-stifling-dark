@@ -1,7 +1,7 @@
 using System.Globalization;
 using StiflingDark.Engine.Core;
 
-namespace BotArena;
+namespace StiflingDark.Bots;
 
 /// <summary>
 /// The designer's tactical layer: turtling (lock the doors, light the remaining entrances),

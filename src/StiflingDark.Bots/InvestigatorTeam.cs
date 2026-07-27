@@ -1,6 +1,6 @@
 using StiflingDark.Engine.Core;
 
-namespace BotArena;
+namespace StiflingDark.Bots;
 
 /// <summary>What one Investigator is trying to do this turn.</summary>
 public sealed class Plan
@@ -31,7 +31,7 @@ public sealed partial class InvestigatorTeam
     private readonly Game _g;
     private readonly Actor _act;
     private readonly DeterministicRng _rng;
-    private readonly GameRun _run;
+    private readonly IAnomalySink _sink;
     private readonly SpaceKind _turnInKind;
     private readonly List<string> _turnInSpaces;
     private readonly Dictionary<string, int> _degree;
@@ -57,12 +57,12 @@ public sealed partial class InvestigatorTeam
     private int _threatLevel;
     private bool _teammateAttacked;
 
-    public InvestigatorTeam(Game g, Actor act, DeterministicRng rng, GameRun run)
+    public InvestigatorTeam(Game g, Actor act, DeterministicRng rng, IAnomalySink sink)
     {
         _g = g;
         _act = act;
         _rng = rng;
-        _run = run;
+        _sink = sink;
         _turnInKind = g.State.ScenarioId == "sawmill" ? SpaceKind.Computer : SpaceKind.TicketBooth;
         _turnInSpaces = g.Graph.Def.Spaces.Where(s => s.Kind == _turnInKind)
             .Select(s => s.Id).OrderBy(id => id, StringComparer.Ordinal).ToList();
@@ -748,12 +748,12 @@ public sealed partial class InvestigatorTeam
     {
         var set = new HashSet<string>();
         string? card = S.Objective.SelectedEscapeCard;
-        if (card == "the-altar" && S.Objective.Tokens.TryGetValue("altar", out string altar) &&
+        if (card == "the-altar" && S.Objective.Tokens.TryGetValue("altar", out string? altar) &&
             (S.Adversary.Counters.TryGetValue("altar-revealed", out int revealed) ? revealed : 0) != 1)
         {
             set.Add(altar);
         }
-        if (card == "the-grave" && S.Objective.Tokens.TryGetValue("grave-actual", out string grave) &&
+        if (card == "the-grave" && S.Objective.Tokens.TryGetValue("grave-actual", out string? grave) &&
             !S.Adversary.Counters.ContainsKey("burning-until"))
         {
             set.Add(grave);
@@ -761,7 +761,7 @@ public sealed partial class InvestigatorTeam
         // Power the Gate's aid: pushing your luck on the Saw pays a Supply on 3+ when the Saw is
         // Bright but only on 5+ in the dark, so a teammate's beam nearly doubles the Lockbox rate.
         if ((card == "north-gate" || card == "south-gate") && S.Objective.Supplies < 4 &&
-            S.Objective.Tokens.TryGetValue("saw", out string sawToLight))
+            S.Objective.Tokens.TryGetValue("saw", out string? sawToLight))
         {
             set.Add(sawToLight);
         }
@@ -780,7 +780,7 @@ public sealed partial class InvestigatorTeam
         }
         if (Occupied(inv, inv.Space) && !IsSpirit(inv))
         {
-            _run.Anomaly("cannot-end-turn-stacked",
+            _sink.Anomaly("cannot-end-turn-stacked",
                 $"{inv.DefId} is on {inv.Space} with {inv.MpRemaining} MP left (sprint/rest used: " +
                 $"{inv.SprintedOrRested}, movement locked: {inv.MovementLocked}) and another Investigator " +
                 "occupies that space: EndTurnWithoutFinalAction refuses, and no action in the API can end " +
@@ -982,7 +982,7 @@ public sealed partial class InvestigatorTeam
         // Computer. Everyone with nothing better to do waits inside that Zone so whoever flips
         // the switch is not also the only one who can run the token in.
         var hubs = S.Evidence.Where(kv => !kv.Value.Revealed)
-            .Select(kv => _zoneHub.TryGetValue(kv.Key, out string hub) ? hub : null)
+            .Select(kv => _zoneHub.TryGetValue(kv.Key, out string? hub) ? hub : null)
             .Where(hub => hub != null && !_claims.Contains(hub!) && !OwnedByAnother(inv, hub!))
             .Select(hub => hub!)
             .ToList();
@@ -1052,7 +1052,7 @@ public sealed partial class InvestigatorTeam
     /// </summary>
     private string? Sticky(InvestigatorState inv, IReadOnlyList<string> candidates, InvestigatorState? buddy)
     {
-        if (_goal.TryGetValue(inv.DefId, out string remembered) &&
+        if (_goal.TryGetValue(inv.DefId, out string? remembered) &&
             candidates.Contains(remembered) && !_claims.Contains(remembered))
         {
             return remembered;
@@ -1124,7 +1124,7 @@ public sealed partial class InvestigatorTeam
     }
 
     private bool Carries(InvestigatorState inv, string token) =>
-        S.Objective.TokenCarriers.TryGetValue(token, out string carrier) && carrier == inv.DefId;
+        S.Objective.TokenCarriers.TryGetValue(token, out string? carrier) && carrier == inv.DefId;
 
     private bool OnBoard(string token) => S.Objective.Tokens.ContainsKey(token);
 
@@ -1169,7 +1169,7 @@ public sealed partial class InvestigatorTeam
 
     private Plan? PowerTheGatePlan(InvestigatorState inv)
     {
-        string? escape = S.Objective.Tokens.TryGetValue("locked-escape", out string e) ? e : null;
+        string? escape = S.Objective.Tokens.TryGetValue("locked-escape", out string? e) ? e : null;
         if (S.Objective.EscapeOpen && escape != null)
         {
             return new Plan
@@ -1192,7 +1192,7 @@ public sealed partial class InvestigatorTeam
             }
             return escape == null ? null : new Plan { Space = escape, StopAt = 1, Label = "wait-at-gate" };
         }
-        if (S.Objective.Tokens.TryGetValue("saw", out string saw))
+        if (S.Objective.Tokens.TryGetValue("saw", out string? saw))
         {
             if (Carries(inv, "lockbox"))
             {
@@ -1225,7 +1225,7 @@ public sealed partial class InvestigatorTeam
 
     private Plan? FixTheTruckPlan(InvestigatorState inv)
     {
-        if (S.Objective.Tokens.TryGetValue("escape", out string exit))
+        if (S.Objective.Tokens.TryGetValue("escape", out string? exit))
         {
             return new Plan
             {
@@ -1234,7 +1234,7 @@ public sealed partial class InvestigatorTeam
                 Arrive = () => { _g.EscapeAtTruckExit(); return true; },
             };
         }
-        if (!S.Objective.Tokens.TryGetValue("truck", out string truck))
+        if (!S.Objective.Tokens.TryGetValue("truck", out string? truck))
         {
             return null;
         }
@@ -1302,7 +1302,7 @@ public sealed partial class InvestigatorTeam
                 Arrive = ready ? () => { _g.EscapeByHelicopter(); return true; } : null,
             };
         }
-        if (!S.Objective.Tokens.TryGetValue("locked-escape", out string pad))
+        if (!S.Objective.Tokens.TryGetValue("locked-escape", out string? pad))
         {
             return null;
         }
@@ -1345,7 +1345,7 @@ public sealed partial class InvestigatorTeam
 
     private Plan? ServiceTunnelsPlan(InvestigatorState inv)
     {
-        if (!S.Objective.Tokens.TryGetValue("locked-escape", out string hatch))
+        if (!S.Objective.Tokens.TryGetValue("locked-escape", out string? hatch))
         {
             return null;
         }
@@ -1396,7 +1396,7 @@ public sealed partial class InvestigatorTeam
 
     private Plan? GravePlan(InvestigatorState inv)
     {
-        if (!S.Objective.Tokens.TryGetValue("grave-actual", out string grave))
+        if (!S.Objective.Tokens.TryGetValue("grave-actual", out string? grave))
         {
             return null;
         }
@@ -1464,7 +1464,7 @@ public sealed partial class InvestigatorTeam
 
     private Plan? AltarPlan(InvestigatorState inv)
     {
-        if (!S.Objective.Tokens.TryGetValue("altar", out string altar))
+        if (!S.Objective.Tokens.TryGetValue("altar", out string? altar))
         {
             return null;
         }

@@ -1,0 +1,23 @@
+services:
+  server:
+    build:
+      context: .
+      dockerfile: src/StiflingDark.Server/Dockerfile
+    image: stifling-dark-server
+    ports:
+      - "5226:5226"
+    environment:
+      PORT: "5226"
+      # Pacing for BOT-filled seats, in milliseconds. Players can override per room
+      # with a set_speed message (slow / medium / fast).
+      BOT_DELAY_MS: "1100"
+      # Sustained messages per second, per socket. 0 disables the limiter.
+      RATE_LIMIT_PER_SEC: "10"
+      MAX_ROOMS: "2000"
+    volumes:
+      # Room snapshots, so games survive a restart.
+      - rooms:/data
+    restart: unless-stopped
+
+volumes:
+  rooms:

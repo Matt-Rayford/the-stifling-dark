@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>StiflingDark.Server</RootNamespace>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\StiflingDark.Protocol\StiflingDark.Protocol.csproj" />
+    <!-- Bot-filled seats: the same brains the arena plays with. -->
+    <ProjectReference Include="..\StiflingDark.Bots\StiflingDark.Bots.csproj" />
+  </ItemGroup>
+
+</Project>
