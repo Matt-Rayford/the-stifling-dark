@@ -630,8 +630,12 @@ namespace StiflingDark.Engine.Tests
         // ---------- Win conditions ----------
 
         [Fact]
-        public void A_spirit_on_the_board_does_not_hold_up_the_investigators_win()
+        public void A_spirit_on_the_board_does_not_hold_up_the_game_ending_in_a_draw()
         {
+            // aira died (and is playing on as a Spirit) before lucy-belle and mitchell, the
+            // only other Investigators, both escape. A Spirit does not hold up "every LIVING
+            // Investigator escaped" from being noticed — but per the mixed-outcome ruling,
+            // aira's death means the team did not get out clean: it is a Draw, not a win.
             var game = NewGame();
             BecomeSpirit(game, "aira", "apparition");
             game.SelectEscapeCard("north-gate");
@@ -653,7 +657,7 @@ namespace StiflingDark.Engine.Tests
                 }
             }
             Assert.Equal(GamePhase.GameOver, game.State.Phase);
-            Assert.Equal(GameResult.InvestigatorsWin, game.State.Result);
+            Assert.Equal(GameResult.Draw, game.State.Result);
             Assert.NotNull(Inv(game, "aira").SpiritId);
         }
 

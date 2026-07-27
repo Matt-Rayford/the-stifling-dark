@@ -108,11 +108,16 @@ namespace StiflingDark.Engine.Core
             {
                 throw new InvalidOperationException("The Butcher cannot Stalk while Revealed.");
             }
+            if (adv.ActionsUsed.Contains("disappear"))
+            {
+                // His board: "After Disappearing, you may not Stalk or use your Attack card."
+                throw new InvalidOperationException("The Butcher cannot Stalk this turn after Disappearing.");
+            }
             if (targetInvIds == null || targetInvIds.Count == 0)
             {
                 throw new InvalidOperationException("Stalk requires at least one target.");
             }
-            if (!adv.ActionsUsed.Add("stalk"))
+            if (adv.ActionsUsed.Contains("stalk"))
             {
                 throw new InvalidOperationException("Stalk was already used this turn.");
             }
@@ -135,6 +140,9 @@ namespace StiflingDark.Engine.Core
                 targets.Add(inv);
             }
 
+            // Every check above must pass before "stalk" is marked used, or a refused call
+            // would burn the once-per-turn slot.
+            adv.ActionsUsed.Add("stalk");
             adv.ShadowTokens["main"] = adv.Space;
 
             int gained = 0;
@@ -373,11 +381,22 @@ namespace StiflingDark.Engine.Core
 
         // ---------- Attacks ----------
 
+        /// <summary>His board: "After Disappearing, you may not Stalk or use your Attack
+        /// card." (ButcherStalk enforces its own half; the 3 Attack cards share this one.)</summary>
+        private void RequireNotDisappearedForAttack()
+        {
+            if (State.Adversary.ActionsUsed.Contains("disappear"))
+            {
+                throw new InvalidOperationException("The Butcher cannot Attack this turn after Disappearing.");
+            }
+        }
+
         /// <summary>"When adjacent, give Bleeding. If already Bleeding, give a face-up Wound
         /// instead." That is exactly Bleeding's printed duplicate rider, so the shared
         /// GrantConditionWithSubstitution handles both branches.</summary>
         private void ApplyEviscerate(List<string> targets)
         {
+            RequireNotDisappearedForAttack();
             if (targets == null || targets.Count != 1)
             {
                 throw new InvalidOperationException("Eviscerate targets exactly 1 Investigator.");
@@ -397,6 +416,7 @@ namespace StiflingDark.Engine.Core
         /// </summary>
         private void ApplyOnslaught(List<string> targets)
         {
+            RequireNotDisappearedForAttack();
             if (targets == null || targets.Count == 0)
             {
                 throw new InvalidOperationException("Onslaught targets at least 1 Investigator.");
@@ -432,6 +452,7 @@ namespace StiflingDark.Engine.Core
         /// <summary>"When adjacent, draw 3 face-up Wounds. Give them 1 and Mauled, discard the rest."</summary>
         private void ApplyRend(List<string> targets)
         {
+            RequireNotDisappearedForAttack();
             if (targets == null || targets.Count != 1)
             {
                 throw new InvalidOperationException("Rend targets exactly 1 Investigator.");

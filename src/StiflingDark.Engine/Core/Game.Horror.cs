@@ -125,11 +125,14 @@ namespace StiflingDark.Engine.Core
             {
                 throw new InvalidOperationException("This action requires the Enraged Condition.");
             }
-            if (!adv.ActionsUsed.Add("ambush"))
+            if (adv.ActionsUsed.Contains("ambush"))
             {
                 throw new InvalidOperationException("This has already been used this turn.");
             }
+            // GatherInvestigators validates every pull before moving anyone, so it is safe to
+            // mark the action used only once it returns successfully.
             GatherInvestigators(investigatorToSpace, maxRange: 2, weighted: false);
+            adv.ActionsUsed.Add("ambush");
             Log("adversary", $"Enraged: gathered {investigatorToSpace.Count} investigator(s)");
         }
 

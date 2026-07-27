@@ -532,8 +532,14 @@ namespace StiflingDark.Engine.Core
                 return;
             }
             State.Phase = GamePhase.GameOver;
-            State.Result = GameResult.InvestigatorsWin;
-            Log("gameover", "every surviving Investigator escaped");
+            // "Some lived, some did not": every LIVING Investigator escaping is only an outright
+            // win for the team if nobody died along the way. If any Investigator is Dead, the
+            // team that made it out did not make it out clean, and the game is a Draw instead.
+            bool anyDied = State.Investigators.Any(i => i.Dead);
+            State.Result = anyDied ? GameResult.Draw : GameResult.InvestigatorsWin;
+            Log("gameover", anyDied
+                ? "every surviving Investigator escaped, but not everyone survived: a draw"
+                : "every surviving Investigator escaped");
         }
 
         private InvestigatorState BeginInvolvedAction()

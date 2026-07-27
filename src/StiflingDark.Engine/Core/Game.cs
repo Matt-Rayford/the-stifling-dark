@@ -225,6 +225,12 @@ namespace StiflingDark.Engine.Core
 
         private void BeginRound(int round)
         {
+            if (State.Phase == GamePhase.GameOver)
+            {
+                // A hook that ran while ending the previous round already decided the game;
+                // a decided game never opens a new round.
+                return;
+            }
             State.Round = round;
             State.Phase = GamePhase.InvestigatorTurns;
             State.ActiveInvestigator = null;
@@ -690,6 +696,12 @@ namespace StiflingDark.Engine.Core
                 throw new InvalidOperationException("Cannot end the turn on another Investigator's space.");
             }
             OnInvestigatorTurnEnd(inv);
+            if (State.Phase == GamePhase.GameOver)
+            {
+                // A Wound or Condition resolved above (e.g. Bleeding) just decided the game;
+                // nothing below may touch TurnTakenThisRound or hand the phase to the Adversary.
+                return;
+            }
             if (inv.Rested && inv.FinalAction != FinalActionKind.InvolvedAction)
             {
                 // Heavy Winds / Heavy Smoke / Tornado: no Stamina may be gained as part of a
@@ -788,7 +800,7 @@ namespace StiflingDark.Engine.Core
             {
                 throw new InvalidOperationException("Corporeal Mor'gonnod can no longer Disappear.");
             }
-            if (!adv.ActionsUsed.Add("disappear"))
+            if (adv.ActionsUsed.Contains("disappear"))
             {
                 throw new InvalidOperationException("Disappear was already used this turn.");
             }
@@ -800,6 +812,10 @@ namespace StiflingDark.Engine.Core
             {
                 throw new InvalidOperationException("Disappear requires a Dim or Dark space.");
             }
+            // Every check above must pass before "disappear" is marked used: a refused call
+            // must leave ActionsUsed untouched, or it would wrongly block the Attack card too
+            // (see ApplyAttack's ActionsUsed.Contains("disappear") gate).
+            adv.ActionsUsed.Add("disappear");
             adv.Revealed = false;
             adv.ShadowTokens["main"] = adv.Space;
             Log("adversary", "disappeared");
@@ -808,7 +824,7 @@ namespace StiflingDark.Engine.Core
         public void AdversaryBreakDoor(string doorSpace)
         {
             EnsureAdversaryTurnStarted();
-            if (!State.Adversary.ActionsUsed.Add("breakDoor"))
+            if (State.Adversary.ActionsUsed.Contains("breakDoor"))
             {
                 throw new InvalidOperationException("Break Door was already used this turn.");
             }
@@ -822,22 +838,36 @@ namespace StiflingDark.Engine.Core
                 throw new InvalidOperationException("No door in reach.");
             }
             var current = State.Overlay.DoorState(doorSpace);
-            State.Overlay.DoorStates[doorSpace] = current switch
+            DoorState next = current switch
             {
                 DoorState.Open => DoorState.Damaged,
                 DoorState.Locked => DoorState.Damaged,
                 DoorState.Damaged => DoorState.Destroyed,
                 _ => throw new InvalidOperationException($"Door is {current}."),
             };
+            // Every check above (including the door-state switch) must pass before
+            // "breakDoor" is marked used, or a refused call would burn the once-per-turn slot.
+            State.Adversary.ActionsUsed.Add("breakDoor");
+            State.Overlay.DoorStates[doorSpace] = next;
             Log("adversary", $"broke door {doorSpace} ({State.Overlay.DoorState(doorSpace)})");
         }
 
         public void AdversaryEndTurn()
         {
+            if (State.Phase == GamePhase.GameOver)
+            {
+                return;
+            }
             EnsureAdversaryTurnStarted();
             // Cards that resolve "at the end of your turn" run while this round's Flashlights
             // are still on the board and before the cooldown tracks move.
             OnAdversaryTurnEnd();
+            if (State.Phase == GamePhase.GameOver)
+            {
+                // The end-of-turn hooks just decided the game; cooldowns and the round no
+                // longer advance for a game that is already over.
+                return;
+            }
             AdvanceCooldowns();
             State.Adversary.TurnStarted = false;
             EndRound();
@@ -845,9 +875,19 @@ namespace StiflingDark.Engine.Core
 
         private void EndRound()
         {
+            if (State.Phase == GamePhase.GameOver)
+            {
+                return;
+            }
             // Cards that expire or trigger "at the end of the round" run first, while this
             // round's lights are still on and before the round counter moves.
             OnRoundEnd();
+            if (State.Phase == GamePhase.GameOver)
+            {
+                // OnRoundEnd just decided the game (a Wound or escape effect); the round-limit
+                // branch below must never overwrite that Result, and no new round may begin.
+                return;
+            }
             State.Overlay.BrightSpaces.Clear();
             State.Flashlights.Clear();
             // Zone lights burn out to Faltering after their round.
@@ -859,14 +899,34 @@ namespace StiflingDark.Engine.Core
 
             if (State.Round >= Db.Config.Rounds)
             {
-                // Timeout: with the Grave/Eggs banish objectives the game is a draw; the
-                // Altar (Cult) banish is an adversary win. Otherwise anyone still on the
-                // board counts as being killed, handing the Adversary the win.
+                // Timeout: with the Grave/Eggs banish objectives the game is a draw
+                // regardless (per their cards). Otherwise, anyone still on the board counts
+                // as killed for this tally only (Adversary.Kills itself is untouched): if
+                // that brings the Adversary to KillsToWin, they win outright; if not but some
+                // Investigators did escape, "some lived, some did not" is a Draw; if nobody
+                // escaped either, the Adversary wins by default (nobody made it out).
                 State.Phase = GamePhase.GameOver;
                 string? selected = State.Objective.SelectedEscapeCard;
-                State.Result = selected == "the-grave" || selected == "the-eggs"
-                    ? GameResult.Draw
-                    : GameResult.AdversaryWins;
+                if (selected == "the-grave" || selected == "the-eggs")
+                {
+                    State.Result = GameResult.Draw;
+                }
+                else
+                {
+                    int killedAtTimeout = State.Investigators.Count(i => !i.Dead && !i.Escaped);
+                    if (State.Adversary.Kills + killedAtTimeout >= State.Adversary.KillsToWin)
+                    {
+                        State.Result = GameResult.AdversaryWins;
+                    }
+                    else if (State.Investigators.Any(i => i.Escaped))
+                    {
+                        State.Result = GameResult.Draw;
+                    }
+                    else
+                    {
+                        State.Result = GameResult.AdversaryWins;
+                    }
+                }
                 Log("gameover", "round limit reached");
                 return;
             }
@@ -910,6 +970,22 @@ namespace StiflingDark.Engine.Core
                 {
                     State.Phase = GamePhase.GameOver;
                     State.Result = GameResult.AdversaryWins;
+                }
+                else if (!State.Investigators.Any(i => !i.Dead && !i.Escaped))
+                {
+                    // The Adversary has not won outright, but nobody is left on the board to
+                    // act: "some lived, some did not" is a Draw, not an Investigators win — a
+                    // death can no longer complete "every surviving Investigator escaped" the
+                    // way it used to (see CheckObjectiveWin). If instead nobody escaped either,
+                    // every Investigator is dead and the Adversary's kill count has simply not
+                    // caught up yet (e.g. a Rabbit's Foot revival lowered it); nothing to decide
+                    // here — the game either already ended above or is not yet over.
+                    if (State.Investigators.Any(i => i.Escaped))
+                    {
+                        State.Phase = GamePhase.GameOver;
+                        State.Result = GameResult.Draw;
+                        Log("gameover", "the last living Investigator died with some already escaped: a draw");
+                    }
                 }
                 // Otherwise the player may adopt a Spirit — Spirit play lands with abilities.
             }
@@ -1110,6 +1186,14 @@ namespace StiflingDark.Engine.Core
             if (!State.Adversary.Revealed)
             {
                 State.Adversary.Revealed = true;
+                // Designer-confirmed: being Revealed during their own turn locks the Attack
+                // for the rest of the round, same as beginning the turn Revealed. This is
+                // the tactical point of flashlights: a beam across an approach lane both
+                // exposes the Adversary and disarms them.
+                if (State.Phase == GamePhase.AdversaryTurn)
+                {
+                    State.Adversary.AttackLockedThisTurn = true;
+                }
                 Log("reveal", $"adversary at {State.Adversary.Space} ({reason})");
             }
         }

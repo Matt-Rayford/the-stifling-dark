@@ -330,10 +330,33 @@ namespace StiflingDark.Engine.Core
             int actor = CultCounter("cult-actor");
             if (actor != 0 && actor != index)
             {
+                // Cult figures can never stack, the same rule that stops an Investigator ending
+                // their turn on another Investigator's space: a Cultist may move THROUGH an
+                // occupied space, but its activation may not END on one shared with another
+                // living Cultist or with Mor'gonnod. This is where that activation ends — the
+                // retiring Cultist is marked finished right here — so this is where the check
+                // belongs. Mor'gonnod's own moves share AdversaryMoveStep with the main figure
+                // and are not touched; stacking Mor'gonnod onto a Cultist is instead caught from
+                // this side (whichever Cultist he lands on can never retire stacked with him)
+                // and in TheFinalSacrifice.
+                var retiring = State.Adversary.Figures.FirstOrDefault(f => f.Id == "c" + actor && f.Alive);
+                if (retiring != null && IsStackedWithAnotherCultFigure(retiring))
+                {
+                    throw new InvalidOperationException(
+                        $"Cultist {retiring.Id} cannot finish acting stacked with another cult figure on " +
+                        $"{retiring.Space}; move them apart before acting with Cultist {cultist.Id}.");
+                }
                 counters["cfin:c" + actor] = 1;
             }
             counters["cult-actor"] = index;
         }
+
+        /// <summary>True if <paramref name="figure"/> shares a space with another living Cultist
+        /// or with Mor'gonnod (see the stacking rule enforced in <see cref="BeginCultistAction"/>
+        /// and <see cref="TheFinalSacrifice"/>).</summary>
+        private bool IsStackedWithAnotherCultFigure(AdversaryFigure figure) =>
+            State.Adversary.Space == figure.Space ||
+            State.Adversary.Figures.Any(f => f != figure && f.Alive && f.Space == figure.Space);
 
         private static int CultistIndex(string cultistId) =>
             int.TryParse(cultistId.Substring(1), out int index)
@@ -366,6 +389,15 @@ namespace StiflingDark.Engine.Core
             if (living.Count == 0)
             {
                 throw new InvalidOperationException("There are no Cultists to sacrifice.");
+            }
+            // Cult figures can never stack: defend the same rule here as everywhere else a
+            // Cultist's position matters, in case anything upstream (a card, a forced move)
+            // ever placed one on another living cult figure's space without going through
+            // BeginCultistAction's check.
+            if (living.Any(IsStackedWithAnotherCultFigure))
+            {
+                throw new InvalidOperationException(
+                    "Cult figures cannot stack: no Cultist may share a space with another living Cultist or with Mor'gonnod.");
             }
             var spaces = living.Select(f => f.Space).Distinct().ToList();
             RequireSingleGroup(spaces, "Cultists");
@@ -464,9 +496,15 @@ namespace StiflingDark.Engine.Core
                     {
                         throw new InvalidOperationException("Immolate may only repeat on a different Investigator.");
                     }
+                    // Validate every target's adjacency before wounding anyone: an illegal 2nd
+                    // target must not leave the 1st with Wounds already applied.
+                    var immolateTargets = new List<InvestigatorState>();
                     for (int i = 0; i < targets.Count; i++)
                     {
-                        var inv = AdjacentCardTarget(targets, i, cardId);
+                        immolateTargets.Add(AdjacentCardTarget(targets, i, cardId));
+                    }
+                    foreach (var inv in immolateTargets)
+                    {
                         DealAttackWounds(inv.DefId, 2, faceUp: true);
                     }
                     break;

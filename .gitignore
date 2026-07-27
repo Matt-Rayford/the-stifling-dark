@@ -1,3 +1,18 @@
 # Original Files
 .DS_Store
 game-assets
+
+# .NET build artifacts
+bin/
+obj/
+*.user
+.vs/
+
+# Generated self-play outputs (rerun via tools/BotArena)
+bot-results/
+
+# Unity (for the future client folder; mirrors lemonade-wars)
+unity/Library/
+unity/Temp/
+unity/Logs/
+unity/UserSettings/

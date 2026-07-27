@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>BotArena</RootNamespace>
+    <AssemblyName>BotArena</AssemblyName>
+    <!-- The arena is a throwaway harness, not shipped engine code: warnings stay warnings. -->
+    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+    <!-- netstandard2.1 dictionaries have no MaybeNullWhen annotations, so every TryGetValue
+         against the engine's Dictionary<string,string> state trips CS8600. -->
+    <NoWarn>CS8600</NoWarn>
+    <InvariantGlobalization>true</InvariantGlobalization>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\StiflingDark.Engine\StiflingDark.Engine.csproj" />
+  </ItemGroup>
+
+</Project>

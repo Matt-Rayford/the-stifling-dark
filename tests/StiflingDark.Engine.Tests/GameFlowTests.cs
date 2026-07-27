@@ -135,6 +135,28 @@ namespace StiflingDark.Engine.Tests
         }
 
         [Fact]
+        public void Reveal_during_own_turn_locks_the_attack_for_the_round()
+        {
+            var game = NewSawmillGame();
+            game.State.Adversary.AttackCard = "eviscerate";
+            game.State.Adversary.Counters["stalk"] = 3;
+            foreach (string inv in new[] { "aira", "lucy-belle", "mitchell", "vincent" })
+            {
+                game.BeginInvestigatorTurn(inv);
+                game.EndTurnWithoutFinalAction();
+            }
+            // Butcher walks into a lit space on his own turn: revealed mid-turn.
+            game.State.Overlay.BrightSpaces.Add("S-26");
+            game.AdversaryMoveStep("S-26");
+            Assert.True(game.State.Adversary.Revealed);
+            var aira = game.State.Investigators.First(i => i.DefId == "aira");
+            aira.Space = "S-26";
+            var error = Assert.Throws<InvalidOperationException>(
+                () => game.PlayAdversaryCard("eviscerate", new List<string> { "aira" }));
+            Assert.Contains("cannot Attack", error.Message);
+        }
+
+        [Fact]
         public void Flashlight_over_the_adversary_reveals_them()
         {
             var game = NewSawmillGame();

@@ -24,6 +24,18 @@ namespace StiflingDark.Engine.Core
             ["cult-of-hunlow"] = 3, // per Cultist and Mor'gonnod, sharing one sprint roll
         };
 
+        /// <summary>
+        /// game-data/adversaries.json "setup.byInvestigatorCount" bans some Ability cards at
+        /// specific investigator counts (currently just the 2-Investigator Insatiable Horror,
+        /// who may not take Projectile Adhesive or Occluded Lights). Keyed by (adversary def
+        /// id, investigator count).
+        /// </summary>
+        private static readonly Dictionary<(string AdversaryId, int Count), HashSet<string>> BannedAbilities =
+            new Dictionary<(string, int), HashSet<string>>
+            {
+                [("insatiable-horror", 2)] = new HashSet<string> { "projectile-adhesive", "occluded-lights" },
+            };
+
         // Per-adversary hooks; an adversary's partial implements its own and leaves the rest.
         partial void BeginButcherTurn();
         partial void BeginHorrorTurn();
@@ -53,11 +65,19 @@ namespace StiflingDark.Engine.Core
             {
                 throw new InvalidOperationException($"{adv.DefId} takes {allowed} Ability card(s) with {investigators} investigators.");
             }
+            var banned = BannedAbilities.TryGetValue((adv.DefId, investigators), out var set)
+                ? set
+                : null;
             foreach (string id in abilityCardIds)
             {
                 if (!owned.TryGetValue(id, out var card) || card.AdversaryCardType != "ability")
                 {
                     throw new InvalidOperationException($"'{id}' is not one of this adversary's Ability cards.");
+                }
+                if (banned != null && banned.Contains(id))
+                {
+                    throw new InvalidOperationException(
+                        $"'{id}' is banned for {adv.DefId} with {investigators} investigators.");
                 }
             }
             adv.AttackCard = attackCardId;
