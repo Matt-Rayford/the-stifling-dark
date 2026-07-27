@@ -1,0 +1,37 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Compile-sanity check for the parts of the Unity client that do NOT touch UnityEngine:
+    the protocol client (Session.cs), the local board/geometry mirror (BoardModel.cs), and the
+    id-to-label layer (Describe.cs). There is no Unity editor on the build machine, so this is
+    how those three files get a real compiler run against the engine + protocol assemblies.
+
+      ~/.dotnet/dotnet build tools/ClientCheck
+
+    Deliberately NOT part of TheStiflingDark.sln: `dotnet test` at the repo root must keep
+    seeing exactly the engine, protocol, server, bots, and their tests.
+    Everything else under unity/Assets/Scripts is UnityEngine-dependent and is only compiled
+    by Unity itself.
+  -->
+  <PropertyGroup>
+    <TargetFramework>netstandard2.1</TargetFramework>
+    <RootNamespace>StiflingDark.Unity</RootNamespace>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <LangVersion>9.0</LangVersion>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="../../unity/Assets/Scripts/Session.cs" />
+    <Compile Include="../../unity/Assets/Scripts/BoardModel.cs" />
+    <Compile Include="../../unity/Assets/Scripts/Describe.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../../src/StiflingDark.Protocol/StiflingDark.Protocol.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.4" />
+  </ItemGroup>
+
+</Project>

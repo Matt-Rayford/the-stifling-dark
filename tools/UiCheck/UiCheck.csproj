@@ -1,0 +1,35 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Compiler run for the whole Unity client against a stub UnityEngine surface (UnityStubs.cs).
+    There is no Unity editor on the build machine; this is what keeps unity/Assets/Scripts
+    well-formed. It proves syntax, member names, and argument counts — NOT Unity behaviour.
+
+      ~/.dotnet/dotnet build tools/UiCheck
+
+    Not part of TheStiflingDark.sln.
+  -->
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <RootNamespace>StiflingDark.UiCheck</RootNamespace>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <LangVersion>9.0</LangVersion>
+    <Nullable>disable</Nullable>
+    <!-- The stubs are intentionally inert: ignore "never used"/"always null" chatter. -->
+    <NoWarn>CS0067;CS0169;CS0414;CS0649;CS8632;CS0108;CS0114;CS0472;CS0162</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="UnityStubs.cs" />
+    <Compile Include="../../unity/Assets/Scripts/*.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../../src/StiflingDark.Protocol/StiflingDark.Protocol.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.4" />
+  </ItemGroup>
+
+</Project>
