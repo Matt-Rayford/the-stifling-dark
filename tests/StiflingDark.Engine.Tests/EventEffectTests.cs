@@ -212,8 +212,13 @@ namespace StiflingDark.Engine.Tests
 
             DrawEventNextRound(game, "interference");
             Assert.Contains("interference", string.Join("|", game.ActionBlockers("aira", Game.ActionCharge)));
+            // The ban also vetoes the automatic end-of-turn Charge.
+            var aira = Inv(game, "aira");
+            aira.Charge = 1;
             game.BeginInvestigatorTurn("aira");
-            Assert.Throws<InvalidOperationException>(() => game.ChargeFlashlight());
+            game.EndTurnWithoutFinalAction();
+            Assert.Equal(1, aira.Charge);
+            Assert.Contains(game.State.Log, e => e.Type == "turn" && e.Detail.Contains("does not Charge"));
         }
 
         [Fact]
@@ -260,9 +265,8 @@ namespace StiflingDark.Engine.Tests
             Assert.Equal(1, game.RoundModifier(Game.NoRestStaminaKey));
 
             var aira = Inv(game, "aira");
-            aira.Stamina = 2; // below the track maximum, so Resting would normally add 1
+            aira.Stamina = 2; // below the track maximum, so the automatic Rest would normally add 1
             game.BeginInvestigatorTurn("aira");
-            game.Rest();
             game.EndTurnWithoutFinalAction();
 
             Assert.Equal(2, aira.Stamina);

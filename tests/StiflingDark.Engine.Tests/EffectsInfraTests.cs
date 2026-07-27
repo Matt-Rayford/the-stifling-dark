@@ -229,7 +229,6 @@ namespace StiflingDark.Engine.Tests
             var game = NewSawmillGame();
             var inv = Aira(game);
             game.BeginInvestigatorTurn("aira");
-            game.Rest();
             game.EndTurnWithoutFinalAction();
             Assert.True(inv.TurnTakenThisRound);
             Assert.Null(game.State.ActiveInvestigator);

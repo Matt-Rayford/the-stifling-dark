@@ -69,6 +69,8 @@ namespace StiflingDark.Unity
         private TMP_Text _toast;
         private float _toastUntil;
         private int _menuRevision = -1;
+        /// <summary>Room code whose My Games × is one click from ending the game.</summary>
+        private string _confirmEndCode = "";
         private string _dataDir = "";
         private string _loadError = "";
 
@@ -245,6 +247,15 @@ namespace StiflingDark.Unity
             _session.ErrorReceived += OnServerError;
             _session.TurnAlert += code => Toast("Another game needs you: room " + code);
             _session.RoomChanged += OnRoomChanged;
+            _session.RoomClosed += (code, by) =>
+            {
+                Toast("Game " + code + " was ended by " + by + ".");
+                // Kicked out from under us: drop back to the menu instead of a dead table.
+                if (_session.Room.Code == code && _stage != Stage.Menu)
+                {
+                    ShowStage(Stage.Menu);
+                }
+            };
             _menuRevision = -1;
 
             // The lobby and table are built against a live session, so rebuild them per connect.
@@ -347,11 +358,34 @@ namespace StiflingDark.Unity
                     "   round " + captured.Round +
                     (captured.Finished ? "   FINISHED" : captured.YourTurn ? "   ← YOUR TURN" : "") +
                     "   (" + string.Join(", ", captured.Players) + ")";
-                UiKit.CreateButton(_menuBody, label, 15, () => _session.JoinRoom(captured.Code,
+                var row = UiKit.CreateRow(_menuBody, "Game " + captured.Code);
+                var join = UiKit.CreateButton(row, label, 15, () => _session.JoinRoom(captured.Code,
                     NameOrDefault(), PlayerPrefs.GetString("sd_token_" + captured.Code, ""),
                     captured.YourRole));
+                join.GetComponent<LayoutElement>().flexibleWidth = 1;
+                // End-for-everyone, two clicks: the × arms, "end?" fires. Any re-render
+                // (refresh, another row's ×) disarms it again.
+                bool armed = _confirmEndCode == captured.Code;
+                UiKit.CreateButton(row, armed ? "end?" : "×", 15, () =>
+                {
+                    if (_confirmEndCode == captured.Code)
+                    {
+                        _confirmEndCode = "";
+                        _session.AbandonGame(captured.Code);
+                        Toast("Ending game " + captured.Code + " for everyone…");
+                    }
+                    else
+                    {
+                        _confirmEndCode = captured.Code;
+                        RenderMenu();
+                    }
+                }, danger: true);
             }
-            UiKit.CreateButton(_menuBody, "Refresh My Games", 15, () => _session.ListGames());
+            UiKit.CreateButton(_menuBody, "Refresh My Games", 15, () =>
+            {
+                _confirmEndCode = "";
+                _session.ListGames();
+            });
         }
 
         private string NameOrDefault()

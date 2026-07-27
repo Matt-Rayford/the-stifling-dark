@@ -265,11 +265,10 @@ namespace StiflingDark.Engine.Tests
             game.PlayAdversaryCard("burning-heart");
             game.AdversaryEndTurn();
 
-            // Round 2: somebody Rests, gaining Stamina, so the card stays in effect.
+            // Round 2: aira's automatic end-of-turn Rest gains Stamina, so the card stays.
             var aira = Inv(game, "aira");
             aira.Stamina = 2;
             game.BeginInvestigatorTurn("aira");
-            game.Rest();
             game.EndTurnWithoutFinalAction();
             foreach (string id in new[] { "lucy-belle", "mitchell", "vincent" })
             {
@@ -279,7 +278,13 @@ namespace StiflingDark.Engine.Tests
             game.AdversaryEndTurn();
             Assert.Contains("burning-heart", adv.ActiveAbilities);
 
-            // Round 3: nobody gains anything.
+            // Round 3: everyone already sits at their maximums, so the automatic Rest and
+            // Charge gain nothing and the card finally expires.
+            foreach (var i in game.State.Investigators)
+            {
+                i.Stamina = game.Db.Investigator(i.DefId).StaminaTrack.Spaces - 1;
+                i.Charge = game.Db.Config.ChargeMax;
+            }
             FinishInvestigatorTurns(game);
             game.AdversaryEndTurn();
 

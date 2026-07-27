@@ -102,9 +102,10 @@ namespace StiflingDark.Engine.Tests
             Assert.Equal(FinalActionKind.None, aira.FinalAction);
             Assert.Empty(game.State.Flashlights);
             Assert.Empty(game.State.Overlay.BrightSpaces);
-            // The turn is still going; a legal Final Action is unaffected.
-            game.ChargeFlashlight();
-            Assert.Equal(FinalActionKind.Charge, aira.FinalAction);
+            // The turn is still going; it ends normally and the automatic Charge still fires.
+            aira.Charge = 0;
+            game.EndTurnWithoutFinalAction();
+            Assert.Equal(1, aira.Charge);
         }
 
         [Fact]

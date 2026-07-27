@@ -238,10 +238,23 @@ namespace StiflingDark.Engine.Tests
             int before = aira.Stamina;
             aira.Wounds.Add(new WoundInstance { CardId = "breathless", FaceUp = true });
 
+            // Designer-confirmed: on a quiet turn the drain nets out against the automatic
+            // Rest — Stamina "should stay the same".
+            aira.Stamina = before - 1; // below max, so the automatic Rest is not clamped away
             game.BeginInvestigatorTurn("aira");
             game.EndTurnWithoutFinalAction();
-
             Assert.Equal(before - 1, aira.Stamina);
+
+            // An Involved final forfeits the automatic Rest, so the drain lands net.
+            foreach (string other in new[] { "lucy-belle", "mitchell", "vincent" })
+            {
+                game.BeginInvestigatorTurn(other);
+                game.EndTurnWithoutFinalAction();
+            }
+            game.AdversaryEndTurn();
+            game.BeginInvestigatorTurn("aira");
+            game.TakeInvolvedAction();
+            Assert.Equal(before - 2, aira.Stamina);
             Assert.Single(aira.Wounds); // no extra face-down Wound from the loss.
         }
 
@@ -253,9 +266,21 @@ namespace StiflingDark.Engine.Tests
             aira.Charge = 2;
             aira.Wounds.Add(new WoundInstance { CardId = "dying-battery", FaceUp = true });
 
+            // Designer-confirmed: on a quiet turn the drain nets out against the automatic
+            // Charge — it "should stay the same".
             game.BeginInvestigatorTurn("aira");
             game.EndTurnWithoutFinalAction();
+            Assert.Equal(2, aira.Charge);
 
+            // An Involved final forfeits the automatic Charge, so the drain lands net.
+            foreach (string other in new[] { "lucy-belle", "mitchell", "vincent" })
+            {
+                game.BeginInvestigatorTurn(other);
+                game.EndTurnWithoutFinalAction();
+            }
+            game.AdversaryEndTurn();
+            game.BeginInvestigatorTurn("aira");
+            game.TakeInvolvedAction();
             Assert.Equal(1, aira.Charge);
         }
 
@@ -268,7 +293,6 @@ namespace StiflingDark.Engine.Tests
             aira.Wounds.Add(new WoundInstance { CardId = "panic", FaceUp = true });
 
             game.BeginInvestigatorTurn("aira");
-            game.Rest();
             game.EndTurnWithoutFinalAction();
 
             Assert.Equal(2, aira.Stamina);
@@ -658,7 +682,7 @@ namespace StiflingDark.Engine.Tests
             aira.Items.Add("energy-bar");
 
             game.BeginInvestigatorTurn("aira");
-            Assert.Throws<InvalidOperationException>(() => game.ChargeFlashlight());
+            Assert.Contains("Drain", string.Join("|", game.ActionBlockers("aira", Game.ActionCharge)));
             Assert.Throws<InvalidOperationException>(() => game.TakeInvolvedAction());
             Assert.Throws<InvalidOperationException>(() => game.PlaceFlashlight(0.0));
             // Mistrust is on the *other* side of the trade: "or be Traded with".
@@ -676,12 +700,13 @@ namespace StiflingDark.Engine.Tests
             aira.Charge = 1;
 
             game.BeginInvestigatorTurn("aira");
-            int stamina = aira.Stamina;
-            game.ChargeFlashlight();
-            Assert.Equal(2, aira.Charge);
-            Assert.Equal(stamina - 1, aira.Stamina);
+            game.Sprint(); // no automatic Rest this turn, so Gear Jam's toll stays visible
+            int afterSprint = aira.Stamina;
+            game.EndTurnWithoutFinalAction();
+            Assert.Equal(2, aira.Charge); // the automatic Charge still happened
+            Assert.Equal(afterSprint - 1, aira.Stamina); // ...but Gear Jam took its Stamina toll
 
-            // With no Stamina left to spend the Action is simply unavailable.
+            // With no Stamina left to spend the automatic Charge is simply vetoed.
             game.GrantConditionWithSubstitution(aira, "gear-jam");
             aira.Stamina = 0;
             Assert.Contains("Gear Jam", string.Join("|", game.ActionBlockers("aira", Game.ActionCharge)));

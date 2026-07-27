@@ -16,6 +16,13 @@
   "S": "Sawmill",
   "O": "Office"
  },
+ "zoneLights": {
+  "L": {"x": 1830.1, "y": 1824.1, "size": 206},
+  "K": {"x": 5154.5, "y": 1315.0, "size": 206},
+  "G": {"x": 6234.9, "y": 3401.4, "size": 206},
+  "S": {"x": 3610.9, "y": 3401.4, "size": 206},
+  "O": {"x": 806.9, "y": 3149.5, "size": 206}
+ },
  "_notes": [
   "Space light: dim = solid ring (1 MP), dark = dashed ring (2 MP for Investigators). Coordinates are pixel centers in the rendered source image.",
   "Adjacency verified: 9 QA tiles reviewed; 2 false edges removed (S-31/S-36, S-35/S-40). All 22 window edges visually verified."

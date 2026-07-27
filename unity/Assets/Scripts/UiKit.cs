@@ -126,7 +126,8 @@ namespace StiflingDark.Unity
         /// reason on hover.
         /// </summary>
         public static Button CreateButton(Transform parent, string label, int fontSize,
-            UnityEngine.Events.UnityAction onClick, bool enabled = true, string tooltip = null)
+            UnityEngine.Events.UnityAction onClick, bool enabled = true, string tooltip = null,
+            bool danger = false)
         {
             var go = new GameObject("Button", typeof(RectTransform), typeof(Image), typeof(Button),
                 typeof(LayoutElement));
@@ -141,10 +142,14 @@ namespace StiflingDark.Unity
             button.onClick.AddListener(onClick);
             button.interactable = enabled;
 
-            var idleBackground = enabled
-                ? new Color(0.20f, 0.22f, 0.27f, 0.92f)
-                : new Color(0.12f, 0.13f, 0.15f, 0.75f);
-            var idleText = enabled ? TextColor : new Color(0.42f, 0.43f, 0.46f);
+            var idleBackground = !enabled
+                ? new Color(0.12f, 0.13f, 0.15f, 0.75f)
+                : danger
+                    ? new Color(0.32f, 0.10f, 0.10f, 0.92f)
+                    : new Color(0.20f, 0.22f, 0.27f, 0.92f);
+            var idleText = !enabled
+                ? new Color(0.42f, 0.43f, 0.46f)
+                : danger ? DangerColor : TextColor;
             var image = go.GetComponent<Image>();
             image.color = idleBackground;
 
@@ -154,11 +159,13 @@ namespace StiflingDark.Unity
 
             if (enabled)
             {
+                var hoverBackground = danger ? DangerColor : AccentColor;
+                var hoverText = danger ? new Color(0.98f, 0.92f, 0.90f) : AccentTextColor;
                 AddHover(go,
                     () =>
                     {
-                        image.color = AccentColor;
-                        text.color = AccentTextColor;
+                        image.color = hoverBackground;
+                        text.color = hoverText;
                     },
                     () =>
                     {

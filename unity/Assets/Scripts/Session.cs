@@ -84,6 +84,8 @@ namespace StiflingDark.Unity
         public event Action<string> ErrorReceived;
         /// <summary>A game you are not watching wants you; payload is its room code.</summary>
         public event Action<string> TurnAlert;
+        /// <summary>A room you sit in was ended for everyone; payload is (code, who ended it).</summary>
+        public event Action<string, string> RoomClosed;
 
         private ServerSession(string playerKey, string playerName)
         {
@@ -152,6 +154,14 @@ namespace StiflingDark.Unity
         }
 
         public void ListGames() => AfterWelcome(() => Send(new { type = MessageType.ListGames }));
+
+        /// <summary>End a game for everyone (the My Games ✕). The server replies with a fresh
+        /// games list, so the row disappears on its own.</summary>
+        public void AbandonGame(string code) => AfterWelcome(() => Send(new
+        {
+            type = MessageType.AbandonGame,
+            code,
+        }));
 
         public void CreateRoom(string name, SeatRole role) => AfterWelcome(() => Send(new
         {
@@ -357,6 +367,14 @@ namespace StiflingDark.Unity
                     {
                         TurnAlert?.Invoke(code);
                     }
+                    break;
+                }
+                case MessageType.RoomClosed:
+                {
+                    string code = (string)message["code"] ?? "";
+                    GamesList.RemoveAll(g => g.Code == code);
+                    Revision++;
+                    RoomClosed?.Invoke(code, (string)message["by"] ?? "");
                     break;
                 }
                 case MessageType.Error:

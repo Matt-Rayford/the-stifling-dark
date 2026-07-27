@@ -501,6 +501,53 @@ public class ServerTests : IClassFixture<WebApplicationFactory<Program>>
         Assert.Equal(code, (string)alert["code"]!);
     }
 
+    [Fact]
+    public async Task Abandoning_a_game_removes_it_for_everyone_and_notifies_the_table()
+    {
+        string hostKey = "sd-abandon-host-" + Guid.NewGuid().ToString("N");
+        string guestKey = "sd-abandon-guest-" + Guid.NewGuid().ToString("N");
+
+        await using var host = await TestClient.ConnectAsync(_factory);
+        await host.SendAsync(new { type = "hello", playerKey = hostKey, name = "Host" });
+        await host.NextOfTypeAsync("welcome");
+        await host.SendAsync(new { type = "create_room", name = "Host" });
+        string code = (string)(await host.NextOfTypeAsync("room"))["code"]!;
+
+        await using var guest = await TestClient.ConnectAsync(_factory);
+        await guest.SendAsync(new { type = "hello", playerKey = guestKey, name = "Guest" });
+        await guest.NextOfTypeAsync("welcome");
+        await guest.SendAsync(new { type = "join_room", code, name = "Guest" });
+        await guest.NextOfTypeAsync("room");
+
+        // Someone with no seat at this table may not end it.
+        await using var stranger = await TestClient.ConnectAsync(_factory);
+        await stranger.SendAsync(new
+        {
+            type = "hello",
+            playerKey = "sd-abandon-nosy-" + Guid.NewGuid().ToString("N"),
+            name = "Nosy",
+        });
+        await stranger.NextOfTypeAsync("welcome");
+        await stranger.SendAsync(new { type = "abandon_game", code });
+        var refused = await stranger.NextOfTypeAsync("error");
+        Assert.Contains("not seated", (string)refused["message"]!);
+
+        // Any seated player may end it — not just the host. The other members are told who.
+        await guest.SendAsync(new { type = "abandon_game", code });
+        var closed = await host.NextOfTypeAsync("room_closed");
+        Assert.Equal(code, (string)closed["code"]!);
+        Assert.Equal("Guest", (string)closed["by"]!);
+
+        // The ender gets a fresh My Games list without the room in it...
+        var games = await guest.NextOfTypeAsync("games");
+        Assert.DoesNotContain(code, games["gamesList"]!.Select(g => (string?)g["code"]));
+
+        // ...and the code itself is dead.
+        await guest.SendAsync(new { type = "join_room", code, name = "Guest" });
+        var gone = await guest.NextOfTypeAsync("error");
+        Assert.Contains("No room", (string)gone["message"]!);
+    }
+
     // ------------------------------------------------------------- helpers
 
     private static async Task<JObject> Room(TestClient client, string code)

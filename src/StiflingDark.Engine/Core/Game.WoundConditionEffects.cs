@@ -343,10 +343,10 @@ namespace StiflingDark.Engine.Core
 
         /// <summary>
         /// Gear Jam: "You may not take the Charge Final Action unless you spend a Stamina."
-        /// The gate (<see cref="ConditionsCollectActionBlockers"/>'s ActionCharge case) already
-        /// refuses the Action outright at 0 Stamina; this pays the cost the moment Charge is
-        /// actually declared (see Game.cs' ChargeFlashlight), which is also before Breathless
-        /// or any other end-of-turn Stamina loss has had a chance to run.
+        /// Charge now happens automatically at end of turn (see Game.cs' AutoCharge); the gate
+        /// (<see cref="ConditionsCollectActionBlockers"/>'s ActionCharge case) already vetoes
+        /// the automatic gain outright at 0 Stamina, and this pays the toll when it does fire —
+        /// still before Breathless or any other end-of-turn Stamina loss has had a chance to run.
         /// </summary>
         partial void ConditionsOnChargeDeclared(InvestigatorState inv)
         {

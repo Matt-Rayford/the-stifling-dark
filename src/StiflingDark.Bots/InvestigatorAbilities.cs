@@ -125,26 +125,12 @@ public sealed partial class InvestigatorTeam
             new List<string> { best.ToString("R", CultureInfo.InvariantCulture) }));
     }
 
-    /// <summary>The best beam angle that is not the one already placed.</summary>
+    /// <summary>The best beam angle that is not (within a few degrees of) the one already
+    /// placed — the same fine-angle search the first placement uses.</summary>
     private double SecondBestFlashlightAngle(InvestigatorState inv, double taken)
     {
-        double bestAngle = taken + Math.PI / 2;
-        double best = -1;
-        for (int i = 0; i < 12; i++)
-        {
-            double angle = i * Math.PI / 6;
-            if (Math.Abs(angle - taken) < 1e-9)
-            {
-                continue;
-            }
-            double score = ScoreFlashlightAngle(inv, angle);
-            if (score > best)
-            {
-                best = score;
-                bestAngle = angle;
-            }
-        }
-        return bestAngle;
+        var (angle, score) = BestFlashlightAngle(inv, avoid: taken);
+        return score > 0 ? angle : taken + Math.PI / 2;
     }
 
     // ---------- Majors: one token each, spent on purpose ----------

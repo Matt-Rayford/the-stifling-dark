@@ -44,6 +44,10 @@ namespace StiflingDark.Unity
         private int _renderedRevision = -1;
         private int _renderedLogCount = -1;
 
+        /// <summary>Mitchell just confirmed his own placement: open the Sweep aim as soon as
+        /// the update carrying the new Flashlight arrives.</summary>
+        private bool _offerSweepWhenPlaced;
+
         // A command that needs spaces picked off the board.
         private int _pickCount;
         private string _pickPrompt = "";
@@ -201,6 +205,31 @@ namespace StiflingDark.Unity
             RenderMoveTargets(view);
             _boardView.Render(view, MyInvestigatorId);
             MaybeShowModal(view);
+            OfferSweepIfJustPlaced(view);
+        }
+
+        /// <summary>
+        /// Mitchell places, then places a 2nd time (designer note): the moment the update
+        /// confirming his own placement arrives, drop straight back into aim mode for the
+        /// Sweep's 2nd cone. Escape keeps the 1st position (the offer does not come back —
+        /// the SWEEP bar button stays available all round instead).
+        /// </summary>
+        private void OfferSweepIfJustPlaced(PlayerView view)
+        {
+            if (!_offerSweepWhenPlaced)
+            {
+                return;
+            }
+            var placement = view.Flashlights.FirstOrDefault(f => f.InvestigatorId == "mitchell");
+            if (placement == null)
+            {
+                return; // the placing command has not landed yet (or was refused); keep waiting
+            }
+            _offerSweepWhenPlaced = false;
+            if (!view.RoundModifiers.ContainsKey(Game.SweepUsedPrefix + "mitchell"))
+            {
+                BeginSweepAim(placement.Space);
+            }
         }
 
         private void RenderStatus(PlayerView view)
@@ -572,23 +601,15 @@ namespace StiflingDark.Unity
                 }
             }
 
-            // ---- core actions
+            // ---- core actions. Rest and Charge have no buttons: they happen on their own at
+            // end of turn (Rest unless you Sprinted, Charge unless you placed the Flashlight,
+            // neither after an Involved Action).
             UiKit.CreateButton(bar, "SPRINT", 17,
                 () => Send(new SprintCommand()),
                 active && !me.SprintedOrRested && !blockedByWindow,
-                me.SprintedOrRested ? "Already Sprinted or Rested this turn." : "Not your active turn.");
-            UiKit.CreateButton(bar, "REST", 17,
-                () => Send(new RestCommand()),
-                active && !me.SprintedOrRested && !blockedByWindow,
-                me.SprintedOrRested ? "Already Sprinted or Rested this turn." : "Not your active turn.");
+                me.SprintedOrRested ? "Already Sprinted this turn." : "Not your active turn.");
 
             // ---- final actions
-            UiKit.CreateButton(bar, "CHARGE", 17,
-                () => Send(new ChargeFlashlightCommand()),
-                active && me.FinalAction == FinalActionKind.None && !blockedByWindow,
-                me.FinalAction != FinalActionKind.None
-                    ? "Final Action already taken: " + Describe.FinalAction(me.FinalAction)
-                    : "Not your active turn.");
             UiKit.CreateButton(bar, "PLACE FLASHLIGHT", 17,
                 BeginFlashlightAim,
                 active && me.FinalAction == FinalActionKind.None && me.Charge > 0 && !blockedByWindow,
@@ -597,12 +618,31 @@ namespace StiflingDark.Unity
                     : me.FinalAction != FinalActionKind.None
                         ? "Final Action already taken."
                         : "Not your active turn.");
+            // Mitchell's Sweep lives in the main bar, not the abilities fold: it is legal the
+            // whole round (his turn already ended when the 1st cone went down), and it should
+            // read as the natural 2nd half of placing.
+            if (me.DefId == "mitchell")
+            {
+                var sweepPlacement = view.Flashlights.FirstOrDefault(f => f.InvestigatorId == "mitchell");
+                if (sweepPlacement != null)
+                {
+                    bool alreadySwept = view.RoundModifiers.ContainsKey(Game.SweepUsedPrefix + "mitchell");
+                    UiKit.CreateButton(bar, "SWEEP", 17,
+                        () => BeginSweepAim(sweepPlacement.Space),
+                        !alreadySwept && !blockedByWindow,
+                        alreadySwept
+                            ? "Sweep may only be used once per Flashlight."
+                            : "Move the Flashlight to a 2nd position (replaces the 1st).");
+                }
+            }
             UiKit.CreateButton(bar, "INVOLVED", 17,
                 () => Send(new TakeInvolvedActionCommand()),
                 active && me.FinalAction == FinalActionKind.None && !blockedByWindow,
-                "Generic Involved Action — ends the turn with no Stamina gain.");
+                "Generic Involved Action — ends the turn with no Stamina gain and no Charge.");
             UiKit.CreateButton(bar, "END TURN", 17,
-                () => Send(new EndTurnCommand()), active && !blockedByWindow, "Not your active turn.");
+                () => Send(new EndTurnCommand()), active && !blockedByWindow,
+                "Ends the turn. Rest (+1 Stamina if you did not Sprint) and Charge (+1 if you " +
+                "did not place the Flashlight) happen on their own.");
 
             // ---- context panel
             RenderInteracts(view, me, active);
@@ -816,27 +856,8 @@ namespace StiflingDark.Unity
                     args => Send(new UseMajorAbilityCommand { Args = args })),
                 active && me.MajorAbilityTokens > 0);
 
-            // Mitchell's Minor ("Sweep") fires AFTER his own turn already ended — the engine
-            // allows it off-turn (UseMinorAbility resolves invId "mitchell" directly rather
-            // than the active Investigator) — so it needs its own always-visible button rather
-            // than living behind the generic "Use MINOR ability" (which is greyed out except on
-            // his own active turn). Offered whenever his Flashlight is still on the board; if
-            // the view happens not to carry the "already Swept" round modifier for some reason,
-            // this stays enabled per this file's own rule (see the class doc comment): an
-            // over-eager button that explains itself beats a hidden one.
-            if (me.DefId == "mitchell")
-            {
-                var placement = view.Flashlights.FirstOrDefault(f => f.InvestigatorId == "mitchell");
-                if (placement != null)
-                {
-                    bool alreadySwept = view.RoundModifiers.ContainsKey(Game.SweepUsedPrefix + "mitchell");
-                    ActionButton("Sweep flashlight", () => BeginSweepAim(placement.Space),
-                        !alreadySwept,
-                        alreadySwept
-                            ? "Sweep may only be used once per Flashlight."
-                            : "Aim the Flashlight's 2nd position.");
-                }
-            }
+            // (Mitchell's Sweep lives in the main action bar — see RenderInvestigatorActions —
+            // where it reads as the 2nd half of placing rather than a buried ability.)
 
             // Another Investigator's ability, for the cards that let you lend one.
             foreach (var other in view.Investigators.Where(i => i.DefId != me.DefId))
@@ -1155,7 +1176,14 @@ namespace StiflingDark.Unity
             _prompt.Hide();
             _boardView.FocusOn(me.Space);
             _boardView.BeginAim(me.Space,
-                angle => Send(new PlaceFlashlightCommand { AngleRadians = angle }),
+                angle =>
+                {
+                    Send(new PlaceFlashlightCommand { AngleRadians = angle });
+                    // Mitchell's Sweep is part of his placement flow (designer note): the
+                    // moment the 1st cone lands, offer the 2nd immediately. The offer fires
+                    // from Render() once the update confirming the placement arrives.
+                    _offerSweepWhenPlaced = MyInvestigatorId == "mitchell";
+                },
                 () => Render());
             Render();
         }

@@ -167,10 +167,9 @@ namespace StiflingDark.Engine.Tests
             var game = NewSawmillGame();
             var aira = BeginTurnOnComputer(game);
             int staminaBeforeTurnIn = aira.Stamina;
-            game.Rest();
             aira.EvidenceCarried.Add("L");
             game.TurnInEvidence(OneTurnIn("L", "general-item"));
-            Assert.Equal(staminaBeforeTurnIn, aira.Stamina); // Rest's +1 Stamina is suppressed by the Involved Action.
+            Assert.Equal(staminaBeforeTurnIn, aira.Stamina); // the automatic Rest is suppressed by the Involved Action.
             Assert.Equal(FinalActionKind.InvolvedAction, aira.FinalAction);
             Assert.True(aira.TurnTakenThisRound);
             Assert.Null(game.State.ActiveInvestigator);

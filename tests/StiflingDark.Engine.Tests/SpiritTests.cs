@@ -258,14 +258,15 @@ namespace StiflingDark.Engine.Tests
             spirit.Space = game.State.MedicalItemSpaces[0];
 
             game.BeginInvestigatorTurn("aira");
-            Assert.Throws<InvalidOperationException>(game.Rest);
-            Assert.Throws<InvalidOperationException>(game.ChargeFlashlight);
             Assert.Throws<InvalidOperationException>(() => game.PlaceFlashlight(0.0));
             Assert.Throws<InvalidOperationException>(game.PickUpMedicalItem);
             Assert.Single(game.State.MedicalItemSpaces);
-            // No Rest means no Stamina gain at the end of the turn either.
+            // The automatic end-of-turn Rest and Charge skip Spirits entirely: no player
+            // board, so no Stamina or Charge track to recover.
+            int charge = spirit.Charge;
             game.EndTurnWithoutFinalAction();
             Assert.Equal(0, spirit.Stamina);
+            Assert.Equal(charge, spirit.Charge);
             Assert.NotEmpty(game.ActionBlockers("aira", Game.ActionRest));
             Assert.Empty(game.ActionBlockers("lucy-belle", Game.ActionRest));
         }

@@ -598,6 +598,40 @@ public sealed class Room
         BroadcastRoom(toNotify);
     }
 
+    /// <summary>
+    /// End the table for everyone. Any seated human may do it (the async group is presumed to
+    /// agree — and it is the only way to clear a table whose other seats are bots). The room
+    /// refuses all further joins and commands; every other connected member is told who pulled
+    /// the plug. RoomManager.Abandon does the removal and snapshot deletion.
+    /// </summary>
+    public string Abandon(string? playerId)
+    {
+        List<Seat> toNotify;
+        string by;
+        lock (_sync)
+        {
+            if (_retired)
+            {
+                return "That room has expired.";
+            }
+            var seat = playerId == null
+                ? null
+                : _seats.FirstOrDefault(s => s.PlayerId == playerId);
+            if (seat == null)
+            {
+                return "You are not seated in that game.";
+            }
+            _retired = true;
+            by = seat.Name;
+            toNotify = _seats.Where(s => s != seat && s.Connected).ToList();
+        }
+        foreach (var member in toNotify)
+        {
+            _ = member.SendAsync(new RoomClosedMessage { Code = Code, By = by });
+        }
+        return "";
+    }
+
     /// <summary>Give up a lobby seat entirely (a started game keeps it for reconnects).</summary>
     public string Leave(Connection connection)
     {
@@ -644,6 +678,11 @@ public sealed class Room
 
         lock (_sync)
         {
+            if (_retired)
+            {
+                _ = SendErrorAsync(seatIndex, "This game has been ended.");
+                return;
+            }
             if (_game == null)
             {
                 _ = SendErrorAsync(seatIndex, "The game has not started.");
@@ -745,7 +784,8 @@ public sealed class Room
             {
                 lock (_sync)
                 {
-                    if (_game == null || _game.State.Phase == GamePhase.GameOver || _bots == null)
+                    if (_retired || _game == null ||
+                        _game.State.Phase == GamePhase.GameOver || _bots == null)
                     {
                         return;
                     }
@@ -1023,7 +1063,9 @@ public sealed class Room
 
     private void Save()
     {
-        if (_storePath == null || _game == null)
+        // An abandoned (retired) room must never write again: a racing bot turn could
+        // otherwise resurrect the snapshot file right after Abandon deleted it.
+        if (_storePath == null || _game == null || _retired)
         {
             return;
         }
@@ -1210,6 +1252,27 @@ public sealed class RoomManager
     /// <summary>Unfinished rooms this player occupies — the create-room spam guard.</summary>
     public int ActiveGameCount(string playerId) =>
         _rooms.Values.Count(room => room.IsActiveFor(playerId));
+
+    /// <summary>Player-initiated close (the My Games ✕): retire the room, drop it from the
+    /// registry, and delete its snapshot. Empty string on success, else the refusal.</summary>
+    public string Abandon(string code, string? playerId)
+    {
+        var room = Find(code);
+        if (room == null)
+        {
+            return "No room with that code.";
+        }
+        string error = room.Abandon(playerId);
+        if (error.Length > 0)
+        {
+            return error;
+        }
+        if (_rooms.TryRemove(room.Code, out _) && room.StorePath != null)
+        {
+            TryDelete(room.StorePath);
+        }
+        return "";
+    }
 
     /// <summary>Retire dead rooms. Returns how many were removed.</summary>
     public int Sweep(TimeSpan? lobbyTtl = null, TimeSpan? finishedTtl = null,

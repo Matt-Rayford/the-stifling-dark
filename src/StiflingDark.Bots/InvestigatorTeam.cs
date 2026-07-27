@@ -240,7 +240,7 @@ public sealed partial class InvestigatorTeam
         }
         else
         {
-            MaybeRest(inv);
+            // Nothing to do and no Sprint means the end-of-turn auto-Rest recovers Stamina.
         }
 
         if (Active(inv))
@@ -416,15 +416,7 @@ public sealed partial class InvestigatorTeam
         {
             return;
         }
-        MaybeRest(inv);
-    }
-
-    private void MaybeRest(InvestigatorState inv)
-    {
-        if (!IsSpirit(inv) && !inv.SprintedOrRested && inv.Stamina < 5)
-        {
-            _act.Try("rest", () => _g.Rest());
-        }
+        // Not Sprinting IS Resting now — the engine grants the Stamina at end of turn.
     }
 
     // ---------- Movement-point pathing ----------
@@ -614,19 +606,16 @@ public sealed partial class InvestigatorTeam
             {
                 _beamedThisRound.Add(inv.DefId);
                 SweepFlashlight(inv);
-                return;
             }
         }
-        if (inv.Charge < _g.Db.Config.ChargeMax && _act.Try("charge", () => _g.ChargeFlashlight()))
-        {
-            return;
-        }
+        // No beam means the automatic end-of-turn Charge tops us up — nothing to do here.
     }
 
     /// <summary>
-    /// Charge is the team's ammunition: 1 per beam, 1 back per Charge action, 3 max. Anyone with
-    /// spare Charge beams every round; anyone down to their last point alternates by round and
-    /// seat so half the group is always topping up and the other half is always lighting.
+    /// Charge is the team's ammunition: 1 per beam, 1 back automatically on any turn without
+    /// one, 3 max. Anyone with spare Charge beams every round; anyone down to their last point
+    /// alternates by round and seat so half the group is always topping up and the other half
+    /// is always lighting.
     /// </summary>
     private bool WantsBeam(InvestigatorState inv, int cost)
     {
@@ -651,49 +640,126 @@ public sealed partial class InvestigatorTeam
         return (S.Round + seat) % 2 == 0;
     }
 
-    private (double Angle, double Score) BestFlashlight(InvestigatorState inv)
+    private (double Angle, double Score) BestFlashlight(InvestigatorState inv) =>
+        BestFlashlightAngle(inv, avoid: null);
+
+    /// <summary>
+    /// The best beam angle from where the Investigator stands: a coarse 15-degree sweep to rank
+    /// directions, then a fine 1-degree swivel around the most promising few. The physical
+    /// template picks whole spaces up or drops them on swivels of a degree or two — the
+    /// designer's photo case ("179" at -166.6 degrees, 10 covered circles) sits on no coarse
+    /// grid point at all — so the old 30-degree-only sweep routinely lit several fewer spaces
+    /// than the same Charge could buy. Refining more than one direction matters too: a
+    /// runner-up direction often overtakes the coarse winner once both are tuned.
+    /// `avoid` excludes angles within a few degrees of an already-placed beam (Mitchell's
+    /// Sweep re-aims the same Flashlight, so a near-duplicate would waste the second cone).
+    /// </summary>
+    private (double Angle, double Score) BestFlashlightAngle(InvestigatorState inv, double? avoid)
     {
+        var ctx = BuildBeamContext(inv);
+        const int CoarseSteps = 24;
+        const double CoarseStep = 2 * Math.PI / CoarseSteps;
+        const double FineStep = Math.PI / 180;
+        const double AvoidWindow = 5 * Math.PI / 180;
+
+        var coarse = new double[CoarseSteps];
         double bestAngle = 0;
         double best = 0;
-        for (int i = 0; i < 12; i++)
+        for (int i = 0; i < CoarseSteps; i++)
         {
-            double angle = i * Math.PI / 6;
-            double score = ScoreFlashlightAngle(inv, angle);
-            if (score > best)
+            double angle = i * CoarseStep;
+            if (avoid.HasValue && AnglesNear(angle, avoid.Value, AvoidWindow))
             {
-                best = score;
+                coarse[i] = -1;
+                continue;
+            }
+            coarse[i] = ScoreFlashlightAngle(inv, angle, ctx);
+            if (coarse[i] > best)
+            {
+                best = coarse[i];
                 bestAngle = angle;
+            }
+        }
+        foreach (int i in Enumerable.Range(0, CoarseSteps)
+                     .OrderByDescending(i => coarse[i]).ThenBy(i => i).Take(3))
+        {
+            if (coarse[i] <= 0)
+            {
+                continue; // a direction not worth pointing at is not worth tuning either
+            }
+            for (int deg = -7; deg <= 7; deg++)
+            {
+                if (deg == 0)
+                {
+                    continue; // the coarse pass already scored this exact angle
+                }
+                double angle = i * CoarseStep + deg * FineStep;
+                if (avoid.HasValue && AnglesNear(angle, avoid.Value, AvoidWindow))
+                {
+                    continue;
+                }
+                double score = ScoreFlashlightAngle(inv, angle, ctx);
+                if (score > best)
+                {
+                    best = score;
+                    bestAngle = angle;
+                }
             }
         }
         return (bestAngle, best);
     }
 
-    /// <summary>What one beam angle is worth from where the Investigator is standing.</summary>
-    private double ScoreFlashlightAngle(InvestigatorState inv, double angle)
+    private static bool AnglesNear(double a, double b, double tolerance)
     {
-        var darkZones = S.Evidence.Where(kv => !kv.Value.Revealed).Select(kv => kv.Key).ToHashSet();
-        var mustLight = MustLightSpaces();
-        bool threatened = _threatLevel > 0;
+        double d = Math.Abs(a - b) % (2 * Math.PI);
+        return Math.Min(d, 2 * Math.PI - d) < tolerance;
+    }
+
+    /// <summary>Everything the beam scorer weighs that does not depend on the angle, built once
+    /// per placement decision so the fine sweep's ~60 candidate angles share one BFS.</summary>
+    private sealed class BeamContext
+    {
+        public HashSet<string> DarkZones = new();
+        public HashSet<string> MustLight = new();
+        public bool Threatened;
+        public Dictionary<string, int> Near = new();
+        public HashSet<string> GuardRing = new();
+        public HashSet<string> Lanes = new();
+        public HashSet<string> Entrances = new();
+    }
+
+    private BeamContext BuildBeamContext(InvestigatorState inv)
+    {
+        var ctx = new BeamContext
+        {
+            DarkZones = S.Evidence.Where(kv => !kv.Value.Revealed).Select(kv => kv.Key).ToHashSet(),
+            MustLight = MustLightSpaces(),
+            Threatened = _threatLevel > 0,
+            Near = Nav.From(_g, inv.Space, 3),
+        };
 
         // The ring an Attack could come from: every space this Investigator or a close teammate
         // stands on, plus everything adjacent to it. A beam over that ring means anything walking
         // in is Revealed on arrival, and a Revealed Adversary may not Attack for the rest of the round.
-        var near = Nav.From(_g, inv.Space, 3);
-        var buddies = Alive.Where(o => o == inv || Nav.Hops(near, o.Space) <= 2).ToList();
-        var guardRing = new HashSet<string>();
+        var buddies = Alive.Where(o => o == inv || Nav.Hops(ctx.Near, o.Space) <= 2).ToList();
         foreach (var friend in buddies)
         {
-            guardRing.Add(friend.Space);
+            ctx.GuardRing.Add(friend.Space);
             foreach (string neighbour in Nav.Neighbors(_g, friend.Space))
             {
-                guardRing.Add(neighbour);
+                ctx.GuardRing.Add(neighbour);
             }
         }
-        var lanes = near.Keys.Where(k => Danger(k) > 0).ToHashSet();
+        ctx.Lanes = ctx.Near.Keys.Where(k => Danger(k) > 0).ToHashSet();
         // Turtling: after the Doors are Locked these are the only ways left in, so a beam over
         // them seals the huddle for the round.
-        var entrances = Entrances(buddies);
+        ctx.Entrances = Entrances(buddies);
+        return ctx;
+    }
 
+    /// <summary>What one beam angle is worth from where the Investigator is standing.</summary>
+    private double ScoreFlashlightAngle(InvestigatorState inv, double angle, BeamContext ctx)
+    {
         HashSet<string> bright;
         try
         {
@@ -703,44 +769,42 @@ public sealed partial class InvestigatorTeam
         {
             return 0;
         }
+        double score = 0;
+        foreach (string id in bright)
         {
-            double score = 0;
-            foreach (string id in bright)
+            if (S.Overlay.BrightSpaces.Contains(id))
             {
-                if (S.Overlay.BrightSpaces.Contains(id))
-                {
-                    continue; // a teammate already covers it; do not pay twice for the same space
-                }
-                score += 0.1;
-                if (mustLight.Contains(id))
-                {
-                    score += 40;
-                }
-                if (entrances.Contains(id))
-                {
-                    score += threatened ? 14 : 2;
-                }
-                if (guardRing.Contains(id))
-                {
-                    score += threatened ? 12 : 2;
-                }
-                if (lanes.Contains(id))
-                {
-                    score += threatened ? 6 : 2;
-                }
-                // Choke points: a beam down a corridor mouth walls off a whole approach.
-                if (_degree.TryGetValue(id, out int degree) && degree <= 2 && Nav.Hops(near, id) <= 3)
-                {
-                    score += threatened ? 4 : 1;
-                }
-                string? zone = _g.Graph.Space(id).Zone;
-                if (zone != null && darkZones.Contains(zone))
-                {
-                    score += threatened ? 1 : 2;
-                }
+                continue; // a teammate already covers it; do not pay twice for the same space
             }
-            return score;
+            score += 0.1;
+            if (ctx.MustLight.Contains(id))
+            {
+                score += 40;
+            }
+            if (ctx.Entrances.Contains(id))
+            {
+                score += ctx.Threatened ? 14 : 2;
+            }
+            if (ctx.GuardRing.Contains(id))
+            {
+                score += ctx.Threatened ? 12 : 2;
+            }
+            if (ctx.Lanes.Contains(id))
+            {
+                score += ctx.Threatened ? 6 : 2;
+            }
+            // Choke points: a beam down a corridor mouth walls off a whole approach.
+            if (_degree.TryGetValue(id, out int degree) && degree <= 2 && Nav.Hops(ctx.Near, id) <= 3)
+            {
+                score += ctx.Threatened ? 4 : 1;
+            }
+            string? zone = _g.Graph.Space(id).Zone;
+            if (zone != null && ctx.DarkZones.Contains(zone))
+            {
+                score += ctx.Threatened ? 1 : 2;
+            }
         }
+        return score;
     }
 
     /// <summary>Objective tokens that only work once their space has been made Bright.</summary>

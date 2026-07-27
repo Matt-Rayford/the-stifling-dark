@@ -356,19 +356,6 @@ namespace StiflingDark.Engine.Core
             }
         }
 
-        public void Rest()
-        {
-            var inv = ActiveInv();
-            RequireNoPendingWindow();
-            RequireActionAllowed(inv, ActionRest);
-            if (inv.SprintedOrRested)
-            {
-                throw new InvalidOperationException("Sprint or Rest may be used once per turn.");
-            }
-            inv.SprintedOrRested = true;
-            inv.Rested = true;
-        }
-
         public void MoveStep(string to)
         {
             var inv = ActiveInv();
@@ -600,21 +587,6 @@ namespace StiflingDark.Engine.Core
 
         // ---------- Final actions & end of turn ----------
 
-        public void ChargeFlashlight()
-        {
-            var inv = ActiveInv();
-            RequireNoPendingWindow();
-            RequireActionAllowed(inv, ActionCharge);
-            RequireNoFinalAction(inv);
-            inv.FinalAction = FinalActionKind.Charge;
-            // Any cost a card attaches to *taking* Charge (Gear Jam's Stamina) is paid here,
-            // the moment the Action is declared — see OnChargeDeclared's doc comment for why
-            // this can no longer wait until the end-of-turn hooks.
-            OnChargeDeclared(inv);
-            inv.Charge = Math.Min(Db.Config.ChargeMax, inv.Charge + 1);
-            EndTurn(inv);
-        }
-
         public void PlaceFlashlight(double angleRadians)
         {
             var inv = ActiveInv();
@@ -717,6 +689,28 @@ namespace StiflingDark.Engine.Core
             {
                 throw new InvalidOperationException("Cannot end the turn on another Investigator's space.");
             }
+            // Designer ruling: Rest and Charge are not chosen actions. Any turn that did not
+            // Sprint ends by Resting, and any turn that did not Place the Flashlight ends by
+            // Charging — unless an Involved Action consumed the turn's effort. Rest is decided
+            // here but its Stamina is granted after the turn-end hooks (below), so Panic and
+            // the no-Stamina weather events still veto it; the Charge point lands now, before
+            // the hooks. Designer-confirmed corollary: on a quiet turn Breathless's and Dying
+            // Battery's end-of-turn drains net out against the automatic recovery ("they
+            // should stay the same") — those Wounds only bite on turns whose Sprint,
+            // Flashlight, or Involved Action already forfeited the matching recovery.
+            if (!IsSpirit(inv) && !inv.Dead && !inv.Escaped &&
+                inv.FinalAction != FinalActionKind.InvolvedAction)
+            {
+                if (!inv.SprintedOrRested)
+                {
+                    inv.SprintedOrRested = true;
+                    inv.Rested = true;
+                }
+                if (inv.FinalAction != FinalActionKind.PlaceFlashlight)
+                {
+                    AutoCharge(inv);
+                }
+            }
             OnInvestigatorTurnEnd(inv);
             if (State.Phase == GamePhase.GameOver)
             {
@@ -747,6 +741,28 @@ namespace StiflingDark.Engine.Core
                 State.Phase = GamePhase.AdversaryTurn;
                 State.Adversary.NoiseTokens.Clear();
             }
+        }
+
+        /// <summary>
+        /// The automatic end-of-turn Charge. Everything that used to gate or tax the Charge
+        /// Final Action still applies — Drain's ban, Interference's round ban, Gear Jam's
+        /// Stamina toll (paid through the same OnChargeDeclared hook), Gear Jam at 0 Stamina —
+        /// it now vetoes or taxes the automatic gain instead of a button.
+        /// </summary>
+        private void AutoCharge(InvestigatorState inv)
+        {
+            var blockers = ActionBlockers(inv.DefId, ActionCharge);
+            if (blockers.Count > 0)
+            {
+                // Only worth a log line when it actually cost them something.
+                if (inv.Charge < Db.Config.ChargeMax)
+                {
+                    Log("turn", $"{inv.DefId} does not Charge: {blockers[0]}");
+                }
+                return;
+            }
+            OnChargeDeclared(inv);
+            inv.Charge = Math.Min(Db.Config.ChargeMax, inv.Charge + 1);
         }
 
         // ---------- Adversary turn (core actions; per-adversary specials layer on later) ----------

@@ -1084,6 +1084,10 @@ namespace StiflingDark.Engine.Core
         /// the public read-only <see cref="ActionBlockers"/> query.</summary>
         private bool ForcedMajorAbilityPending(InvestigatorState inv) =>
             HasRoundModifier(ForcedMajorAbilityPrefix + inv.DefId) &&
+            // Death, escape, or Spirit conversion mid-turn ends any ability use (the same
+            // gate BeginAbilityUse enforces), so the compulsion is unresolvable and must
+            // release rather than deadlock the dying Investigator's final end-of-turn.
+            !inv.Dead && !inv.Escaped && !IsSpirit(inv) &&
             inv.MajorAbilityTokens >= 1 &&
             CanResolveMajorAbility(inv);
 

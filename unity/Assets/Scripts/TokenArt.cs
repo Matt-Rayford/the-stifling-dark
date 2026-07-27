@@ -328,6 +328,44 @@ namespace StiflingDark.Unity
                 return null;
             }
             string name = tokenName.ToLowerInvariant();
+            // Ability / card tokens ("can:brielle:1", "escape-artist:dylan", "ghost-orbs-…").
+            // escape-artist must be matched before the generic escape/gate marker below.
+            if (name.StartsWith("can:", System.StringComparison.Ordinal))
+            {
+                return "investigator/abilities/Can.png";
+            }
+            if (name.Contains("escape-artist"))
+            {
+                return "investigator/abilities/Escape-Artist.png";
+            }
+            if (name.Contains("ghost-orb"))
+            {
+                return "investigator/abilities/Ghost-Orbs.png";
+            }
+            if (name.Contains("ectoplasm"))
+            {
+                return "investigator/abilities/Ectoplasm.png";
+            }
+            if (name.Contains("barricade"))
+            {
+                return BarricadeMarker;
+            }
+            if (name.Contains("evil-eye"))
+            {
+                return "adversary/butcher/Evil-Eye.png";
+            }
+            if (name.Contains("mucus"))
+            {
+                return "adversary/horror/Mucus.png";
+            }
+            if (name.Contains("hellfire"))
+            {
+                return "adversary/cultists/Hellfire.png";
+            }
+            if (name.Contains("desecrated"))
+            {
+                return "adversary/cultists/Desecrated-Ground.png";
+            }
             if (name.Contains("altar"))
             {
                 return AltarMarker;

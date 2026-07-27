@@ -130,6 +130,18 @@ namespace StiflingDark.Engine.Data
                 SpaceRadius = j["spaceRadius"]!.Value<double>(),
                 Zones = ((JObject)j["zones"]!).Properties().ToDictionary(p => p.Name, p => p.Value.Value<string>()!),
             };
+            if (j["zoneLights"] is JObject zoneLights)
+            {
+                foreach (var prop in zoneLights.Properties())
+                {
+                    map.ZoneLights[prop.Name] = new ZoneLightSquareDef
+                    {
+                        X = prop.Value["x"]!.Value<double>(),
+                        Y = prop.Value["y"]!.Value<double>(),
+                        Size = prop.Value["size"]!.Value<double>(),
+                    };
+                }
+            }
             foreach (var s in (JArray)j["spaces"]!)
             {
                 map.Spaces.Add(new SpaceDef

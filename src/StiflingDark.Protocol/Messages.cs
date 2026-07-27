@@ -6,8 +6,8 @@ namespace StiflingDark.Protocol
     /// <summary>
     /// Wire messages. Client -> server: hello, create_room, join_room, leave_room, set_seat,
     /// add_bot, remove_seat, configure, set_speed, ready, start_game, command, resync,
-    /// list_games. Server -> client: welcome, room, update, games, turn_alert, error.
-    /// Everything is a JSON object with a "type" field.
+    /// list_games, abandon_game. Server -> client: welcome, room, update, games, turn_alert,
+    /// room_closed, error. Everything is a JSON object with a "type" field.
     /// </summary>
     public static class MessageType
     {
@@ -26,6 +26,7 @@ namespace StiflingDark.Protocol
         public const string Command = "command";
         public const string Resync = "resync";
         public const string ListGames = "list_games";
+        public const string AbandonGame = "abandon_game";
 
         // server -> client
         public const string Welcome = "welcome";
@@ -33,6 +34,7 @@ namespace StiflingDark.Protocol
         public const string Update = "update";
         public const string Games = "games";
         public const string TurnAlert = "turn_alert";
+        public const string RoomClosed = "room_closed";
         public const string Error = "error";
     }
 
@@ -164,5 +166,15 @@ namespace StiflingDark.Protocol
     {
         public string Type { get; set; } = MessageType.TurnAlert;
         public string Code { get; set; } = "";
+    }
+
+    /// <summary>A room was ended for everyone (abandon_game). Sent to every connected member;
+    /// the room is gone from My Games and its code no longer joins.</summary>
+    public sealed class RoomClosedMessage
+    {
+        public string Type { get; set; } = MessageType.RoomClosed;
+        public string Code { get; set; } = "";
+        /// <summary>Display name of the player who ended it.</summary>
+        public string By { get; set; } = "";
     }
 }

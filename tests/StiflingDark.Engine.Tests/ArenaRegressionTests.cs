@@ -621,7 +621,7 @@ namespace StiflingDark.Engine.Tests
             game.BeginInvestigatorTurn("mada");
             Assert.NotEmpty(game.ActionBlockers("mada", Game.ActionCharge));
             Assert.Throws<InvalidOperationException>(() => game.EndTurnWithoutFinalAction());
-            Assert.Throws<InvalidOperationException>(() => game.ChargeFlashlight());
+            Assert.Throws<InvalidOperationException>(() => game.PlaceFlashlight(0.0));
 
             game.UseMajorAbility(); // MadaTripleSprint: spends the 5 Stamina, satisfies Fear
             game.EndTurnWithoutFinalAction();
@@ -664,6 +664,31 @@ namespace StiflingDark.Engine.Tests
             Assert.Null(game.State.ActiveInvestigator);
         }
 
+        // ---------- Bug 7b (fine-aim arena run, seed 516): Fear must release on death ----------
+
+        [Fact]
+        public void Fear_releases_when_the_owner_dies_during_their_own_turn()
+        {
+            var game = NewAbilityGame(new[] { "dylan", "mitchell" });
+            var dylan = Inv(game, "dylan");
+
+            game.BeginInvestigatorTurn("dylan");
+            GiveFaceUpWound(game, dylan, "fear");
+            game.EndTurnWithoutFinalAction(); // this turn is unaffected ("your next turn")
+            FinishRound(game);
+
+            game.BeginInvestigatorTurn("dylan");
+            dylan.Dead = true; // e.g. a 4th Wound drawn mid-turn
+
+            // Pre-fix: ForcedMajorAbilityPending never checked Dead/Escaped/Spirit, and Dylan's
+            // Major counts as always-resolvable, so a Fear'd Dylan who died on his own turn
+            // could never legally end it — UseMajorAbility itself refuses anyone off the board.
+            game.EndTurnWithoutFinalAction();
+
+            Assert.Null(game.State.ActiveInvestigator);
+            Assert.Contains(game.State.Log, e => e.Type == "wound" && e.Detail.Contains("released"));
+        }
+
         // ---------- Bug 8: Gear Jam's Stamina cost must not race Breathless at end of turn ----------
 
         [Fact]
@@ -681,10 +706,12 @@ namespace StiflingDark.Engine.Tests
             // Pre-fix: Gear Jam's SpendStamina ran in ConditionsOnTurnEnd, *after* Breathless's
             // own end-of-turn Stamina loss in the same OnInvestigatorTurnEnd fanout had already
             // spent the last point, throwing "Not enough Stamina" out of EndTurn (seed 680).
-            game.ChargeFlashlight();
+            // Charge is automatic at end of turn now; the ordering contract is the same.
+            game.EndTurnWithoutFinalAction();
 
-            Assert.Equal(1, aira.Charge); // the Charge Action still happened
-            Assert.Equal(0, aira.Stamina); // Gear Jam's 1, then Breathless's 1, clamped at 0
+            Assert.Equal(1, aira.Charge); // the automatic Charge still happened
+            // Gear Jam's 1 spent, then Breathless's 1 clamped at 0, then the automatic Rest's +1.
+            Assert.Equal(1, aira.Stamina);
             Assert.Null(game.State.ActiveInvestigator); // the turn ended cleanly
         }
 

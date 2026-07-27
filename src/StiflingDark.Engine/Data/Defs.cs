@@ -39,6 +39,17 @@ namespace StiflingDark.Engine.Data
         public Dictionary<string, string> ForcedNext { get; set; } = new Dictionary<string, string>();
     }
 
+    /// <summary>The printed per-zone light square on the board art — where the physical
+    /// lights-on / burnt-out / permanently-dim token is placed, covering the square.</summary>
+    public sealed class ZoneLightSquareDef
+    {
+        /// <summary>Square center, in board pixels.</summary>
+        public double X { get; set; }
+        public double Y { get; set; }
+        /// <summary>Side length, in board pixels.</summary>
+        public double Size { get; set; }
+    }
+
     public sealed class MapDef
     {
         public string Id { get; set; } = "";
@@ -49,6 +60,8 @@ namespace StiflingDark.Engine.Data
         public double SpaceRadius { get; set; }
         /// <summary>Zone letter to display name.</summary>
         public Dictionary<string, string> Zones { get; set; } = new Dictionary<string, string>();
+        /// <summary>Zone letter to the printed light square its state token covers.</summary>
+        public Dictionary<string, ZoneLightSquareDef> ZoneLights { get; set; } = new Dictionary<string, ZoneLightSquareDef>();
         public List<SpaceDef> Spaces { get; set; } = new List<SpaceDef>();
         public List<EdgeDef> Edges { get; set; } = new List<EdgeDef>();
         /// <summary>Ride id ("zipper", "ferrisWheel") to rotation definition. Empty for the Sawmill.</summary>

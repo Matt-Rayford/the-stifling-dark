@@ -105,7 +105,7 @@ namespace StiflingDark.Engine.Tests
             Assert.Throws<InvalidOperationException>(() => game.TakeInvolvedAction());
 
             // A different Final Action still ends the turn normally.
-            game.ChargeFlashlight();
+            game.PlaceFlashlight(0.0);
             Assert.Null(game.State.ActiveInvestigator);
         }
 
@@ -139,11 +139,12 @@ namespace StiflingDark.Engine.Tests
             game.EndTurnWithoutFinalAction();
             Assert.Equal(5, asher.Stamina); // slot 1: ignored
 
-            // Push it out of the first slot and it bites again.
+            // Push it out of the first slot and it bites again. (An Involved final, so the
+            // automatic Rest does not mask the bite.)
             asher.Wounds.Insert(0, new WoundInstance { CardId = "drain", FaceUp = true });
             EndRound(game);
             game.BeginInvestigatorTurn("asher");
-            game.EndTurnWithoutFinalAction();
+            game.TakeInvolvedAction();
             Assert.Equal(4, asher.Stamina);
         }
 
@@ -167,7 +168,9 @@ namespace StiflingDark.Engine.Tests
             Assert.Equal(6, asher.MpRemaining);
             Assert.Empty(game.ActionBlockers("asher", Game.ActionCharge));
             game.EndTurnWithoutFinalAction();
-            Assert.Equal(4, asher.Stamina); // Breathless ignored too
+            // Breathless ignored; the automatic Rest's +1 lands unopposed (a biting
+            // Breathless would have cancelled it back down to 4).
+            Assert.Equal(5, asher.Stamina);
 
             // The Ability lasted "during this turn" only.
             EndRound(game);
@@ -595,7 +598,7 @@ namespace StiflingDark.Engine.Tests
             game.BeginInvestigatorTurn("aira");
             Assert.NotEmpty(game.ActionBlockers("aira", Game.ActionCharge));
             Assert.Throws<InvalidOperationException>(() => game.EndTurnWithoutFinalAction());
-            Assert.Throws<InvalidOperationException>(() => game.ChargeFlashlight());
+            Assert.Throws<InvalidOperationException>(() => game.PlaceFlashlight(0.0));
 
             game.UseMajorAbility(args: new List<string> { "S-24", "G-1" });
             game.EndTurnWithoutFinalAction();

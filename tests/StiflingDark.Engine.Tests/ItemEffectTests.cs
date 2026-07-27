@@ -121,7 +121,7 @@ namespace StiflingDark.Engine.Tests
             // "...but you may not take another Involved Action this turn."
             Assert.Throws<InvalidOperationException>(() => game.TakeInvolvedAction());
             // A different Final Action is still open.
-            game.ChargeFlashlight();
+            game.PlaceFlashlight(0.0);
             Assert.True(aira.TurnTakenThisRound);
         }
 

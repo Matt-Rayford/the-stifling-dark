@@ -16,6 +16,13 @@
   "T": "Tunnel of Love",
   "F": "Food Stand"
  },
+ "zoneLights": {
+  "G": {"x": 1142.0, "y": 526.2, "size": 195},
+  "M": {"x": 4202.0, "y": 533.4, "size": 198},
+  "C": {"x": 3689.6, "y": 3176.3, "size": 192},
+  "T": {"x": 5517.8, "y": 3704.1, "size": 195},
+  "F": {"x": 3022.0, "y": 6393.9, "size": 195}
+ },
  "_notes": [
   "Space light: dim = solid ring (1 MP), dark = dashed ring (2 MP for Investigators). Coordinates are pixel centers in the rendered source image.",
   "Edge types: move (normal), window (Map Hazard), mirrorDoor (color-coded Mirror Maze door; passable only when its color token is Open), adversaryLink (yellow dashed; adjacent ONLY for Adversary Attacks/Abilities - no movement or trading).",

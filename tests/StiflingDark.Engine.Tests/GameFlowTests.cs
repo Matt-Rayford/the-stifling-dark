@@ -60,19 +60,63 @@ namespace StiflingDark.Engine.Tests
         }
 
         [Fact]
-        public void Rest_turns_advance_to_the_adversary_and_next_round()
+        public void Plain_turns_advance_to_the_adversary_and_next_round()
         {
             var game = NewSawmillGame();
             foreach (string inv in new[] { "aira", "lucy-belle", "mitchell", "vincent" })
             {
                 game.BeginInvestigatorTurn(inv);
-                game.Rest();
                 game.EndTurnWithoutFinalAction();
             }
             Assert.Equal(GamePhase.AdversaryTurn, game.State.Phase);
             game.AdversaryEndTurn();
             Assert.Equal(2, game.State.Round);
             Assert.Equal(GamePhase.InvestigatorTurns, game.State.Phase);
+        }
+
+        [Fact]
+        public void Rest_and_charge_happen_automatically_at_the_end_of_a_plain_turn()
+        {
+            var game = NewSawmillGame();
+            var aira = game.State.Investigators.First(i => i.DefId == "aira");
+            aira.Stamina = 3;
+            aira.Charge = 1;
+
+            game.BeginInvestigatorTurn("aira");
+            game.EndTurnWithoutFinalAction();
+
+            Assert.Equal(4, aira.Stamina); // no Sprint means the turn ends by Resting
+            Assert.Equal(2, aira.Charge);  // no Flashlight placed means it ends by Charging
+        }
+
+        [Fact]
+        public void Placing_the_flashlight_forfeits_the_automatic_charge_but_not_the_rest()
+        {
+            var game = NewSawmillGame();
+            var aira = game.State.Investigators.First(i => i.DefId == "aira");
+            aira.Stamina = 3;
+            aira.Charge = 2;
+
+            game.BeginInvestigatorTurn("aira");
+            game.PlaceFlashlight(0.0);
+
+            Assert.Equal(1, aira.Charge);  // the placement's 1 spent, no automatic top-up
+            Assert.Equal(4, aira.Stamina); // the automatic Rest still happened
+        }
+
+        [Fact]
+        public void An_involved_action_skips_both_automatic_recoveries()
+        {
+            var game = NewSawmillGame();
+            var aira = game.State.Investigators.First(i => i.DefId == "aira");
+            aira.Stamina = 3;
+            aira.Charge = 1;
+
+            game.BeginInvestigatorTurn("aira");
+            game.TakeInvolvedAction();
+
+            Assert.Equal(3, aira.Stamina);
+            Assert.Equal(1, aira.Charge);
         }
 
         [Fact]
@@ -85,7 +129,8 @@ namespace StiflingDark.Engine.Tests
             game.Sprint();
             Assert.Equal(4, aira.Stamina);
             Assert.InRange(aira.MpRemaining, 6, 8); // 4 base + sprint die 2..4
-            Assert.Throws<InvalidOperationException>(() => game.Rest());
+            game.EndTurnWithoutFinalAction();
+            Assert.Equal(4, aira.Stamina); // Sprinting forfeits the automatic end-of-turn Rest
         }
 
         [Fact]

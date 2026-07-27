@@ -263,14 +263,7 @@ namespace StiflingDark.Unity
                 BoardMini(pair.Key, TokenArt.DoorToken(pair.Value), new Color(0.80f, 0.55f, 0.35f),
                     Describe.Door(pair.Value).Substring(0, 2), 22);
             }
-            foreach (string zone in view.FalteringZones)
-            {
-                foreach (var space in _board.Graph.ZoneSpaces(zone).Take(1))
-                {
-                    Token(space.Id, TokenArt.FalteringMarker, new Color(0.70f, 0.66f, 0.35f),
-                        "F", 0.6f, 21);
-                }
-            }
+            DrawZoneLights(view);
             DrawEdgeMarkers(overlay.OpenWindows, TokenArt.OpenWindowMarker,
                 new Color(0.50f, 0.72f, 0.88f), "W", "Open Window token on an edge here");
             DrawEdgeMarkers(overlay.FalseWindows, TokenArt.FalseWindowMarker,
@@ -280,6 +273,40 @@ namespace StiflingDark.Unity
             foreach (string space in overlay.AdversaryBarriers)
             {
                 Token(space, TokenArt.BarricadeMarker, new Color(0.72f, 0.62f, 0.42f), "B", 0.7f, 21);
+            }
+        }
+
+        /// <summary>
+        /// Zone light-state tokens sit ON the printed light square of their zone, covering it
+        /// exactly like the physical token does (designer note) — lights on, burnt out, or
+        /// permanently dim. The squares' positions come from the map's zoneLights data.
+        /// </summary>
+        private void DrawZoneLights(PlayerView view)
+        {
+            foreach (var pair in _board.Map.ZoneLights)
+            {
+                string zone = pair.Key;
+                string art;
+                if (view.Overlay.BrightZones.Contains(zone))
+                {
+                    art = TokenArt.BrightMarker;
+                }
+                else if (view.FalteringZones.Contains(zone))
+                {
+                    art = TokenArt.FalteringMarker;
+                }
+                else if (view.Overlay.DimZones.Contains(zone))
+                {
+                    art = TokenArt.DimMarker;
+                }
+                else
+                {
+                    continue; // untouched lights: the printed bulb square shows through
+                }
+                var square = pair.Value;
+                PlaceToken(new Vector3((float)square.X, -(float)square.Y, 0f), art,
+                    new Color(0.70f, 0.66f, 0.35f), zone,
+                    (float)(square.Size / _board.Map.SpaceRadius), 21);
             }
         }
 
@@ -418,8 +445,8 @@ namespace StiflingDark.Unity
 
             if (!string.IsNullOrEmpty(adversary.Space))
             {
-                Figure(adversary.Space, TokenArt.AdversaryFace(adversary.DefId), color, "AD", 31,
-                    Describe.Adversary(adversary.DefId) +
+                AdversaryFigure(adversary.Space, TokenArt.AdversaryFace(adversary.DefId), color,
+                    "AD", 31, Describe.Adversary(adversary.DefId) +
                     (adversary.Revealed ? " — REVEALED" : " — position known"));
             }
             foreach (var figure in adversary.Figures)
@@ -428,9 +455,29 @@ namespace StiflingDark.Unity
                 {
                     continue;
                 }
-                Figure(figure.Space, TokenArt.CultistFace(figure.Id), color, Short(figure.Id), 30,
-                    figure.Id + (figure.Revealed ? " — revealed" : ""));
+                AdversaryFigure(figure.Space, TokenArt.CultistFace(figure.Id), color,
+                    Short(figure.Id), 30, figure.Id + (figure.Revealed ? " — revealed" : ""));
             }
+        }
+
+        /// <summary>
+        /// Adversary figures (Butcher, Horror, Mor'gonnod, Cultists) fill the space's circle
+        /// exactly like an Investigator portrait — masked round crop plus an identity ring in
+        /// the adversary's color — instead of the smaller square face token they used to be.
+        /// </summary>
+        private void AdversaryFigure(string spaceId, string artPath, Color color, string initials,
+            int sortingOrder, string note)
+        {
+            var go = FigureSprite(spaceId, _art.CircularToken(artPath), color, initials,
+                sortingOrder, note, 2f);
+            if (go == null)
+            {
+                return;
+            }
+            var ring = NewSprite(_dynamic, "Identity", UiSprites.Ring,
+                new Color(color.r, color.g, color.b, 0.85f), sortingOrder);
+            ring.transform.position = go.transform.position;
+            Scale(ring, (float)_board.Map.SpaceRadius * 2.1f);
         }
 
         private void DrawInvestigators(PlayerView view)
@@ -524,24 +571,8 @@ namespace StiflingDark.Unity
 
         // -------------------------------------------------------------- pieces
 
-        private GameObject Figure(string spaceId, string artPath, Color color, string initials,
-            int sortingOrder, string note)
-        {
-            var space = _board.SpaceOrNull(spaceId);
-            if (space == null)
-            {
-                return null;
-            }
-            if (!string.IsNullOrEmpty(note))
-            {
-                Note(spaceId, note);
-            }
-            return PlaceToken(new Vector3((float)space.X, -(float)space.Y, 0f), artPath, color,
-                initials, 1.35f, sortingOrder);
-        }
-
-        /// <summary>Like <see cref="Figure"/>, but for a pre-resolved sprite (e.g. an already
-        /// circle-masked portrait) rather than an art path, and a caller-chosen size.</summary>
+        /// <summary>Places a figure from a pre-resolved sprite (e.g. an already circle-masked
+        /// portrait) rather than an art path, with a caller-chosen size.</summary>
         private GameObject FigureSprite(string spaceId, Sprite sprite, Color color, string initials,
             int sortingOrder, string note, float sizeInRadii)
         {

@@ -98,12 +98,6 @@ namespace StiflingDark.Protocol
         public override void Apply(Game game) => game.Sprint();
     }
 
-    public sealed class RestCommand : GameCommand
-    {
-        public override CommandSide Side => CommandSide.Investigator;
-        public override void Apply(Game game) => game.Rest();
-    }
-
     public sealed class MoveStepCommand : GameCommand
     {
         public string To { get; set; } = "";
@@ -171,12 +165,6 @@ namespace StiflingDark.Protocol
         public string Zone { get; set; } = "";
         public override CommandSide Side => CommandSide.Investigator;
         public override void Apply(Game game) => game.TradeEvidence(ToInvestigatorId, Zone);
-    }
-
-    public sealed class ChargeFlashlightCommand : GameCommand
-    {
-        public override CommandSide Side => CommandSide.Investigator;
-        public override void Apply(Game game) => game.ChargeFlashlight();
     }
 
     public sealed class PlaceFlashlightCommand : GameCommand

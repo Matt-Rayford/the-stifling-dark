@@ -134,6 +134,26 @@ public static class ClientSession
                         });
                         break;
                     }
+                    case MessageType.AbandonGame when identity != null:
+                    {
+                        string code = ((string?)message["code"] ?? "").Trim().ToUpperInvariant();
+                        string abandonError = rooms.Abandon(code, identity.PlayerId);
+                        if (abandonError.Length > 0)
+                        {
+                            await SendErrorAsync(connection, abandonError);
+                            break;
+                        }
+                        if (room != null && room.Code == code)
+                        {
+                            room = null; // no lingering handle to a closed room
+                        }
+                        // A fresh list right away, so the row disappears without a manual refresh.
+                        await connection.SendAsync(new GamesMessage
+                        {
+                            GamesList = rooms.GamesFor(identity.PlayerId),
+                        });
+                        break;
+                    }
                     case MessageType.CreateRoom:
                     {
                         if (identity != null &&
