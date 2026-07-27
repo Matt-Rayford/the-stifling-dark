@@ -23,9 +23,9 @@ COPY --from=build /app ./
 COPY game-data/ /app/game-data/
 ENV GAME_DATA_DIR=/app/game-data
 
-# Room snapshots. Mount a volume here to keep games across redeploys.
+# Room snapshots land here. No VOLUME instruction on purpose - Railway rejects it
+# ("use Railway Volumes"); attach the platform volume (or a compose volume) at /data.
 ENV DATA_DIR=/data
-VOLUME /data
 
 # Milliseconds between bot turns; 0 makes bot seats instant.
 ENV BOT_DELAY_MS=1100
