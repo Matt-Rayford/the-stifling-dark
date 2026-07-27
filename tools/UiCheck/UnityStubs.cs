@@ -127,7 +127,12 @@ namespace UnityEngine
         MiddleLeft, MiddleCenter, MiddleRight,
         LowerLeft, LowerCenter, LowerRight,
     }
-    public enum KeyCode { Escape }
+    public enum KeyCode
+    {
+        Escape,
+        W, A, S, D,
+        UpArrow, DownArrow, LeftArrow, RightArrow,
+    }
     public enum RuntimeInitializeLoadType { AfterSceneLoad }
 
     [AttributeUsage(AttributeTargets.Method)]
@@ -160,6 +165,7 @@ namespace UnityEngine
         public TextureWrapMode wrapMode { get; set; }
         public FilterMode filterMode { get; set; }
         public void SetPixels32(Color32[] colors) { }
+        public Color32[] GetPixels32() => new Color32[width * height];
         public void Apply() { }
         public void Apply(bool updateMipmaps) { }
         public bool LoadImage(byte[] data) => true;
@@ -281,6 +287,7 @@ namespace UnityEngine
         public static bool GetMouseButtonDown(int button) => false;
         public static bool GetMouseButtonUp(int button) => false;
         public static bool GetKeyDown(KeyCode key) => false;
+        public static bool GetKey(KeyCode key) => false;
     }
 
     public static class Screen
@@ -292,6 +299,7 @@ namespace UnityEngine
     public static class Time
     {
         public static float time => 0f;
+        public static float deltaTime => 0f;
     }
 
     public static class Debug

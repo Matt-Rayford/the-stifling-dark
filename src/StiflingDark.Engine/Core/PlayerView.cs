@@ -310,17 +310,33 @@ namespace StiflingDark.Engine.Core
     public sealed partial class Game
     {
         /// <summary>
-        /// Log entry types an Investigator seat may read in full. Anything else — "adversary"
-        /// (positions, budgets, card names), "setup" (the Cultist and Altar placements), the
-        /// engine's own "todo" notes, and any type a later rule invents — is dropped, because
-        /// the conservative default for an unclassified line is "hidden".
+        /// Log entry types an Investigator seat may read in full. "adversary" is included: a
+        /// played card, a broken door, a Stalk/track/counter change, a Disappear or a Reveal
+        /// notice are all things a table player would see or hear happen. What is NOT public —
+        /// a hidden figure's current or stepped-through space, a forced drag's destination
+        /// while still Hidden, an unrevealed Grave/Altar location — is written under
+        /// <see cref="AdversaryHiddenPositionLogType"/> instead of "adversary" at the call
+        /// site (see Game.cs / Game.ItemEffects.cs / Game.Butcher.cs), so it falls through to
+        /// the conservative default below and stays dropped. "setup" (Cultist/Altar
+        /// placements), the engine's own "todo" notes, and any type a later rule invents are
+        /// dropped for the same reason: the conservative default for an unclassified line is
+        /// "hidden".
         /// </summary>
         private static readonly HashSet<string> InvestigatorPublicLogTypes = new HashSet<string>
         {
-            "ability", "condition", "death", "deck", "escape", "event", "evidence", "flashlight",
-            "gameover", "item", "lights", "objective", "reveal", "ride", "spirit", "sprint",
-            "token", "water", "wound",
+            "ability", "adversary", "condition", "death", "deck", "escape", "event", "evidence",
+            "flashlight", "gameover", "item", "lights", "objective", "reveal", "ride", "spirit",
+            "sprint", "token", "water", "wound",
         };
+
+        /// <summary>
+        /// Log type for "adversary" lines that name a hidden figure's own space or an
+        /// unrevealed token's location — the exact information <see cref="ViewFor"/> must keep
+        /// off an Investigator's screen even though the general "adversary" type above is now
+        /// public. Never added to <see cref="InvestigatorPublicLogTypes"/>: these lines are
+        /// meant to fall through to the default drop.
+        /// </summary>
+        private const string AdversaryHiddenPositionLogType = "adversary-secret";
 
         /// <summary>
         /// Adversary Counters an Investigator may read: the printed adversary-board tracks and

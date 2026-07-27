@@ -229,7 +229,11 @@ namespace StiflingDark.Engine.Tests
 
             int after = game.Graph.DistancesFrom(target, int.MaxValue, game.State.Overlay)[adv.Space];
             Assert.Equal(Math.Max(0, before - 2), after);
-            Assert.Contains(game.State.Log, e => e.Type == "adversary" && e.Detail.Contains("Firecrackers"));
+            // Type is "adversary" (Investigator-public) once Revealed by the drag, or
+            // "adversary-secret" (dropped from the Investigator log) while still Hidden — see
+            // PlayerView.AdversaryHiddenPositionLogType. Either way the drag itself is logged.
+            Assert.Contains(game.State.Log,
+                e => (e.Type == "adversary" || e.Type == "adversary-secret") && e.Detail.Contains("Firecrackers"));
         }
 
         [Fact]

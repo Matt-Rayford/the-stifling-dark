@@ -46,6 +46,36 @@ namespace StiflingDark.Unity
         }
 
         /// <summary>
+        /// An Investigator's face token masked to a circle, so the figure can fill the space's
+        /// own circle (2 * spaceRadius) exactly instead of showing the square photo underneath.
+        /// A per-investigator identity ring is drawn separately, in BoardView.
+        /// </summary>
+        public Sprite InvestigatorPortrait(string investigatorId) => CircularToken(InvestigatorFace(investigatorId));
+
+        /// <summary>
+        /// Same masked-circle treatment as <see cref="InvestigatorPortrait"/>, generalized to any
+        /// token art path rather than just an Investigator face — used for the board "minis"
+        /// (Shadow, Noise, Evidence, POI, Objective, Door) that should fill their space's own
+        /// circle exactly like a figure, instead of showing the square photo <see cref="Token"/>
+        /// returns.
+        /// </summary>
+        public Sprite CircularToken(string relativePath)
+        {
+            if (string.IsNullOrEmpty(relativePath))
+            {
+                return null;
+            }
+            string key = "circle:" + relativePath;
+            if (_cache.TryGetValue(key, out var cached))
+            {
+                return cached;
+            }
+            var sprite = LoadCircularSprite(Path.Combine(_streamingRoot, "tokens", relativePath), 118f);
+            _cache[key] = sprite;
+            return sprite;
+        }
+
+        /// <summary>
         /// The 4096x4096 board render for a map id. Tries StreamingAssets/textures first (what
         /// a built player has), then Assets/Textures (what the editor has straight after the
         /// sync script ran).
@@ -86,6 +116,54 @@ namespace StiflingDark.Unity
             }
             return Sprite.Create(texture, new Rect(0, 0, texture.width, texture.height),
                 new Vector2(0.5f, 0.5f), pixelsPerUnit, 0, SpriteMeshType.FullRect);
+        }
+
+        private static Sprite LoadCircularSprite(string path, float pixelsPerUnit)
+        {
+            var texture = LoadTexture(path);
+            if (texture == null)
+            {
+                return null;
+            }
+            var masked = MaskToCircle(texture);
+            return Sprite.Create(masked, new Rect(0, 0, masked.width, masked.height),
+                new Vector2(0.5f, 0.5f), pixelsPerUnit, 0, SpriteMeshType.FullRect);
+        }
+
+        /// <summary>
+        /// Copies a texture into a new one with alpha multiplied by a circle inscribed in the
+        /// square (1px anti-aliased edge) — a generated round alpha mask, the same soft-edge
+        /// technique UiSprites uses for its procedural discs and rings.
+        /// </summary>
+        private static Texture2D MaskToCircle(Texture2D source)
+        {
+            int w = source.width, h = source.height;
+            var masked = new Texture2D(w, h, TextureFormat.RGBA32, false)
+            {
+                hideFlags = HideFlags.DontSave,
+                wrapMode = TextureWrapMode.Clamp,
+                filterMode = FilterMode.Bilinear,
+            };
+            var pixels = source.GetPixels32();
+            float radius = Mathf.Min(w, h) / 2f - 1f;
+            float cx = w / 2f, cy = h / 2f;
+            for (int y = 0; y < h; y++)
+            {
+                int row = y * w;
+                float dy = y + 0.5f - cy;
+                for (int x = 0; x < w; x++)
+                {
+                    float dx = x + 0.5f - cx;
+                    float dist = Mathf.Sqrt(dx * dx + dy * dy);
+                    float alpha = Mathf.Clamp01(radius - dist + 0.5f);
+                    var c = pixels[row + x];
+                    c.a = (byte)(c.a * alpha);
+                    pixels[row + x] = c;
+                }
+            }
+            masked.SetPixels32(pixels);
+            masked.Apply();
+            return masked;
         }
 
         private static Texture2D LoadTexture(string path)

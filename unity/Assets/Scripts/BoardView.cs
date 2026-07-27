@@ -26,6 +26,10 @@ namespace StiflingDark.Unity
     {
         private const float MinOrthoSize = 400f;
         private const float DragThreshold = 6f;
+        // World units/second of camera pan per unit of orthographicSize, so WASD/arrow panning
+        // feels like a constant SCREEN-space speed at any zoom (the same reasoning as the
+        // mouse-drag pan's unitsPerPixel below).
+        private const float KeyPanUnitsPerSecondPerOrthoUnit = 1.6f;
 
         private readonly BoardModel _board;
         private readonly TokenArt _art;
@@ -55,6 +59,7 @@ namespace StiflingDark.Unity
         private double _aimAngle;
         private bool _aiming;
         private Transform _beamIndicator;
+        private Sprite _beamSprite;
 
         /// <summary>A space was left-clicked (and the click was not a pan).</summary>
         public Action<string> SpaceClicked;
@@ -100,6 +105,7 @@ namespace StiflingDark.Unity
             }
 
             _light = new LightOverlay(_root, board, 10);
+            _beamSprite = BuildBeamSprite(board.Db.Flashlight, board.Map.SpacePitch);
 
             _camera = Camera.main;
             if (_camera == null)
@@ -254,8 +260,8 @@ namespace StiflingDark.Unity
                 {
                     continue;
                 }
-                Token(pair.Key, TokenArt.DoorToken(pair.Value), new Color(0.80f, 0.55f, 0.35f),
-                    Describe.Door(pair.Value).Substring(0, 2), 0.78f, 22);
+                BoardMini(pair.Key, TokenArt.DoorToken(pair.Value), new Color(0.80f, 0.55f, 0.35f),
+                    Describe.Door(pair.Value).Substring(0, 2), 22);
             }
             foreach (string zone in view.FalteringZones)
             {
@@ -310,8 +316,8 @@ namespace StiflingDark.Unity
                 {
                     continue;
                 }
-                Token(evidence.Space, TokenArt.EvidenceToken(view.ScenarioId),
-                    new Color(0.95f, 0.86f, 0.42f), evidence.Zone, 0.7f, 22,
+                BoardMini(evidence.Space, TokenArt.EvidenceToken(view.ScenarioId),
+                    new Color(0.95f, 0.86f, 0.42f), evidence.Zone, 22,
                     "Evidence (" + _board.ZoneName(evidence.Zone) + ")" +
                     (evidence.Revealed ? " — revealed" : ""));
             }
@@ -321,9 +327,8 @@ namespace StiflingDark.Unity
         {
             foreach (var poi in view.PoiTokens)
             {
-                // The printed POI space is public map data; the token's position may not be.
-                Token(poi.PoiSpace, null, new Color(0.55f, 0.58f, 0.70f), "?", 0.5f, 20,
-                    "Point of Interest space");
+                // No marker on the printed POI space itself: the board art already shows the
+                // yellow "!" ring, and a synthetic badge there just reads as mystery clutter.
                 if (poi.Collected || string.IsNullOrEmpty(poi.TokenSpace))
                 {
                     continue;
@@ -334,7 +339,7 @@ namespace StiflingDark.Unity
                 string label = poi.CursedFront.HasValue
                     ? (poi.CursedFront.Value ? "Cursed Item front" : "General Item front")
                     : "Point of Interest token (face hidden)";
-                Token(poi.TokenSpace, art, new Color(0.72f, 0.62f, 0.90f), "P", 0.72f, 23,
+                BoardMini(poi.TokenSpace, art, new Color(0.72f, 0.62f, 0.90f), "P", 23,
                     label + (poi.ScoutedFaceDown ? " — Scouted, face-down" : ""));
             }
         }
@@ -352,8 +357,8 @@ namespace StiflingDark.Unity
         {
             foreach (var pair in view.BoardTokens)
             {
-                Token(pair.Value, TokenArt.ObjectiveToken(pair.Key),
-                    new Color(0.80f, 0.55f, 0.86f), Short(pair.Key), 0.62f, 22, pair.Key);
+                BoardMini(pair.Value, TokenArt.ObjectiveToken(pair.Key),
+                    new Color(0.80f, 0.55f, 0.86f), Short(pair.Key), 22, pair.Key);
             }
         }
 
@@ -366,8 +371,8 @@ namespace StiflingDark.Unity
                 {
                     continue;
                 }
-                Token(pair.Value, TokenArt.ObjectiveToken(pair.Key),
-                    new Color(0.55f, 0.82f, 0.88f), Short(pair.Key), 0.72f, 22, pair.Key);
+                BoardMini(pair.Value, TokenArt.ObjectiveToken(pair.Key),
+                    new Color(0.55f, 0.82f, 0.88f), Short(pair.Key), 22, pair.Key);
             }
         }
 
@@ -376,17 +381,10 @@ namespace StiflingDark.Unity
             foreach (var flashlight in view.Flashlights)
             {
                 var world = WorldOf(flashlight.Space);
-                var beam = NewSprite(_dynamic, "Beam", UiSprites.RoundedRect,
+                var beam = NewSprite(_dynamic, "Beam", _beamSprite,
                     new Color(1f, 0.86f, 0.55f, 0.10f), 12);
-                float length = (float)(_board.Db.Flashlight.LengthInSpacePitches * _board.Map.SpacePitch);
-                var spriteRenderer = beam.GetComponent<SpriteRenderer>();
-                spriteRenderer.drawMode = SpriteDrawMode.Sliced;
-                spriteRenderer.size = new Vector2(length, (float)_board.Map.SpacePitch * 1.1f);
-                // The engine's angle is board-space (y down); world y is flipped.
-                float degrees = (float)(-flashlight.AngleRadians * Mathf.Rad2Deg);
-                beam.transform.position = world +
-                    Quaternion.Euler(0, 0, degrees) * new Vector3(length / 2f, 0f, 0f);
-                beam.transform.rotation = Quaternion.Euler(0, 0, degrees);
+                beam.transform.position = world;
+                beam.transform.rotation = Quaternion.Euler(0, 0, BeamDegrees(flashlight.AngleRadians));
             }
         }
 
@@ -398,14 +396,14 @@ namespace StiflingDark.Unity
             foreach (var pair in adversary.ShadowTokens)
             {
                 // key is the token's own id ("main", "frayed", or a space), value is its space.
-                Token(pair.Value, TokenArt.ShadowToken(adversary.DefId, faceUp: false),
-                    new Color(0.22f, 0.22f, 0.28f), "S", 0.8f, 24,
+                BoardMini(pair.Value, TokenArt.ShadowToken(adversary.DefId, faceUp: false),
+                    new Color(0.22f, 0.22f, 0.28f), "S", 24,
                     "Shadow token (" + pair.Key + ")");
             }
             foreach (string space in adversary.NoiseTokens)
             {
-                Token(space, TokenArt.NoiseToken(adversary.DefId),
-                    new Color(0.72f, 0.70f, 0.42f), "N", 0.7f, 24, "Noise token");
+                BoardMini(space, TokenArt.NoiseToken(adversary.DefId),
+                    new Color(0.72f, 0.70f, 0.42f), "N", 24, "Noise token");
             }
             foreach (var pair in adversary.SpineChill)
             {
@@ -462,19 +460,33 @@ namespace StiflingDark.Unity
                     (panel.Dead ? "  (dead)" : "") +
                     (panel.SpiritId != null ? "  Spirit: " + _describe.Card(panel.SpiritId) : "");
 
-                var go = Figure(panel.Space, panel.Dead ? null : TokenArt.InvestigatorFace(panel.DefId),
+                // Portraits fill the space's own circle exactly (2 * spaceRadius) — a masked
+                // round crop of the face art, not the smaller square the fallback path uses.
+                var portrait = panel.Dead ? null : _art.InvestigatorPortrait(panel.DefId);
+                var go = FigureSprite(panel.Space, portrait,
                     panel.Dead ? new Color(0.45f, 0.45f, 0.48f) : color,
-                    _describe.Initials(panel.DefId), isMe ? 33 : 32, tip);
+                    _describe.Initials(panel.DefId), isMe ? 33 : 32, tip, 2f);
                 if (go == null)
                 {
                     continue;
                 }
-                // Your own figure wears a ring so it is findable at any zoom.
-                var ring = NewSprite(_dynamic, "Own", UiSprites.Ring,
-                    isMe ? new Color(1f, 0.92f, 0.62f, 0.95f) : new Color(0f, 0f, 0f, 0.45f),
+                // A thin ring in the Investigator's own identity color, drawn just outside the
+                // now space-filling portrait so it stays visible; yours is brighter/bigger so
+                // your own figure is still findable at any zoom.
+                var ringColor = panel.Dead ? new Color(0.55f, 0.55f, 0.58f) : color;
+                if (isMe)
+                {
+                    // Lighten toward white so your own ring reads brighter than the rest.
+                    ringColor = new Color(
+                        ringColor.r + (1f - ringColor.r) * 0.5f,
+                        ringColor.g + (1f - ringColor.g) * 0.5f,
+                        ringColor.b + (1f - ringColor.b) * 0.5f);
+                }
+                var ring = NewSprite(_dynamic, "Identity", UiSprites.Ring,
+                    new Color(ringColor.r, ringColor.g, ringColor.b, isMe ? 0.95f : 0.85f),
                     isMe ? 34 : 31);
                 ring.transform.position = go.transform.position;
-                Scale(ring, (float)_board.Map.SpaceRadius * (isMe ? 2.05f : 1.95f));
+                Scale(ring, (float)_board.Map.SpaceRadius * (isMe ? 2.22f : 2.1f));
 
                 foreach (var carrier in view.Objective.TokenCarriers.Where(c => c.Value == panel.DefId))
                 {
@@ -528,6 +540,24 @@ namespace StiflingDark.Unity
                 initials, 1.35f, sortingOrder);
         }
 
+        /// <summary>Like <see cref="Figure"/>, but for a pre-resolved sprite (e.g. an already
+        /// circle-masked portrait) rather than an art path, and a caller-chosen size.</summary>
+        private GameObject FigureSprite(string spaceId, Sprite sprite, Color color, string initials,
+            int sortingOrder, string note, float sizeInRadii)
+        {
+            var space = _board.SpaceOrNull(spaceId);
+            if (space == null)
+            {
+                return null;
+            }
+            if (!string.IsNullOrEmpty(note))
+            {
+                Note(spaceId, note);
+            }
+            return PlaceTokenSprite(new Vector3((float)space.X, -(float)space.Y, 0f), sprite, color,
+                initials, sizeInRadii, sortingOrder);
+        }
+
         /// <summary>
         /// Pin a line of hover text to a space. Everything on a space shares one tooltip: with
         /// figures, shadow tokens and objective tokens overlapping at this zoom, per-sprite
@@ -544,6 +574,40 @@ namespace StiflingDark.Unity
             {
                 lines.Add(line);
             }
+        }
+
+        /// <summary>
+        /// A board "mini" — Shadow, Noise, Evidence, POI, Objective, and Door tokens — rendered
+        /// exactly like an Investigator portrait (<see cref="FigureSprite"/>): a full circle
+        /// filling the space's own diameter (2 * spaceRadius) and centered on it, circularly
+        /// masked via TokenArt's shared MaskToCircle path (<see cref="TokenArt.CircularToken"/>)
+        /// instead of the small square crop the plain art texture shows underneath. The
+        /// fallback-disc/label/tint behavior of <see cref="PlaceTokenSprite"/> is unchanged, so
+        /// a token still missing synced art keeps showing its colored disc + initials.
+        ///
+        /// Unlike <see cref="Token"/> this is only for tokens meant to occupy a space's whole
+        /// visual footprint by themselves. SpineChill, Faltering, Barricade, Medical Items, the
+        /// printed-POI-space "?" landmark, and the edge markers (Window/Passage) stay on the
+        /// small offset <see cref="Token"/>/<see cref="PlaceToken"/> path: they are secondary
+        /// badges layered over a figure, an edge, or a permanent map landmark rather than a
+        /// standalone mini, and blowing them up to full-space size would either hide the figure
+        /// underneath or misrepresent a printed space as a placed token.
+        /// </summary>
+        private GameObject BoardMini(string spaceId, string artPath, Color fallbackColor, string label,
+            int sortingOrder, string note = null)
+        {
+            var space = _board.SpaceOrNull(spaceId);
+            if (space == null)
+            {
+                return null;
+            }
+            if (!string.IsNullOrEmpty(note))
+            {
+                Note(spaceId, note);
+            }
+            var sprite = artPath == null ? null : _art.CircularToken(artPath);
+            return PlaceTokenSprite(new Vector3((float)space.X, -(float)space.Y, 0f), sprite,
+                fallbackColor, label, 2f, sortingOrder);
         }
 
         private GameObject Token(string spaceId, string artPath, Color color, string label,
@@ -570,6 +634,12 @@ namespace StiflingDark.Unity
             string label, float sizeInRadii, int sortingOrder)
         {
             var sprite = artPath == null ? null : _art.Token(artPath);
+            return PlaceTokenSprite(world, sprite, fallbackColor, label, sizeInRadii, sortingOrder);
+        }
+
+        private GameObject PlaceTokenSprite(Vector3 world, Sprite sprite, Color fallbackColor,
+            string label, float sizeInRadii, int sortingOrder)
+        {
             float size = (float)_board.Map.SpaceRadius * sizeInRadii;
             var go = NewSprite(_dynamic, "Token", sprite ?? UiSprites.Circle,
                 sprite != null ? Color.white : fallbackColor, sortingOrder);
@@ -664,12 +734,8 @@ namespace StiflingDark.Unity
             {
                 return;
             }
-            float length = (float)(_board.Db.Flashlight.LengthInSpacePitches * _board.Map.SpacePitch);
-            var go = NewSprite(_dynamic, "AimBeam", UiSprites.RoundedRect,
+            var go = NewSprite(_dynamic, "AimBeam", _beamSprite,
                 new Color(1f, 0.88f, 0.58f, 0.22f), 15);
-            var renderer = go.GetComponent<SpriteRenderer>();
-            renderer.drawMode = SpriteDrawMode.Sliced;
-            renderer.size = new Vector2(length, (float)_board.Map.SpacePitch * 1.15f);
             _beamIndicator = go.transform;
         }
 
@@ -687,8 +753,7 @@ namespace StiflingDark.Unity
             {
                 return;
             }
-            // The engine works in board coordinates, which run y-DOWN; world y runs up.
-            double angle = Math.Atan2(-dy, dx);
+            double angle = BoardModel.AngleFromWorldOffset(dx, dy);
             if (!force && !double.IsNaN(_aimAngle) && Math.Abs(Delta(angle, _aimAngle)) < 0.004)
             {
                 return;
@@ -697,12 +762,81 @@ namespace StiflingDark.Unity
             _light.SetPreview(_board.PreviewBright(_aimFrom, angle));
             if (_beamIndicator != null)
             {
-                float length = (float)(_board.Db.Flashlight.LengthInSpacePitches * _board.Map.SpacePitch);
-                float degrees = (float)(-angle * Mathf.Rad2Deg);
-                _beamIndicator.rotation = Quaternion.Euler(0, 0, degrees);
-                _beamIndicator.position = origin +
-                    Quaternion.Euler(0, 0, degrees) * new Vector3(length / 2f, 0f, 0f);
+                _beamIndicator.rotation = Quaternion.Euler(0, 0, BeamDegrees(angle));
+                _beamIndicator.position = origin;
             }
+        }
+
+        /// <summary>
+        /// The beam sprite is built pointing toward world +y (see <see cref="BuildBeamSprite"/>)
+        /// with its pivot at the notch, so turning an engine board-space angle into a Z rotation
+        /// needs the same -90deg correction as the direction itself: engine 0 rad (+x/east) must
+        /// land on world +x, but the sprite's un-rotated forward is world +y, 90deg away.
+        /// </summary>
+        private static float BeamDegrees(double angleRadians) =>
+            (float)(-angleRadians * Mathf.Rad2Deg) - 90f;
+
+        /// <summary>
+        /// Rasterizes the flashlight's real 38-point template outline (StreamingAssets
+        /// game-data/flashlight.json, already parsed into <paramref name="def"/> by
+        /// GameDatabase) into a translucent-alpha Sprite, mirroring exactly how the engine's
+        /// FlashlightBeam maps template pixels to board pixels: origin at the notch, y-down,
+        /// beam toward -y, scaled so the template's full length spans LengthInSpacePitches
+        /// board pitches. Built once and reused (just rotated/positioned) for every aim preview
+        /// and every placed flashlight — the shape never changes, only where it points.
+        /// </summary>
+        private static Sprite BuildBeamSprite(FlashlightDef def, double spacePitch)
+        {
+            int w = Mathf.Max(1, Mathf.CeilToInt((float)def.ImageWidth));
+            int h = Mathf.Max(1, Mathf.CeilToInt((float)def.ImageHeight));
+            var texture = new Texture2D(w, h, TextureFormat.RGBA32, false)
+            {
+                hideFlags = HideFlags.DontSave,
+                wrapMode = TextureWrapMode.Clamp,
+                filterMode = FilterMode.Bilinear,
+            };
+            var pixels = new Color32[w * h];
+            var fill = new Color32(255, 255, 255, 255);
+            for (int py = 0; py < h; py++)
+            {
+                // Texture rows run bottom-up; the template was measured top-down (y-down, per
+                // the engine's FlashlightBeam). Row 0 (bottom of the sprite) is the notch end.
+                double templateY = def.ImageHeight - py;
+                int row = py * w;
+                for (int px = 0; px < w; px++)
+                {
+                    if (PointInBeamOutline(def.OutlinePolygon, px + 0.5, templateY))
+                    {
+                        pixels[row + px] = fill;
+                    }
+                }
+            }
+            texture.SetPixels32(pixels);
+            texture.Apply(false);
+
+            float pivotX = (float)(def.OriginX / def.ImageWidth);
+            float pivotY = (float)(1.0 - def.OriginY / def.ImageHeight);
+            double scale = def.LengthInSpacePitches * spacePitch / def.ImageHeight;
+            float pixelsPerUnit = (float)(1.0 / scale);
+            return Sprite.Create(texture, new Rect(0, 0, w, h), new Vector2(pivotX, pivotY),
+                pixelsPerUnit, 0, SpriteMeshType.FullRect);
+        }
+
+        /// <summary>Point-in-polygon ray cast — the same algorithm as FlashlightBeam.PointInPolygon.</summary>
+        private static bool PointInBeamOutline(List<double[]> polygon, double x, double y)
+        {
+            bool inside = false;
+            int n = polygon.Count;
+            for (int i = 0, j = n - 1; i < n; j = i++)
+            {
+                double xi = polygon[i][0], yi = polygon[i][1];
+                double xj = polygon[j][0], yj = polygon[j][1];
+                if ((yi > y) != (yj > y) && x < (xj - xi) * (y - yi) / (yj - yi) + xi)
+                {
+                    inside = !inside;
+                }
+            }
+            return inside;
         }
 
         private static double Delta(double a, double b)
@@ -735,6 +869,7 @@ namespace StiflingDark.Unity
 
             HandleZoom(overUi);
             HandlePan(overUi);
+            HandleKeyPan(overUi);
             if (_aiming)
             {
                 UpdateAim(force: false);
@@ -775,6 +910,7 @@ namespace StiflingDark.Unity
             var after = _camera.ScreenToWorldPoint(Input.mousePosition);
             // Zoom toward the cursor: keep the world point under the mouse where it was.
             _camera.transform.position += before - after;
+            ClampCameraToBoard();
         }
 
         private void HandlePan(bool overUi)
@@ -806,6 +942,61 @@ namespace StiflingDark.Unity
             {
                 _dragging = false;
             }
+            ClampCameraToBoard();
+        }
+
+        /// <summary>WASD and the arrow keys pan the camera, alongside the existing scroll-zoom
+        /// and mouse drag. Speed is in world units, scaled by the current zoom (orthographicSize)
+        /// so a key-held pan feels like a constant on-screen speed at any zoom level.</summary>
+        private void HandleKeyPan(bool overUi)
+        {
+            if (overUi)
+            {
+                return;
+            }
+            float dx = 0f, dy = 0f;
+            if (Input.GetKey(KeyCode.A) || Input.GetKey(KeyCode.LeftArrow))
+            {
+                dx -= 1f;
+            }
+            if (Input.GetKey(KeyCode.D) || Input.GetKey(KeyCode.RightArrow))
+            {
+                dx += 1f;
+            }
+            if (Input.GetKey(KeyCode.S) || Input.GetKey(KeyCode.DownArrow))
+            {
+                dy -= 1f;
+            }
+            if (Input.GetKey(KeyCode.W) || Input.GetKey(KeyCode.UpArrow))
+            {
+                dy += 1f;
+            }
+            if (dx == 0f && dy == 0f)
+            {
+                return;
+            }
+            var dir = new Vector3(dx, dy, 0f);
+            float magnitude = Mathf.Sqrt(dx * dx + dy * dy);
+            if (magnitude > 1f)
+            {
+                // A diagonal key combo should not pan faster than a single cardinal direction.
+                dir = dir / magnitude;
+            }
+            float speed = _camera.orthographicSize * KeyPanUnitsPerSecondPerOrthoUnit;
+            _camera.transform.position += dir * (speed * Time.deltaTime);
+            ClampCameraToBoard();
+        }
+
+        /// <summary>Keeps the camera's center over the board rectangle, plus a one-screen-size
+        /// margin so the far edge can still be framed comfortably — panning (mouse or keys)
+        /// cannot drift the view off into empty space indefinitely.</summary>
+        private void ClampCameraToBoard()
+        {
+            float margin = _camera.orthographicSize;
+            var pos = _camera.transform.position;
+            pos.x = Mathf.Clamp(pos.x, -margin, (float)_board.SourceWidth + margin);
+            pos.y = Mathf.Clamp(pos.y, -(float)_board.SourceHeight - margin, margin);
+            _camera.transform.position = pos;
         }
 
         private void HandleHoverAndClick(bool overUi)

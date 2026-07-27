@@ -795,7 +795,11 @@ namespace StiflingDark.Engine.Core
                 }
             }
             ApplyAdversaryCarriageRotation();
-            Log("adversary", $"moved {from} -> {to} ({cost} MP, {State.Adversary.MpRemaining} left)");
+            // Only Investigator-hidden while the figure itself is still Hidden after this step:
+            // once Revealed, the physical token is standing in plain sight, so naming the space
+            // it moved to/from is no different from what is already on the table.
+            Log(State.Adversary.Revealed ? "adversary" : AdversaryHiddenPositionLogType,
+                $"moved {from} -> {to} ({cost} MP, {State.Adversary.MpRemaining} left)");
             OnAdversaryMoveStep(from, to);
         }
 

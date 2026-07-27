@@ -149,7 +149,8 @@ unity/
     Textures/          board-sawmill.png, board-amusement-park.png (gitignored, regenerable)
 tools/
   sync_unity.sh        the one build step
-  ClientCheck/         compiles the UnityEngine-free client files against the real engine
+  ClientCheck/         compiles the UnityEngine-free client files against the real engine,
+                       then runs a deterministic flashlight-angle regression against it
   UiCheck/             compiles ALL client files against a stub UnityEngine surface
 ```
 
@@ -173,7 +174,8 @@ the same full-res pixel space.
 ## 8. Verifying changes without opening Unity
 
 ```sh
-~/.dotnet/dotnet build tools/ClientCheck    # protocol client, board model, describers
+~/.dotnet/dotnet build tools/ClientCheck    # protocol client, board model, describers + a
+                                             # real-engine flashlight-angle sanity check
 ~/.dotnet/dotnet build tools/UiCheck        # every client file, against UnityEngine stubs
 ~/.dotnet/dotnet test                       # the real suite: engine + server
 ```

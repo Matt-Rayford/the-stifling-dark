@@ -88,6 +88,19 @@ namespace StiflingDark.Unity
             _beam.ComputeBright(Graph, atSpace, angleRadians, _blocker);
 
         /// <summary>
+        /// Turns a mouse offset from the aiming Investigator's figure, in WORLD units (client
+        /// is y-up), into the engine's own board-space angle convention (board is y-down,
+        /// 0 rad = +x/east — see <see cref="Core.FlashlightBeam.ComputeBright"/>). BoardView
+        /// draws a board point (x, y) at world (x, -y) (see BoardView's class comment), so
+        /// world-down (-y) is board-down (+y) and vice versa: negate the y offset, leave x
+        /// alone. Pulled out as a pure function, with no UnityEngine reference, so the one line
+        /// a mirrored beam would get wrong has a deterministic check in tools/ClientCheck
+        /// without needing a Unity runtime.
+        /// </summary>
+        public static double AngleFromWorldOffset(double worldDx, double worldDy) =>
+            Math.Atan2(-worldDy, worldDx);
+
+        /// <summary>
         /// Rebuild the engine's <see cref="BoardOverlay"/> from the redacted view, so the
         /// client can ask MapGraph the same light and adjacency questions the server does.
         /// </summary>

@@ -391,11 +391,15 @@ namespace StiflingDark.Engine.Core
                     if (dragged != adv.Space)
                     {
                         adv.Space = dragged;
-                        Log("adversary", $"Firecrackers drag the Adversary to {dragged}");
                         if (!adv.Revealed && IsBright(dragged))
                         {
                             RevealAdversary("dragged into the light by Firecrackers");
                         }
+                        // Investigator-hidden unless the drag just Revealed him (checked above,
+                        // Revealed is already updated): otherwise this names exactly where the
+                        // still-Hidden main figure now stands.
+                        Log(adv.Revealed ? "adversary" : AdversaryHiddenPositionLogType,
+                            $"Firecrackers drag the Adversary to {dragged}");
                     }
                     foreach (var figure in adv.Figures.Where(f => f.Alive))
                     {
@@ -405,12 +409,14 @@ namespace StiflingDark.Engine.Core
                             continue;
                         }
                         figure.Space = next;
-                        Log("adversary", $"Firecrackers drag {figure.Id} to {next}");
                         if (!figure.Revealed && IsBright(next))
                         {
                             figure.Revealed = true;
                             Log("reveal", $"{figure.Id} at {next} (caught in the light)");
                         }
+                        // Same reasoning as the main figure above: only public once Revealed.
+                        Log(figure.Revealed ? "adversary" : AdversaryHiddenPositionLogType,
+                            $"Firecrackers drag {figure.Id} to {next}");
                     }
                     Log("item", $"{inv.DefId} set off Firecrackers at {bang}");
                     break;

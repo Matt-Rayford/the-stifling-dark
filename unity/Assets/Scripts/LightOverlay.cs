@@ -24,14 +24,23 @@ namespace StiflingDark.Unity
         // in the mask is a soft gradient, so bilinear filtering hides the resolution.
         private const int Resolution = 1024;
 
-        // Darkness alpha per light level. Dark is heavy but not opaque — the designer still
-        // needs to see the printed graph to plan a route through unlit rooms.
-        private const float OffBoardAlpha = 0.90f;
-        private const float DarkAlpha = 0.86f;
-        private const float DimAlpha = 0.52f;
-        private const float BrightAlpha = 0.05f;
+        // Darkness alpha per light level — designer-tuned (2026-07 playtest: "dimly lit, not
+        // dark", players must still be able to see the map everywhere). These three numbers are
+        // the only ones that control how dark the mask ever gets; tune here only.
+        private const float DarkAlpha = 0.50f;
+        private const float DimAlpha = 0.25f;
+        private const float BrightAlpha = 0.0f;
+        // Bright pools additionally get a warm wash instead of literally no effect (see
+        // BrightTint below), so a flashlight's light reads as POSITIVELY bright rather than
+        // merely "un-darkened".
+        private const float BrightTintAlpha = 0.12f;
+
+        // The area outside any space (pure background) stays close to opaque regardless of the
+        // three levels above — there is nothing there to see.
+        private const float OffBoardAlpha = 0.55f;
 
         private static readonly Color32 Shade = new Color32(4, 5, 10, 255);
+        private static readonly Color32 BrightTint = new Color32(255, 222, 165, 255);
         // A warm amber wash for the beam being aimed: not the final light, an intention.
         private static readonly Color32 Preview = new Color32(255, 214, 148, 66);
 
@@ -140,10 +149,20 @@ namespace StiflingDark.Unity
                 var level = view == null
                     ? space.PrintedLight
                     : _board.Graph.EffectiveLight(space.Id, overlay);
-                float alpha = level == LightLevel.Bright
-                    ? BrightAlpha
-                    : level == LightLevel.Dim ? DimAlpha : DarkAlpha;
-                var color = Shade;
+                Color32 color;
+                float alpha;
+                if (level == LightLevel.Bright)
+                {
+                    color = BrightTint;
+                    // BrightAlpha (0, no darkening at all) plus a small warm wash on top, so a
+                    // Bright pool reads as light, not just "un-darkened".
+                    alpha = BrightAlpha + BrightTintAlpha;
+                }
+                else
+                {
+                    color = Shade;
+                    alpha = level == LightLevel.Dim ? DimAlpha : DarkAlpha;
+                }
                 color.a = (byte)(alpha * 255f);
                 PaintSpace(_base, space.Id, color, blendMinimum: true);
             }

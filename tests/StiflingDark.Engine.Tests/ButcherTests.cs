@@ -218,7 +218,7 @@ namespace StiflingDark.Engine.Tests
         // ---------- Abilities ----------
 
         [Fact]
-        public void Disturbed_presence_drains_lungs_and_grants_a_stalk_for_two_targets()
+        public void Disturbed_presence_drains_lungs_and_grants_a_stalk_for_two_targets_at_turn_end()
         {
             var game = NewButcherGame("rend", new List<string> { "disturbed-presence", "escalating-terror" });
             FinishInvestigatorTurns(game);
@@ -232,10 +232,66 @@ namespace StiflingDark.Engine.Tests
             int lucyStamina = lucy.Stamina;
 
             game.PlayAdversaryCard("disturbed-presence", new List<string> { "aira", "lucy-belle" });
+            // Arming the card must not resolve it immediately: nothing happens until the turn
+            // actually ends.
+            Assert.Equal(airaStamina, aira.Stamina);
+            Assert.Equal(lucyStamina, lucy.Stamina);
+            Assert.Equal(0, adv.Counters.TryGetValue("stalk", out int s) ? s : 0);
+
+            game.AdversaryEndTurn();
 
             Assert.Equal(airaStamina - 1, aira.Stamina);
             Assert.Equal(lucyStamina - 1, lucy.Stamina);
             Assert.Empty(aira.Wounds); // Lungs lost this way do not incur a Wound
+            Assert.Equal(1, adv.Counters["stalk"]);
+        }
+
+        [Fact]
+        public void Disturbed_presence_resolves_from_the_butchers_final_position_not_where_it_was_played()
+        {
+            var game = NewButcherGame("rend", new List<string> { "disturbed-presence", "escalating-terror" });
+            FinishInvestigatorTurns(game);
+            var adv = game.State.Adversary;
+            var aira = Inv(game, "aira");
+            var within4 = game.Graph.DistancesFrom(adv.Space, 4, game.State.Overlay).Keys.ToList();
+            aira.Space = within4[0]; // within 4 of where the Butcher plays the card...
+            int airaStamina = aira.Stamina;
+
+            game.PlayAdversaryCard("disturbed-presence");
+
+            // ...but he then moves far enough away that nobody is within 4 when his turn ends.
+            string farSpace = game.Graph.Def.Spaces.Select(s => s.Id)
+                .First(id => !game.Graph.DistancesFrom(id, 4, game.State.Overlay).ContainsKey(aira.Space));
+            adv.Space = farSpace;
+
+            game.AdversaryEndTurn();
+
+            Assert.Equal(airaStamina, aira.Stamina); // no drain
+            Assert.Equal(0, adv.Counters.TryGetValue("stalk", out int s) ? s : 0); // no stalk
+        }
+
+        [Fact]
+        public void Disturbed_presence_drains_everyone_within_4_of_the_final_position_even_if_2_were_never_targeted_when_played()
+        {
+            var game = NewButcherGame("rend", new List<string> { "disturbed-presence", "escalating-terror" });
+            FinishInvestigatorTurns(game);
+            var adv = game.State.Adversary;
+            var aira = Inv(game, "aira");
+            var lucy = Inv(game, "lucy-belle");
+            int airaStamina = aira.Stamina;
+            int lucyStamina = lucy.Stamina;
+
+            // Play the card (no targets required to arm it), then move the Butcher so that both
+            // Aira and Lucy Belle end up within 4 of his FINAL space.
+            game.PlayAdversaryCard("disturbed-presence");
+            var within4 = game.Graph.DistancesFrom(adv.Space, 4, game.State.Overlay).Keys.ToList();
+            aira.Space = within4[0];
+            lucy.Space = within4[0];
+
+            game.AdversaryEndTurn();
+
+            Assert.Equal(airaStamina - 1, aira.Stamina);
+            Assert.Equal(lucyStamina - 1, lucy.Stamina);
             Assert.Equal(1, adv.Counters["stalk"]);
         }
 

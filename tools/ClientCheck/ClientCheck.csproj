@@ -6,7 +6,15 @@
     id-to-label layer (Describe.cs). There is no Unity editor on the build machine, so this is
     how those three files get a real compiler run against the engine + protocol assemblies.
 
+    It also runs a small deterministic regression test (Program.cs) over the REAL engine DLL:
+    the flashlight beam's angle math (BoardModel.AngleFromWorldOffset) and its exact Bright set
+    (FlashlightBeam.ComputeBright) against known-good space ids on the sawmill map. The
+    RunSanityCheck target below runs the built exe after every build, so:
+
       ~/.dotnet/dotnet build tools/ClientCheck
+
+    fails (non-zero exit, from the Exec task) if that math ever regresses — not just when it
+    fails to compile.
 
     Deliberately NOT part of TheStiflingDark.sln: `dotnet test` at the repo root must keep
     seeing exactly the engine, protocol, server, bots, and their tests.
@@ -14,24 +22,36 @@
     by Unity itself.
   -->
   <PropertyGroup>
-    <TargetFramework>netstandard2.1</TargetFramework>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
     <RootNamespace>StiflingDark.Unity</RootNamespace>
     <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
     <LangVersion>9.0</LangVersion>
+    <Nullable>disable</Nullable>
+    <InvariantGlobalization>true</InvariantGlobalization>
   </PropertyGroup>
 
   <ItemGroup>
     <Compile Include="../../unity/Assets/Scripts/Session.cs" />
     <Compile Include="../../unity/Assets/Scripts/BoardModel.cs" />
     <Compile Include="../../unity/Assets/Scripts/Describe.cs" />
+    <Compile Include="Program.cs" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="../../src/StiflingDark.Protocol/StiflingDark.Protocol.csproj" />
+    <ProjectReference Include="../../src/StiflingDark.Engine/StiflingDark.Engine.csproj" />
   </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="Newtonsoft.Json" Version="13.0.4" />
   </ItemGroup>
+
+  <Target Name="RunSanityCheck" AfterTargets="Build">
+    <!-- Same DOTNET convention as tools/sync_unity.sh: this repo's dotnet lives at
+         ~/.dotnet/dotnet, not necessarily on PATH or where the apphost's own hostfxr resolver
+         looks, so run the built dll through the SDK's dotnet muxer explicitly. -->
+    <Exec Command="bash -c &quot;\&quot;${DOTNET:-$HOME/.dotnet/dotnet}\&quot; exec \&quot;$(TargetPath)\&quot;&quot;" />
+  </Target>
 
 </Project>

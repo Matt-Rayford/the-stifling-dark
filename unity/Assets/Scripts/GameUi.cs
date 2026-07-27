@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using StiflingDark.Engine.Core;
 using StiflingDark.Engine.Data;
@@ -815,6 +816,28 @@ namespace StiflingDark.Unity
                     args => Send(new UseMajorAbilityCommand { Args = args })),
                 active && me.MajorAbilityTokens > 0);
 
+            // Mitchell's Minor ("Sweep") fires AFTER his own turn already ended — the engine
+            // allows it off-turn (UseMinorAbility resolves invId "mitchell" directly rather
+            // than the active Investigator) — so it needs its own always-visible button rather
+            // than living behind the generic "Use MINOR ability" (which is greyed out except on
+            // his own active turn). Offered whenever his Flashlight is still on the board; if
+            // the view happens not to carry the "already Swept" round modifier for some reason,
+            // this stays enabled per this file's own rule (see the class doc comment): an
+            // over-eager button that explains itself beats a hidden one.
+            if (me.DefId == "mitchell")
+            {
+                var placement = view.Flashlights.FirstOrDefault(f => f.InvestigatorId == "mitchell");
+                if (placement != null)
+                {
+                    bool alreadySwept = view.RoundModifiers.ContainsKey(Game.SweepUsedPrefix + "mitchell");
+                    ActionButton("Sweep flashlight", () => BeginSweepAim(placement.Space),
+                        !alreadySwept,
+                        alreadySwept
+                            ? "Sweep may only be used once per Flashlight."
+                            : "Aim the Flashlight's 2nd position.");
+                }
+            }
+
             // Another Investigator's ability, for the cards that let you lend one.
             foreach (var other in view.Investigators.Where(i => i.DefId != me.DefId))
             {
@@ -1133,6 +1156,29 @@ namespace StiflingDark.Unity
             _boardView.FocusOn(me.Space);
             _boardView.BeginAim(me.Space,
                 angle => Send(new PlaceFlashlightCommand { AngleRadians = angle }),
+                () => Render());
+            Render();
+        }
+
+        /// <summary>
+        /// Re-enters beam-aiming for Mitchell's Sweep, anchored at the FLASHLIGHT'S space
+        /// rather than his own (he may well have moved since placing it, and the printed text
+        /// moves the beam, not him). Reuses the same aim mode as <see cref="BeginFlashlightAim"/>
+        /// so the live ComputeBright preview is identical; on confirm it sends the Minor Ability
+        /// wire format (UseMinorAbilityCommand, invId "mitchell", the angle as its one string
+        /// arg) rather than PlaceFlashlightCommand, matching how MitchellSweep parses
+        /// use.Args[0] server-side.
+        /// </summary>
+        private void BeginSweepAim(string flashlightSpace)
+        {
+            _prompt.Hide();
+            _boardView.FocusOn(flashlightSpace);
+            _boardView.BeginAim(flashlightSpace,
+                angle => Send(new UseMinorAbilityCommand
+                {
+                    InvestigatorId = "mitchell",
+                    Args = new List<string> { angle.ToString("R", CultureInfo.InvariantCulture) },
+                }),
                 () => Render());
             Render();
         }

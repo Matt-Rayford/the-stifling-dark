@@ -498,7 +498,7 @@ namespace StiflingDark.Engine.Tests
         }
 
         [Fact]
-        public void The_investigator_log_never_carries_adversary_or_setup_lines()
+        public void The_investigator_log_never_carries_setup_or_todo_lines()
         {
             var game = NewGame("cult-of-hunlow");
             foreach (var inv in game.State.Investigators.ToList())
@@ -506,15 +506,8 @@ namespace StiflingDark.Engine.Tests
                 game.BeginInvestigatorTurn(inv.DefId);
                 game.EndTurnWithoutFinalAction();
             }
-            // One Cultist step: the engine logs it as "adversary", which is exactly the kind of
-            // line the Investigators must not be handed.
-            var cultist = game.State.Adversary.Figures[0];
-            game.CultistMoveStep(cultist.Id,
-                Reachable(game, cultist.Space).First(id => !game.State.Adversary.Figures
-                    .Any(f => f.Space == id) && id != game.State.Adversary.Space));
 
             var investigator = InvestigatorView(game);
-            Assert.DoesNotContain(investigator.Log, e => e.Type == "adversary");
             // "setup" names every Cultist's starting space and the Altar.
             Assert.DoesNotContain(investigator.Log, e => e.Type == "setup");
             Assert.DoesNotContain(investigator.Log, e => e.Type == "todo");
@@ -523,6 +516,55 @@ namespace StiflingDark.Engine.Tests
             Assert.Contains(adversary.Log, e => e.Type == "setup");
             // The Investigators still get the public narration.
             Assert.Contains(investigator.Log, e => e.Type == "event");
+        }
+
+        [Fact]
+        public void A_played_adversary_card_line_is_visible_to_investigators()
+        {
+            // The designer's live-playtest bug: a played card, a broken door, a Stalk change --
+            // anything a table player would physically see -- must not be silently dropped just
+            // because the engine tags it "adversary".
+            var game = NewGame(abilities: new List<string> { "escalating-terror", "decay" });
+            foreach (var inv in game.State.Investigators.ToList())
+            {
+                game.BeginInvestigatorTurn(inv.DefId);
+                game.EndTurnWithoutFinalAction();
+            }
+            // Escalating Terror has no Stalk cost and needs no target: safe to play blind here.
+            game.PlayAdversaryCard("escalating-terror");
+
+            var investigator = InvestigatorView(game);
+            Assert.Contains(investigator.Log,
+                e => e.Type == "adversary" && e.Detail == "played escalating-terror");
+        }
+
+        [Fact]
+        public void A_hidden_position_move_line_is_not_visible_to_investigators()
+        {
+            var game = NewGame();
+            foreach (var inv in game.State.Investigators.ToList())
+            {
+                game.BeginInvestigatorTurn(inv.DefId);
+                game.EndTurnWithoutFinalAction();
+            }
+            var adv = game.State.Adversary;
+            Assert.False(adv.Revealed);
+            string from = adv.Space;
+            string to = game.Graph.DistancesFrom(from, 1, game.State.Overlay).Keys
+                .First(id => id != from && !game.State.Overlay.BrightSpaces.Contains(id) &&
+                             game.Graph.TryStep(FigureKind.Adversary, from, id, game.State.Overlay) != null);
+
+            game.AdversaryMoveStep(to);
+
+            Assert.False(adv.Revealed); // still Hidden: the move did not step into the light
+            Assert.Contains(game.State.Log, e => e.Type == "adversary-secret" &&
+                e.Detail.StartsWith("moved " + from + " -> " + to, StringComparison.Ordinal));
+
+            var investigator = InvestigatorView(game);
+            Assert.DoesNotContain(investigator.Log, e => e.Detail.Contains(from + " -> " + to));
+            // The Adversary's own seat and the replay spectator still get the full truth.
+            Assert.Contains(AdversaryView(game).Log, e => e.Detail.Contains(from + " -> " + to));
+            Assert.Contains(game.ViewFor(ViewRole.Spectator).Log, e => e.Detail.Contains(from + " -> " + to));
         }
 
         [Fact]

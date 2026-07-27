@@ -52,6 +52,7 @@ namespace StiflingDark.Engine.Core
         // adversary whose figures are in the game is dispatched to, so a card's tokens can
         // never fire for someone else's board.
         partial void ButcherOnRoundStart();
+        partial void ButcherOnAdversaryTurnEnd();
         partial void CultOnAdversaryTurnEnd();
         partial void ButcherOnInvestigatorMoveStep(InvestigatorState inv, string from, string to);
         partial void CultOnInvestigatorMoveStep(InvestigatorState inv, string from, string to);
@@ -227,7 +228,11 @@ namespace StiflingDark.Engine.Core
 
         partial void OnAdversaryTurnEnd()
         {
-            if (State.Adversary.DefId == "cult-of-hunlow")
+            if (State.Adversary.DefId == "butcher")
+            {
+                ButcherOnAdversaryTurnEnd();
+            }
+            else if (State.Adversary.DefId == "cult-of-hunlow")
             {
                 CultOnAdversaryTurnEnd();
             }

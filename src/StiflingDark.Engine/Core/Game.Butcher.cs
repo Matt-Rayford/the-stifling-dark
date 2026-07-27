@@ -16,6 +16,8 @@ namespace StiflingDark.Engine.Core
     /// generic dictionaries plus ObjectiveState.Tokens and InvestigatorState.Items:
     ///   Counters["stalk"]                  Stalk track (0-8).
     ///   Counters["escalating-terror-pending"]  1 while Escalating Terror is armed.
+    ///   Counters["disturbed-presence-round"]  Round Disturbed Presence was played; resolved
+    ///                                      from the Butcher's final space at that turn's end.
     ///   Counters["decay-active-round"]     Round Decay's Flashlight surcharge applies (logged only; see below).
     ///   Counters["vengeful-darkness-armed"] 1 while Vengeful Darkness is waiting to resolve at next turn start.
     ///   Counters["vengeful-darkness-supply"] Supply tokens sitting on the Vengeful Darkness card.
@@ -242,31 +244,48 @@ namespace StiflingDark.Engine.Core
 
         /// <summary>
         /// "If you end your turn within 4 spaces of 1+ Investigators, you may reduce each of
-        /// their Lungs by 1 (no Wound). If you remove 2+ Lungs at once, gain 1 Stalk."
-        /// Resolved immediately against the chosen targets rather than waiting for a genuine
-        /// end-of-turn hook, since the Adversary turn framework has none to offer here.
+        /// their Lungs by 1 (no Wound). If you remove 2+ Lungs at once, gain 1 Stalk." A genuine
+        /// end-of-turn effect: playing the card only arms it (the framework still moves it to
+        /// Cooldown here, which is correct - it was "used" this turn regardless of how it
+        /// resolves). Any targets passed in are accepted but ignored; the real targets are
+        /// whichever Investigators are within 4 of The Butcher's FINAL space, determined by
+        /// <see cref="ButcherOnAdversaryTurnEnd"/> once the turn is actually ending.
         /// </summary>
         private void ApplyDisturbedPresence(List<string> targets)
         {
-            if (targets == null || targets.Count == 0)
+            State.Adversary.Counters["disturbed-presence-round"] = State.Round;
+            Log("adversary", "Disturbed Presence is armed for the end of this turn");
+        }
+
+        /// <summary>
+        /// Resolves Disturbed Presence (see <see cref="ApplyDisturbedPresence"/>) from The
+        /// Butcher's position at the moment his turn actually ends, per
+        /// <see cref="Game.AdversaryEndTurn"/> -&gt; OnAdversaryTurnEnd, which runs after all of
+        /// this turn's movement and before cooldowns advance.
+        /// </summary>
+        partial void ButcherOnAdversaryTurnEnd()
+        {
+            var adv = State.Adversary;
+            if (AdversaryCounter("disturbed-presence-round") != State.Round)
             {
-                throw new InvalidOperationException("Disturbed Presence requires at least one target.");
+                return;
             }
-            var withinRange = Graph.DistancesFrom(State.Adversary.Space, 4, State.Overlay);
+            adv.Counters.Remove("disturbed-presence-round");
+            var withinRange = Graph.DistancesFrom(adv.Space, 4, State.Overlay);
             var affected = new List<InvestigatorState>();
-            foreach (string id in targets)
+            foreach (var inv in State.Investigators.Where(i => !i.Dead && !i.Escaped && !IsSpirit(i)))
             {
-                var inv = Investigator(id);
                 if (!withinRange.ContainsKey(inv.Space))
                 {
-                    throw new InvalidOperationException($"{id} is not within 4 spaces of The Butcher.");
+                    continue;
                 }
                 inv.Stamina = Math.Max(0, inv.Stamina - 1); // loses Lungs without the usual Wound-icon-space check
                 affected.Add(inv);
-                Log("adversary", $"Disturbed Presence drains 1 Lung from {id}");
+                Log("adversary", $"Disturbed Presence drains 1 Lung from {inv.DefId}");
             }
             if (affected.Count >= 2)
             {
+                // Not Stalk from the Stalk Action, so Escalating Terror does not double it.
                 AddStalk(1);
                 Log("adversary", "Disturbed Presence drained 2+ Lungs at once: gain 1 Stalk");
             }
@@ -503,7 +522,10 @@ namespace StiflingDark.Engine.Core
             }
             State.Objective.Tokens["grave-actual"] = actualSpace;
             State.Objective.Tokens["grave-decoy"] = decoySpace;
-            Log("adversary", $"places the Grave at {actualSpace} (decoy at {decoySpace})");
+            // Same secrecy as the Objective.Tokens entry itself (see BuildObjective): the real
+            // Grave stays off an Investigator's screen until its space is lit, so the log can't
+            // hand it over in text either.
+            Log(AdversaryHiddenPositionLogType, $"places the Grave at {actualSpace} (decoy at {decoySpace})");
         }
 
         /// <summary>Involved Action on the revealed (Bright) actual Grave: grants the Objective
