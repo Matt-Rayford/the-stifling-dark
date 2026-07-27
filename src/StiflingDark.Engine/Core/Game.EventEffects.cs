@@ -157,6 +157,12 @@ namespace StiflingDark.Engine.Core
 
         partial void EventsOnTurnStart(InvestigatorState inv)
         {
+            // Brielle Easton's Major Ability: "All Investigators may ignore the effects of an
+            // Event this round." Nothing this file enforces applies while that is in force.
+            if (EventEffectsIgnored())
+            {
+                return;
+            }
             // First Investigator turn of the round == "the start of the round" for every
             // persistent Major's recurring text (see the class comment).
             if (State.Investigators.All(other => !other.TurnTakenThisRound))
@@ -175,6 +181,12 @@ namespace StiflingDark.Engine.Core
 
         partial void EventsOnMoveStep(InvestigatorState inv, string from, string to)
         {
+            // Brielle Easton's Major Ability: "All Investigators may ignore the effects of an
+            // Event this round." Nothing this file enforces applies while that is in force.
+            if (EventEffectsIgnored())
+            {
+                return;
+            }
             int cost = RoundModifier(MoveStaminaCostKey);
             if (cost <= 0)
             {
@@ -192,6 +204,12 @@ namespace StiflingDark.Engine.Core
 
         partial void EventsCollectActionBlockers(InvestigatorState inv, string actionKey, List<string> blockers)
         {
+            // Brielle Easton's Major Ability: "All Investigators may ignore the effects of an
+            // Event this round." Nothing this file enforces applies while that is in force.
+            if (EventEffectsIgnored())
+            {
+                return;
+            }
             switch (actionKey)
             {
                 case ActionPickUpPoi:
@@ -684,6 +702,12 @@ namespace StiflingDark.Engine.Core
         /// </summary>
         partial void EventsTrimFlashlightBright(InvestigatorState inv, double angleRadians, HashSet<string> bright)
         {
+            // Brielle Easton's Major Ability: "All Investigators may ignore the effects of an
+            // Event this round." Nothing this file enforces applies while that is in force.
+            if (EventEffectsIgnored())
+            {
+                return;
+            }
             int dropped = TrimBrightToRange(inv.Space, bright, RoundModifier(FlashlightLosRangeKey));
             if (HasRoundModifier(FlashlightCenterLineOnlyKey))
             {

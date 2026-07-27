@@ -36,11 +36,16 @@ public sealed partial class InvestigatorTeam
     private readonly List<string> _turnInSpaces;
     private readonly Dictionary<string, int> _degree;
     private readonly Dictionary<string, List<string>> _adjacency;
+    /// <summary>Zone letter -> the General space nearest that Zone's centre, for pre-positioning.</summary>
+    private readonly Dictionary<string, string> _zoneHub = new();
     private readonly HashSet<string> _claims = new();
 
     /// <summary>Space -> "how close the Adversary was last seen", from public Shadow/Noise tokens.</summary>
     private readonly Dictionary<string, int> _danger = new();
     private readonly Dictionary<string, int> _fleeStreak = new();
+    private readonly Dictionary<string, int> _regroupStreak = new();
+    /// <summary>Bulk turn-ins: the Investigator the team ferries Evidence to this round.</summary>
+    private string? _runner;
     /// <summary>Flashlight swapping: who spent Charge on a beam last round, so buddy pairs can
     /// take turns lighting and topping up and the pair is never dark two rounds running.</summary>
     private HashSet<string> _beamedLastRound = new();
@@ -70,6 +75,20 @@ public sealed partial class InvestigatorTeam
             _adjacency[edge.A].Add(edge.B);
             _adjacency[edge.B].Add(edge.A);
         }
+        foreach (string zone in g.Graph.Def.Zones.Keys)
+        {
+            var inZone = g.Graph.ZoneSpaces(zone).Where(sp => sp.Kind == SpaceKind.Normal).ToList();
+            if (inZone.Count == 0)
+            {
+                continue;
+            }
+            double cx = inZone.Average(sp => sp.X);
+            double cy = inZone.Average(sp => sp.Y);
+            _zoneHub[zone] = inZone
+                .OrderBy(sp => (sp.X - cx) * (sp.X - cx) + (sp.Y - cy) * (sp.Y - cy))
+                .ThenBy(sp => sp.Id, StringComparer.Ordinal)
+                .First().Id;
+        }
     }
 
     /// <summary>Set by the single-seed probe mode to dump each Investigator's chosen plan.</summary>
@@ -87,6 +106,7 @@ public sealed partial class InvestigatorTeam
         _claims.Clear();
         _beamedLastRound = _beamedThisRound;
         _beamedThisRound = new HashSet<string>();
+        ElectRunner();
         _teammateAttacked = S.Investigators.Any(i =>
             _woundsAtRoundStart.TryGetValue(i.DefId, out int before) && i.Wounds.Count > before);
         foreach (var inv in S.Investigators)
@@ -196,8 +216,11 @@ public sealed partial class InvestigatorTeam
         UseTacticalItems(inv);
         UseRegroupItems(inv);
         UseSpiritAbilities(inv);
+        UseMinorAbilities(inv);
 
         var plan = ChoosePlan(inv);
+        ConsiderMajorAbility(inv, plan);
+        UseExtendedTrade(inv);
         if (plan != null && plan.Label != "flee")
         {
             _goal[invId] = plan.Space;
@@ -387,9 +410,9 @@ public sealed partial class InvestigatorTeam
 
     private void MaybeSprint(InvestigatorState inv, Plan plan)
     {
-        int hops = Nav.Hops(CostTo(plan.Space), inv.Space);
+        int hops = Nav.Hops(CostTo(plan.Space, inv), inv.Space);
         bool far = hops != int.MaxValue && hops > inv.MpRemaining;
-        if (far && (IsSpirit(inv) || inv.Stamina >= 3) && _act.Try("sprint", () => _g.Sprint()))
+        if (far && SprintIsSafe(inv) && _act.Try("sprint", () => _g.Sprint()))
         {
             return;
         }
@@ -411,13 +434,15 @@ public sealed partial class InvestigatorTeam
     /// Window costs a Wound or the rest of the turn. These two Dijkstra fields price a route in
     /// what it actually spends, which is worth roughly a fifth of the team's mileage over a game.
     /// </summary>
-    private Dictionary<string, int> CostTo(string goal) => CostField(goal, toward: true);
+    private Dictionary<string, int> CostTo(string goal, InvestigatorState? forWhom = null) =>
+        CostField(goal, toward: true, darkIsDim: forWhom != null && RoutesThroughDark(forWhom));
 
-    private Dictionary<string, int> CostFrom(string origin) => CostField(origin, toward: false);
+    private Dictionary<string, int> CostFrom(string origin, InvestigatorState? forWhom = null) =>
+        CostField(origin, toward: false, darkIsDim: forWhom != null && RoutesThroughDark(forWhom));
 
     private const int WindowPenalty = 2;
 
-    private Dictionary<string, int> CostField(string root, bool toward)
+    private Dictionary<string, int> CostField(string root, bool toward, bool darkIsDim = false)
     {
         var best = new Dictionary<string, int> { [root] = 0 };
         var settled = new HashSet<string>();
@@ -444,7 +469,13 @@ public sealed partial class InvestigatorTeam
                 {
                     continue;
                 }
-                int candidate = cost + step.Cost + (step.CrossesWindow ? WindowPenalty : 0);
+                // Dylan treats up to 3 Dark spaces a turn as Dim, so route him through the dark
+                // that everybody else has to walk around.
+                string entered = toward ? current : other;
+                int stepCost = darkIsDim && _g.Graph.EffectiveLight(entered, S.Overlay) == LightLevel.Dark
+                    ? 1
+                    : step.Cost;
+                int candidate = cost + stepCost + (step.CrossesWindow ? WindowPenalty : 0);
                 if (!best.TryGetValue(other, out int existing) || candidate < existing)
                 {
                     best[other] = candidate;
@@ -465,7 +496,7 @@ public sealed partial class InvestigatorTeam
             // Cut off — most likely by a Door the team Locked behind itself. Open it again.
             hops = Nav.From(_g, plan.Space);
         }
-        var dist = CostTo(plan.Space);
+        var dist = CostTo(plan.Space, inv);
         for (int guard = 0; guard < 40; guard++)
         {
             if (!Active(inv) || inv.Dead || inv.MovementLocked || inv.MpRemaining <= 0)
@@ -582,6 +613,7 @@ public sealed partial class InvestigatorTeam
             if (score > 0 && _act.Try("place-flashlight", () => _g.PlaceFlashlight(bestAngle)))
             {
                 _beamedThisRound.Add(inv.DefId);
+                SweepFlashlight(inv);
                 return;
             }
         }
@@ -621,6 +653,24 @@ public sealed partial class InvestigatorTeam
 
     private (double Angle, double Score) BestFlashlight(InvestigatorState inv)
     {
+        double bestAngle = 0;
+        double best = 0;
+        for (int i = 0; i < 12; i++)
+        {
+            double angle = i * Math.PI / 6;
+            double score = ScoreFlashlightAngle(inv, angle);
+            if (score > best)
+            {
+                best = score;
+                bestAngle = angle;
+            }
+        }
+        return (bestAngle, best);
+    }
+
+    /// <summary>What one beam angle is worth from where the Investigator is standing.</summary>
+    private double ScoreFlashlightAngle(InvestigatorState inv, double angle)
+    {
         var darkZones = S.Evidence.Where(kv => !kv.Value.Revealed).Select(kv => kv.Key).ToHashSet();
         var mustLight = MustLightSpaces();
         bool threatened = _threatLevel > 0;
@@ -644,21 +694,16 @@ public sealed partial class InvestigatorTeam
         // them seals the huddle for the round.
         var entrances = Entrances(buddies);
 
-        double bestAngle = 0;
-        double best = 0;
-        // 12 aims (30 degrees apart) — enough to pick out a specific corridor.
-        for (int i = 0; i < 12; i++)
+        HashSet<string> bright;
+        try
         {
-            double angle = i * Math.PI / 6;
-            HashSet<string> bright;
-            try
-            {
-                bright = _g.PreviewFlashlight(inv.DefId, angle);
-            }
-            catch (InvalidOperationException)
-            {
-                continue;
-            }
+            bright = _g.PreviewFlashlight(inv.DefId, angle);
+        }
+        catch (InvalidOperationException)
+        {
+            return 0;
+        }
+        {
             double score = 0;
             foreach (string id in bright)
             {
@@ -694,13 +739,8 @@ public sealed partial class InvestigatorTeam
                     score += threatened ? 1 : 2;
                 }
             }
-            if (score > best)
-            {
-                best = score;
-                bestAngle = angle;
-            }
+            return score;
         }
-        return (bestAngle, best);
     }
 
     /// <summary>Objective tokens that only work once their space has been made Bright.</summary>
@@ -732,6 +772,7 @@ public sealed partial class InvestigatorTeam
 
     private void EndTurn(InvestigatorState inv)
     {
+        SatisfyForcedMajor(inv);
         StepOffOccupied(inv);
         if (!Active(inv))
         {
@@ -808,6 +849,7 @@ public sealed partial class InvestigatorTeam
             return null;
         }
         _fleeStreak[inv.DefId] = streak + 1;
+        _regroupStreak[inv.DefId] = 0;
         var reachable = Nav.From(_g, inv.Space, Math.Max(1, inv.MpRemaining + 2));
         string target = reachable.Keys
             .Where(k => !Occupied(inv, k))
@@ -845,10 +887,19 @@ public sealed partial class InvestigatorTeam
             return null;
         }
         var dist = Nav.From(_g, buddy.Space);
-        if (Nav.Hops(dist, inv.Space) <= 3)
+        int gap = Nav.Hops(dist, inv.Space);
+        if (gap <= 3 || gap == int.MaxValue)
         {
             return null; // close enough for one beam to cover both of you
         }
+        // Chasing a partner across the board costs more than the cover is worth.
+        _regroupStreak.TryGetValue(inv.DefId, out int chased);
+        if (chased >= 1 || gap > 10)
+        {
+            _regroupStreak[inv.DefId] = 0;
+            return null;
+        }
+        _regroupStreak[inv.DefId] = chased + 1;
         string spot = Nav.Neighbors(_g, buddy.Space).FirstOrDefault(n => !Occupied(inv, n) && !_claims.Contains(n))
                       ?? buddy.Space;
         _claims.Add(spot);
@@ -875,37 +926,13 @@ public sealed partial class InvestigatorTeam
         // of the map should not stop four Investigators working four different Zones.
         var buddy = Danger(inv.Space) > 0 ? Buddy(inv) : null;
 
-        // A face-up Ergophobia bars the Involved Action for good: this Investigator can never
-        // turn Evidence in again, so pass what they carry to somebody who can.
-        if (inv.EvidenceCarried.Count > 0 && !CanTakeInvolved(inv))
+        var ferry = FerryPlan(inv);
+        if (ferry != null)
         {
-            var courier = Alive
-                .Where(o => o != inv && CanTakeInvolved(o) && _g.ActionBlockers(o.DefId, Game.ActionTrade).Count == 0)
-                .OrderBy(o => Nav.Hops(Nav.From(_g, inv.Space), o.Space))
-                .ThenBy(o => o.DefId, StringComparer.Ordinal)
-                .FirstOrDefault();
-            if (courier != null)
-            {
-                var zones = inv.EvidenceCarried.ToList();
-                string to = courier.DefId;
-                return new Plan
-                {
-                    Space = courier.Space,
-                    StopAt = 1,
-                    Label = "hand-off-evidence",
-                    Arrive = () =>
-                    {
-                        foreach (string zone in zones)
-                        {
-                            _g.TradeEvidence(to, zone);
-                        }
-                        return true;
-                    },
-                };
-            }
+            return ferry;
         }
 
-        if (inv.EvidenceCarried.Count > 0 && CanTakeInvolved(inv))
+        if (inv.EvidenceCarried.Count > 0 && CanTakeInvolved(inv) && ShouldTurnInNow(inv))
         {
             string? feature = Sticky(inv, _turnInSpaces, buddy);
             if (feature != null)
@@ -914,10 +941,10 @@ public sealed partial class InvestigatorTeam
                 return new Plan
                 {
                     Space = feature,
-                    Label = "turn-in-evidence",
+                    Label = $"turn-in-{carried.Count}-evidence",
                     Arrive = () =>
                     {
-                        _g.TurnInEvidence(BuildTurnIns(carried));
+                        _g.TurnInEvidence(BuildTurnIns(inv.EvidenceCarried.ToList()));
                         return true;
                     },
                 };
@@ -951,6 +978,21 @@ public sealed partial class InvestigatorTeam
             return new Plan { Space = lightSwitch, Label = "light-switch" };
         }
 
+        // The last Zone's Evidence is a single-threaded chain — switch, then token, then
+        // Computer. Everyone with nothing better to do waits inside that Zone so whoever flips
+        // the switch is not also the only one who can run the token in.
+        var hubs = S.Evidence.Where(kv => !kv.Value.Revealed)
+            .Select(kv => _zoneHub.TryGetValue(kv.Key, out string hub) ? hub : null)
+            .Where(hub => hub != null && !_claims.Contains(hub!) && !OwnedByAnother(inv, hub!))
+            .Select(hub => hub!)
+            .ToList();
+        string? staging = Sticky(inv, hubs, buddy);
+        if (staging != null)
+        {
+            _claims.Add(staging);
+            return new Plan { Space = staging, StopAt = 1, Label = "stage-for-evidence" };
+        }
+
         var poi = S.PoiTokens.Where(p => p.Revealed && !p.Collected && !_claims.Contains(p.TokenSpace))
             .Select(p => p.TokenSpace).ToList();
         string? poiSpace = Sticky(inv, poi, buddy);
@@ -981,6 +1023,14 @@ public sealed partial class InvestigatorTeam
                 list.Add((zone, "medical-item", null, null));
                 continue;
             }
+            // A second Major Ability token is a real card play now, not a spare counter.
+            var spent = Alive.FirstOrDefault(i => !IsSpirit(i) && i.MajorAbilityTokens < 1);
+            if (spent != null && !used.Contains("major-ability-token"))
+            {
+                used.Add("major-ability-token");
+                list.Add((zone, "major-ability-token", spent.DefId, null));
+                continue;
+            }
             var poi = S.PoiTokens.FirstOrDefault(p => !p.Revealed && !p.Collected);
             if (poi != null)
             {
@@ -994,7 +1044,12 @@ public sealed partial class InvestigatorTeam
         return list;
     }
 
-    /// <summary>Keep last round's destination when it is still on the table.</summary>
+    /// <summary>
+    /// Keep last round's destination when it is still on the table, and treat everybody else's
+    /// remembered destination as taken. Without the second half, the turn order changing from
+    /// round to round lets whoever acts first grab a shared target, and the team spends the game
+    /// swapping errands three spaces short of each one.
+    /// </summary>
     private string? Sticky(InvestigatorState inv, IReadOnlyList<string> candidates, InvestigatorState? buddy)
     {
         if (_goal.TryGetValue(inv.DefId, out string remembered) &&
@@ -1002,8 +1057,13 @@ public sealed partial class InvestigatorTeam
         {
             return remembered;
         }
-        return Nearest(inv.Space, candidates, buddy);
+        var free = candidates.Where(c => !OwnedByAnother(inv, c)).ToList();
+        return Nearest(inv.Space, free.Count > 0 ? free : candidates, buddy);
     }
+
+    private bool OwnedByAnother(InvestigatorState inv, string space) =>
+        _goal.Any(kv => kv.Key != inv.DefId && kv.Value == space &&
+                        S.Investigators.Any(o => o.DefId == kv.Key && !o.Dead && !o.Escaped));
 
     /// <summary>
     /// Closest candidate, with a pull toward the buddy's half of the board while the Adversary
@@ -1103,7 +1163,8 @@ public sealed partial class InvestigatorTeam
             return able[0];
         }
         var dist = Nav.From(_g, S.Objective.Tokens[anchor]);
-        return able.OrderBy(i => Nav.Hops(dist, i.Space)).ThenBy(i => i.DefId, StringComparer.Ordinal).First();
+        return able.OrderBy(i => Nav.Hops(dist, i.Space) + ErrandPreference(i))
+            .ThenBy(i => i.DefId, StringComparer.Ordinal).First();
     }
 
     private Plan? PowerTheGatePlan(InvestigatorState inv)

@@ -42,10 +42,12 @@ namespace StiflingDark.Engine.Core
 
         /// <summary>True when a face-up copy of that Wound card is in effect on this
         /// Investigator. Neurotoxin's Wounds sit outside the Wound slots but the card is
-        /// explicit that "you suffer the effects", so they count here too.</summary>
-        private static bool FaceUpWound(InvestigatorState inv, string cardId) =>
-            inv.Wounds.Any(w => w.FaceUp && w.CardId == cardId) ||
-            inv.NonSlotWounds.Any(w => w.FaceUp && w.CardId == cardId);
+        /// explicit that "you suffer the effects", so they count here too. Asher's Abilities
+        /// suppress a Wound's effects outright, which is what
+        /// <see cref="IgnoresFaceUpWound"/> filters out (Game.InvestigatorAbilities.cs).</summary>
+        private bool FaceUpWound(InvestigatorState inv, string cardId) =>
+            inv.Wounds.Any(w => w.FaceUp && w.CardId == cardId && !IgnoresFaceUpWound(inv, w)) ||
+            inv.NonSlotWounds.Any(w => w.FaceUp && w.CardId == cardId && !IgnoresFaceUpWound(inv, w));
 
         // ---------- Condition grant with the printed duplicate-substitution rider ----------
 
@@ -95,6 +97,7 @@ namespace StiflingDark.Engine.Core
             }
             RequireAdjacentForTrade(inv, other);
             inv.Wounds.Remove(wound);
+            State.WoundDiscard.Add(wound.CardId);
             GainWound(other, faceUp: false);
             GainWound(other, faceUp: false);
             Log("wound", $"{inv.DefId} discarded Commiserate; {other.DefId} took 2 face-down Wounds");
@@ -134,7 +137,12 @@ namespace StiflingDark.Engine.Core
                     break;
 
                 case "fear":
-                    Log("todo", "fear: no Major/Minor Ability action exists yet to force its use next turn");
+                    // "You must use your Major Ability on your next turn. If you do not have a
+                    // Major Ability token (or if you are unable to use it), there is no effect."
+                    // Armed here, checked and enforced at that next turn's start
+                    // (AbilitiesOnTurnStart in Game.InvestigatorAbilities.cs) — the token could
+                    // still be spent or gained between now and then.
+                    ArmForcedMajorAbility(inv);
                     break;
 
                 case "broken-battery":
@@ -150,9 +158,8 @@ namespace StiflingDark.Engine.Core
                                 "one), so there is nothing for the 'move' action gate to refuse travel through");
                     break;
 
-                case "disoriented":
-                    Log("todo", "disoriented: no Major/Minor Ability action exists yet to restrict");
-                    break;
+                // disoriented has no immediate text; "You may not use your Major or Minor
+                // Ability" is enforced by the per-action gate below (ActionUseAbility).
 
                 case "nyctophobia":
                     Log("todo", "nyctophobia: the 'move' action gate is asked before the destination is known, " +
@@ -257,7 +264,7 @@ namespace StiflingDark.Engine.Core
             // suffer the effects of the Wound, but it does not take up a Wound slot."
             if (HasCondition(inv, "neurotoxin"))
             {
-                var wound = new WoundInstance { CardId = Draw(State.WoundDeck, "wound"), FaceUp = true };
+                var wound = new WoundInstance { CardId = DrawWound(), FaceUp = true };
                 inv.NonSlotWounds.Add(wound);
                 Log("condition",
                     $"{inv.DefId}'s Neurotoxin puts {wound.CardId} below the card ({inv.NonSlotWounds.Count}/2)");
@@ -318,14 +325,12 @@ namespace StiflingDark.Engine.Core
             if (HasCondition(inv, "gear-jam"))
             {
                 // "You may not take the Charge Final Action unless you spend a Stamina." The
-                // gate refuses the Action outright when there is no Stamina to spend; the spend
-                // itself lands here, which fires immediately after ChargeFlashlight sets the
-                // Final Action and therefore still belongs to that same Action.
-                if (inv.FinalAction == FinalActionKind.Charge)
-                {
-                    SpendStamina(inv, 1);
-                    Log("condition", $"{inv.DefId} spends 1 Stamina to Charge through Gear Jam");
-                }
+                // spend itself now happens the moment Charge is declared (ConditionsOnChargeDeclared,
+                // fired from ChargeFlashlight before EndTurn) rather than here: this hook fires
+                // after Breathless's own end-of-turn Stamina loss in the same OnInvestigatorTurnEnd
+                // fanout, and paying late could try to spend Stamina Breathless already took,
+                // throwing SpendStamina out of EndTurn and locking the turn. Only the D6
+                // discard-check text ("at the end of each of your turns") still belongs here.
                 int roll = _rng.Roll(6);
                 SaveRng();
                 Log("condition", $"{inv.DefId} rolls {roll} for Gear Jam");
@@ -333,6 +338,22 @@ namespace StiflingDark.Engine.Core
                 {
                     DiscardCondition(inv, "gear-jam");
                 }
+            }
+        }
+
+        /// <summary>
+        /// Gear Jam: "You may not take the Charge Final Action unless you spend a Stamina."
+        /// The gate (<see cref="ConditionsCollectActionBlockers"/>'s ActionCharge case) already
+        /// refuses the Action outright at 0 Stamina; this pays the cost the moment Charge is
+        /// actually declared (see Game.cs' ChargeFlashlight), which is also before Breathless
+        /// or any other end-of-turn Stamina loss has had a chance to run.
+        /// </summary>
+        partial void ConditionsOnChargeDeclared(InvestigatorState inv)
+        {
+            if (HasCondition(inv, "gear-jam"))
+            {
+                SpendStamina(inv, 1);
+                Log("condition", $"{inv.DefId} spends 1 Stamina to Charge through Gear Jam");
             }
         }
 
@@ -344,6 +365,7 @@ namespace StiflingDark.Engine.Core
                 // round, discard this Condition and both Wounds."
                 if (HasCondition(inv, "neurotoxin") && inv.NonSlotWounds.Count >= 2)
                 {
+                    State.WoundDiscard.AddRange(inv.NonSlotWounds.Select(w => w.CardId));
                     inv.NonSlotWounds.Clear();
                     DiscardCondition(inv, "neurotoxin");
                     Log("condition", $"{inv.DefId}'s Neurotoxin runs its course; both Wounds below it are discarded");
@@ -406,6 +428,12 @@ namespace StiflingDark.Engine.Core
                     if (FaceUpWound(inv, "mangled-hands"))
                     {
                         blockers.Add("Mangled Hands: you may not use Item or Cursed Item cards");
+                    }
+                    break;
+                case ActionUseAbility:
+                    if (FaceUpWound(inv, "disoriented"))
+                    {
+                        blockers.Add("Disoriented: you may not use your Major or Minor Ability");
                     }
                     break;
             }

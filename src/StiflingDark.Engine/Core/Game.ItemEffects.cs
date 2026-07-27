@@ -83,12 +83,18 @@ namespace StiflingDark.Engine.Core
                 {
                     throw new InvalidOperationException($"'{chosenDrawnCardId}' was not drawn ({drawn1}, {drawn2}).");
                 }
+                // The undrafted drawn card and the Wound it replaced both leave play.
+                string undrafted = chosenDrawnCardId == drawn1 ? drawn2 : drawn1;
+                State.WoundDiscard.Add(existingWoundCardId);
+                State.WoundDiscard.Add(undrafted);
                 toReplace.CardId = chosenDrawnCardId;
                 ResolveWoundFaceUp(inv, toReplace);
                 Log("item", $"{inv.DefId} replaced {existingWoundCardId} with {chosenDrawnCardId}");
             }
             else
             {
+                State.WoundDiscard.Add(drawn1);
+                State.WoundDiscard.Add(drawn2);
                 Log("item", $"{inv.DefId} declined the Painkillers swap");
             }
             inv.Items.Remove(marker);
@@ -539,8 +545,8 @@ namespace StiflingDark.Engine.Core
                     // replace one of their face-up Wounds with one of the drawn cards
                     // (wound count unchanged); everything undrafted is discarded. Two-step:
                     // the draw parks a pending marker, ResolvePainkillers completes it.
-                    string drawn1 = Draw(State.WoundDeck, "wound");
-                    string drawn2 = Draw(State.WoundDeck, "wound");
+                    string drawn1 = DrawWound();
+                    string drawn2 = DrawWound();
                     inv.Items.Add($"marker:painkillers:{drawn1}:{drawn2}");
                     Log("item", $"{inv.DefId} used Painkillers: drew {drawn1}, {drawn2}");
                     break;
@@ -637,7 +643,10 @@ namespace StiflingDark.Engine.Core
                     break;
                 }
                 case "two-way-radio":
-                    Log("todo", "two-way-radio: using another Investigator's Minor Ability isn't modeled (Ability text isn't executable code)");
+                    // "You may use the Minor Ability of an Investigator that is not in play. If
+                    // the Ability uses tokens, you may use 1 of them but cannot keep the rest."
+                    // args: [that Investigator's def id, ...that Ability's own arguments].
+                    UseBorrowedMinorAbility(inv, args);
                     break;
                 case "whiskey":
                 {
@@ -888,9 +897,17 @@ namespace StiflingDark.Engine.Core
                     Log("todo", "binding-tablet: restricting the Adversary to only the Move Action next turn isn't enforced by Attack/Ability resolution");
                     break;
                 case "blood-chalice":
+                    // "Gain a face-up Wound to use any other Investigator's Major Ability
+                    // without using a Major Ability token ... You may choose Investigators that
+                    // are not in play." args: [that Investigator's def id, ...their Ability's
+                    // own arguments]. The Wound is the price, so it is paid first — but only
+                    // once the borrowed Ability itself has been accepted, so a refused Ability
+                    // leaves the drinker unharmed.
+                    UseBorrowedMajorAbility(inv, args);
                     GainWound(inv, faceUp: true);
                     Log("item", $"{inv.DefId} used Blood Chalice");
-                    Log("todo", "blood-chalice: using another Investigator's Major Ability isn't modeled (Ability text isn't executable code); apply that Ability's effect manually");
+                    Log("todo", "blood-chalice: \"You may not Trade this Item after using it\" isn't enforced " +
+                                "(TradeItem has no per-card lock, only the per-Investigator ActionTrade gate)");
                     break;
                 case "cursed-poppet":
                 {

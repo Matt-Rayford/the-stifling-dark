@@ -74,6 +74,12 @@ public sealed class Actor
         catch (InvalidOperationException e)
         {
             TraceRefusals?.Invoke(label, e.Message);
+            // A deck running dry is a real physical-game limit, not a bot mis-step: 26 Wound
+            // cards can genuinely run out at the table. Surface it wherever it happens.
+            if ((e.Message.Contains("deck is empty") || e.Message.Contains("Wound cards remain")))
+            {
+                _run.Anomaly("deck-exhausted", $"{label}: {e.Message}");
+            }
             return false;
         }
         catch (NotImplementedException e)
@@ -119,7 +125,9 @@ public sealed class Actor
         catch (Exception e)
         {
             _run.Anomaly(
-                e is InvalidOperationException ? "required-action-refused" : "unexpected-exception",
+                (e.Message.Contains("deck is empty") || e.Message.Contains("Wound cards remain")) ? "deck-exhausted"
+                    : e is InvalidOperationException ? "required-action-refused"
+                    : "unexpected-exception",
                 $"{label}: {e.GetType().Name}: {e.Message}",
                 e);
             throw new ArenaAbort(label);

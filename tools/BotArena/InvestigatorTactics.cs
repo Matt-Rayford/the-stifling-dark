@@ -176,6 +176,12 @@ public sealed partial class InvestigatorTeam
         }
 
         // Resource top-ups.
+        // Spare Tools turns the batch turn-in into an Interact, so the runner keeps their turn.
+        if (inv.Items.Contains("spare-tools") && WantsInvolvedAction(inv) &&
+            !_g.HasRoundModifier(Game.InvolvedAsInteractPrefix + inv.DefId))
+        {
+            _act.Try("spare-tools", () => _g.UseItem("spare-tools"));
+        }
         if (inv.Charge <= 1 && inv.Items.Contains("fresh-batteries"))
         {
             _act.Try("fresh-batteries", () => _g.UseItem("fresh-batteries"));
@@ -316,9 +322,10 @@ public sealed partial class InvestigatorTeam
     /// <summary>
     /// A dead Investigator whose player takes a Spirit card keeps playing: 4 MP, a free Sprint
     /// every round, no Wound slots to fill, and it walks through Locked Doors, Dark spaces and
-    /// Map Hazards alike. It cannot win the game for the team (a game with a death is a Draw at
-    /// best) but it can still scout, light, carry Evidence and drive objective steps, so there
-    /// is never a reason to decline one.
+    /// Map Hazards alike. It has no Wound slots to fill and cannot itself escape, but it can
+    /// still scout, light, carry Evidence and drive objective steps toward the living team's
+    /// escape (a death no longer caps the outcome at a Draw), so there is never a reason to
+    /// decline one.
     /// </summary>
     public void AdoptSpiritsIfOffered()
     {
@@ -366,6 +373,146 @@ public sealed partial class InvestigatorTeam
         }
     }
 
+    // ---------- Bulk Evidence turn-ins ----------
+
+    /// <summary>
+    /// Designer-confirmed: human teams cash in 2-3 Evidence per trip, not one. The team picks a
+    /// runner each round — whoever already carries the most, breaking ties toward whoever is
+    /// closest to a Computer / Ticket Booth — and everyone else's job is to get tokens into
+    /// that runner's hands rather than making their own walk to a feature.
+    /// </summary>
+    private void ElectRunner()
+    {
+        var carriers = Alive.Where(i => i.EvidenceCarried.Count > 0 && CanTakeInvolved(i)).ToList();
+        if (carriers.Count == 0)
+        {
+            _runner = null;
+            return;
+        }
+        _runner = carriers
+            .OrderByDescending(i => i.EvidenceCarried.Count)
+            .ThenBy(i => _turnInSpaces.Count == 0
+                ? 0
+                : _turnInSpaces.Min(f => Nav.Hops(CostFrom(i.Space, i), f)))
+            .ThenBy(i => i.DefId, StringComparer.Ordinal)
+            .First().DefId;
+    }
+
+    private int EvidenceStillNeeded()
+    {
+        int required = _g.Db.Config.ByInvestigatorCount[S.Investigators.Count].EvidenceRequiredForObjective;
+        return Math.Max(0, required - S.Objective.EvidenceTurnedIn);
+    }
+
+    /// <summary>
+    /// Hold the batch until it is worth the Involved Action: three tokens, or enough to clear
+    /// the gate outright, or nothing else left within reach, or the clock forcing the issue.
+    /// </summary>
+    private bool ShouldTurnInNow(InvestigatorState inv)
+    {
+        int carried = inv.EvidenceCarried.Count;
+        if (carried == 0)
+        {
+            return false;
+        }
+        int needed = EvidenceStillNeeded();
+        if (carried >= needed || carried >= 3)
+        {
+            return true;
+        }
+        // Batching only pays when the gate is bigger than the party: if the team already holds
+        // enough tokens between them, everybody cashing in their own is strictly faster than
+        // funnelling them through one runner.
+        if (Alive.Sum(i => i.EvidenceCarried.Count) >= needed)
+        {
+            return true;
+        }
+        if (S.Round >= _g.Db.Config.Rounds - 4 || S.Objective.SelectedEscapeCard != null)
+        {
+            return true; // out of time to be tidy, or the Evidence economy is over anyway
+        }
+        // Never die holding the batch: Evidence carried by a corpse is Evidence the team never
+        // turned in, so bank it as soon as this Investigator is the one under threat.
+        if (inv.Wounds.Count >= 2 && Danger(inv.Space) > 0)
+        {
+            return true;
+        }
+        // Anything else still worth collecting before the trip?
+        var costs = CostFrom(inv.Space, inv);
+        var loose = S.Evidence.Where(kv => kv.Value.Revealed).Select(kv => kv.Value.Space).ToList();
+        var switches = _g.Graph.Def.Spaces
+            .Where(sp => sp.Kind == SpaceKind.LightSwitch && sp.Zone != null &&
+                         !S.FalteringZones.Contains(sp.Zone) &&
+                         S.Evidence.TryGetValue(sp.Zone, out var e) && !e.Revealed)
+            .Select(sp => sp.Id);
+        int nearestMore = loose.Concat(switches).Select(sp => Nav.Hops(costs, sp))
+            .DefaultIfEmpty(int.MaxValue).Min();
+        int nearestFeature = _turnInSpaces.Select(f => Nav.Hops(costs, f))
+            .DefaultIfEmpty(int.MaxValue).Min();
+        if (nearestMore == int.MaxValue)
+        {
+            return true;
+        }
+        // Only detour for another token while the detour stays cheaper than a second whole trip.
+        return nearestMore > nearestFeature + 10;
+    }
+
+    /// <summary>
+    /// Ferrying: an Investigator who is not the runner walks their tokens to the runner instead
+    /// of making a second trip to a feature. Ibraheem can do it from 5 spaces away with his
+    /// Major, which is the difference between a hand-off and a two-round detour.
+    /// </summary>
+    private Plan? FerryPlan(InvestigatorState inv)
+    {
+        if (inv.EvidenceCarried.Count == 0)
+        {
+            return null;
+        }
+        // A face-up Ergophobia bars the Involved Action for good: whatever this Investigator is
+        // carrying has to change hands or it never gets turned in.
+        bool mustPass = !CanTakeInvolved(inv);
+        if (!mustPass && (_runner == null || _runner == inv.DefId))
+        {
+            return null;
+        }
+        var courier = Alive.FirstOrDefault(o => o.DefId == _runner && o != inv &&
+                                                _g.ActionBlockers(o.DefId, Game.ActionTrade).Count == 0)
+                      ?? (mustPass
+                          ? Alive.Where(o => o != inv && CanTakeInvolved(o) &&
+                                             _g.ActionBlockers(o.DefId, Game.ActionTrade).Count == 0)
+                              .OrderBy(o => Nav.Hops(CostFrom(inv.Space, inv), o.Space))
+                              .ThenBy(o => o.DefId, StringComparer.Ordinal)
+                              .FirstOrDefault()
+                          : null);
+        if (courier == null)
+        {
+            return null;
+        }
+        var costs = CostFrom(inv.Space, inv);
+        int toCourier = Nav.Hops(costs, courier.Space);
+        int toFeature = _turnInSpaces.Select(f => Nav.Hops(costs, f)).DefaultIfEmpty(int.MaxValue).Min();
+        if (!mustPass && toCourier + 3 >= toFeature)
+        {
+            return null; // the hand-off is not actually saving the team a trip
+        }
+        var zones = inv.EvidenceCarried.ToList();
+        string to = courier.DefId;
+        return new Plan
+        {
+            Space = courier.Space,
+            StopAt = 1,
+            Label = "ferry-evidence",
+            Arrive = () =>
+            {
+                foreach (string zone in zones)
+                {
+                    _g.TradeEvidence(to, zone);
+                }
+                return true;
+            },
+        };
+    }
+
     // ---------- Sacrificial screen ----------
 
     /// <summary>
@@ -390,8 +537,11 @@ public sealed partial class InvestigatorTeam
             return null;
         }
         // Only the healthiest bystander screens, or the whole team piles into the same fire.
+        // Asher ignores the face-up Wound in his first slot, so he is the body that should be
+        // standing in the way when there is a choice.
         var healthier = Alive.Where(o => o != casualty && !IsSpirit(o) && o.Wounds.Count <= 1)
-            .OrderBy(o => o.Wounds.Count).ThenBy(o => o.DefId, StringComparer.Ordinal).ToList();
+            .OrderBy(ScreenPreference).ThenBy(o => o.Wounds.Count)
+            .ThenBy(o => o.DefId, StringComparer.Ordinal).ToList();
         if (healthier.Count == 0 || healthier[0] != inv)
         {
             return null;

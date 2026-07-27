@@ -329,7 +329,7 @@ namespace StiflingDark.Engine.Core
             }
             // Squall / Severe Heat make every Sprint cost extra Stamina. The whole cost is
             // spent as one Sprint-origin loss, so Punctured Lung and Cold Front see it too.
-            int staminaCost = 1 + Math.Max(0, RoundModifier(SprintStaminaSurchargeKey));
+            int staminaCost = 1 + Math.Max(0, EventRoundModifier(SprintStaminaSurchargeKey));
             SpendStamina(inv, staminaCost, WoundFromSprint);
             int rolled = _rng.RollSprintDie(Db.Config.SprintDieFaces);
             SaveRng();
@@ -343,7 +343,7 @@ namespace StiflingDark.Engine.Core
                 : $"{inv.DefId} rolled {rolled} MP, adjusted to {finalRoll}");
             // Pyrocumulus: "an Investigator who Sprints must roll a D6 and take a face-down
             // Wound on a 4+".
-            int threshold = RoundModifier(SprintD6WoundThresholdKey);
+            int threshold = EventRoundModifier(SprintD6WoundThresholdKey);
             if (threshold > 0)
             {
                 int d6 = _rng.Roll(6);
@@ -381,11 +381,18 @@ namespace StiflingDark.Engine.Core
             string from = inv.Space;
             var step = Graph.TryStep(FigureKindOf(inv), inv.Space, to, State.Overlay)
                 ?? throw new InvalidOperationException($"Cannot move {inv.Space} -> {to}.");
-            if (step.Cost > inv.MpRemaining)
+            // MapGraph charges by printed light level only; an Ability may still discount this
+            // one step (Dylan's "treat up to 3 Dark spaces as Dim"). The hook is asked before
+            // the MP check and is required to be side-effect free, so a step nobody can afford
+            // costs no allowance — see AdjustMoveCost in Game.Effects.cs.
+            var costBox = new List<int> { step.Cost };
+            AdjustMoveCost(inv, inv.Space, to, costBox);
+            int cost = Math.Max(1, costBox[0]);
+            if (cost > inv.MpRemaining)
             {
-                throw new InvalidOperationException($"Move costs {step.Cost} MP, only {inv.MpRemaining} left.");
+                throw new InvalidOperationException($"Move costs {cost} MP, only {inv.MpRemaining} left.");
             }
-            inv.MpRemaining -= step.Cost;
+            inv.MpRemaining -= cost;
             inv.Space = to;
             if (step.CrossesWindow)
             {
@@ -574,6 +581,13 @@ namespace StiflingDark.Engine.Core
 
         private void RequireAdjacentForTrade(InvestigatorState a, InvestigatorState b)
         {
+            // Ibraheem's Major Ability stretches his Trade reach to 5 spaces for the round; it
+            // applies whichever side of the Trade he is on (Game.InvestigatorAbilities.cs).
+            int range = ExtendedTradeRange(a, b);
+            if (range > 1 && Graph.DistancesFrom(a.Space, range, State.Overlay).ContainsKey(b.Space))
+            {
+                return;
+            }
             var edge = Graph.Edge(a.Space, b.Space);
             bool ok = edge != null && edge.Type != EdgeType.AdversaryLink &&
                       !State.Overlay.FalseWindows.Contains(BoardOverlay.EdgeKey(a.Space, b.Space)) &&
@@ -593,6 +607,10 @@ namespace StiflingDark.Engine.Core
             RequireActionAllowed(inv, ActionCharge);
             RequireNoFinalAction(inv);
             inv.FinalAction = FinalActionKind.Charge;
+            // Any cost a card attaches to *taking* Charge (Gear Jam's Stamina) is paid here,
+            // the moment the Action is declared — see OnChargeDeclared's doc comment for why
+            // this can no longer wait until the end-of-turn hooks.
+            OnChargeDeclared(inv);
             inv.Charge = Math.Min(Db.Config.ChargeMax, inv.Charge + 1);
             EndTurn(inv);
         }
@@ -634,7 +652,7 @@ namespace StiflingDark.Engine.Core
         {
             string waiverKey = FlashlightChargeWaiverPrefix + inv.DefId;
             bool waived = HasRoundModifier(waiverKey);
-            int cost = 1 + Math.Max(0, RoundModifier(FlashlightChargeSurchargeKey)) - (waived ? 1 : 0);
+            int cost = 1 + Math.Max(0, EventRoundModifier(FlashlightChargeSurchargeKey)) - (waived ? 1 : 0);
             // Validate before spending anything, the waiver included: a refused placement must
             // leave the Investigator exactly as they were.
             if (inv.Charge < cost)
@@ -670,6 +688,10 @@ namespace StiflingDark.Engine.Core
         {
             var inv = ActiveInv();
             RequireNoPendingWindow();
+            // The Fear Wound's "you must use your Major Ability on your next turn" — the Final
+            // Actions are refused by the per-action gate, and this is the remaining way out of
+            // a turn (Game.InvestigatorAbilities.cs).
+            RequireForcedAbilityUsed(inv);
             EndTurn(inv);
         }
 
@@ -706,7 +728,7 @@ namespace StiflingDark.Engine.Core
             {
                 // Heavy Winds / Heavy Smoke / Tornado: no Stamina may be gained as part of a
                 // Final Action this round, Rest included.
-                if (HasRoundModifier(NoRestStaminaKey))
+                if (HasEventRoundModifier(NoRestStaminaKey))
                 {
                     Log("event", $"{State.CurrentEvent}: {inv.DefId} gains no Stamina from Resting this round");
                 }
@@ -774,6 +796,7 @@ namespace StiflingDark.Engine.Core
             }
             ApplyAdversaryCarriageRotation();
             Log("adversary", $"moved {from} -> {to} ({cost} MP, {State.Adversary.MpRemaining} left)");
+            OnAdversaryMoveStep(from, to);
         }
 
         /// <summary>
@@ -832,6 +855,14 @@ namespace StiflingDark.Engine.Core
             if (State.Adversary.DefId == "insatiable-horror")
             {
                 adjacent = Graph.DistancesFrom(State.Adversary.Space, 3, State.Overlay).ContainsKey(doorSpace);
+            }
+            // Lucy Belle's Barricade tokens "work like Doors for the Adversary, except when they
+            // are Destroyed the Barricade token is removed": Break Door is the only way through
+            // one, and it burns the same once-per-turn slot (Game.InvestigatorAbilities.cs).
+            if (adjacent && BreakBarricadeAt(doorSpace))
+            {
+                State.Adversary.ActionsUsed.Add("breakDoor");
+                return;
             }
             if (!adjacent || Graph.Space(doorSpace).Kind != SpaceKind.Door)
             {
@@ -899,34 +930,14 @@ namespace StiflingDark.Engine.Core
 
             if (State.Round >= Db.Config.Rounds)
             {
-                // Timeout: with the Grave/Eggs banish objectives the game is a draw
-                // regardless (per their cards). Otherwise, anyone still on the board counts
-                // as killed for this tally only (Adversary.Kills itself is untouched): if
-                // that brings the Adversary to KillsToWin, they win outright; if not but some
-                // Investigators did escape, "some lived, some did not" is a Draw; if nobody
-                // escaped either, the Adversary wins by default (nobody made it out).
+                // Designer ruling: if the timer runs out, the Investigators lose. The only
+                // exceptions are the Grave/Eggs banish cards, whose printed text makes a
+                // timeout a draw (Golden Rule: the card beats the rulebook).
                 State.Phase = GamePhase.GameOver;
                 string? selected = State.Objective.SelectedEscapeCard;
-                if (selected == "the-grave" || selected == "the-eggs")
-                {
-                    State.Result = GameResult.Draw;
-                }
-                else
-                {
-                    int killedAtTimeout = State.Investigators.Count(i => !i.Dead && !i.Escaped);
-                    if (State.Adversary.Kills + killedAtTimeout >= State.Adversary.KillsToWin)
-                    {
-                        State.Result = GameResult.AdversaryWins;
-                    }
-                    else if (State.Investigators.Any(i => i.Escaped))
-                    {
-                        State.Result = GameResult.Draw;
-                    }
-                    else
-                    {
-                        State.Result = GameResult.AdversaryWins;
-                    }
-                }
+                State.Result = selected == "the-grave" || selected == "the-eggs"
+                    ? GameResult.Draw
+                    : GameResult.AdversaryWins;
                 Log("gameover", "round limit reached");
                 return;
             }
@@ -950,7 +961,7 @@ namespace StiflingDark.Engine.Core
                 Log("spirit", $"{inv.DefId}'s Spirit has no Wound slots (Wound ignored)");
                 return;
             }
-            var wound = new WoundInstance { CardId = Draw(State.WoundDeck, "wound"), FaceUp = faceUp };
+            var wound = new WoundInstance { CardId = DrawWound(), FaceUp = faceUp };
             // Cards may still flip this Wound face-up, or inflict further Wounds, before it
             // lands (see the OnWoundGained hook).
             OnWoundGained(inv, wound, origin);
@@ -974,17 +985,18 @@ namespace StiflingDark.Engine.Core
                 else if (!State.Investigators.Any(i => !i.Dead && !i.Escaped))
                 {
                     // The Adversary has not won outright, but nobody is left on the board to
-                    // act: "some lived, some did not" is a Draw, not an Investigators win — a
-                    // death can no longer complete "every surviving Investigator escaped" the
-                    // way it used to (see CheckObjectiveWin). If instead nobody escaped either,
-                    // every Investigator is dead and the Adversary's kill count has simply not
-                    // caught up yet (e.g. a Rabbit's Foot revival lowered it); nothing to decide
-                    // here — the game either already ended above or is not yet over.
+                    // act. Revised designer ruling: deaths no longer downgrade an escape to a
+                    // Draw — dead Investigators play on as Spirits, so if some Investigators did
+                    // escape, the team wins outright the moment the last living, non-escaped
+                    // Investigator dies. If instead nobody escaped either, every Investigator is
+                    // dead and the Adversary's kill count has simply not caught up yet (e.g. a
+                    // Rabbit's Foot revival lowered it); nothing to decide here — the game either
+                    // already ended above or is not yet over.
                     if (State.Investigators.Any(i => i.Escaped))
                     {
                         State.Phase = GamePhase.GameOver;
-                        State.Result = GameResult.Draw;
-                        Log("gameover", "the last living Investigator died with some already escaped: a draw");
+                        State.Result = GameResult.InvestigatorsWin;
+                        Log("gameover", "the last living Investigator died with the rest already escaped: an Investigators win");
                     }
                 }
                 // Otherwise the player may adopt a Spirit — Spirit play lands with abilities.
@@ -1004,7 +1016,7 @@ namespace StiflingDark.Engine.Core
         {
             var track = Db.Investigator(inv.DefId).StaminaTrack;
             // Cold Front: "Sprinting must trip the Stamina track's Wound icons 1 space early."
-            int shift = origin == WoundFromSprint ? Math.Max(0, RoundModifier(SprintWoundIconShiftKey)) : 0;
+            int shift = origin == WoundFromSprint ? Math.Max(0, EventRoundModifier(SprintWoundIconShiftKey)) : 0;
             for (int i = 0; i < amount && inv.Stamina > 0; i++)
             {
                 inv.Stamina -= 1;
@@ -1161,6 +1173,7 @@ namespace StiflingDark.Engine.Core
                 {
                     figure.Revealed = true;
                     Log("reveal", $"{figure.Id} at {figure.Space} (caught in the light)");
+                    OnAdversaryRevealed(figure.Id);
                 }
             }
             foreach (var (zone, token) in State.Evidence.Select(kv => (kv.Key, kv.Value)))
@@ -1195,6 +1208,7 @@ namespace StiflingDark.Engine.Core
                     State.Adversary.AttackLockedThisTurn = true;
                 }
                 Log("reveal", $"adversary at {State.Adversary.Space} ({reason})");
+                OnAdversaryRevealed("main");
             }
         }
 
@@ -1207,6 +1221,33 @@ namespace StiflingDark.Engine.Core
             string id = deck[0];
             deck.RemoveAt(0);
             return id;
+        }
+
+        /// <summary>
+        /// Draw the top card of the Wound deck. Designer ruling: when the Wound deck runs
+        /// out, reshuffle <see cref="GameState.WoundDiscard"/> into a fresh Wound deck and
+        /// keep drawing, rather than treating the deck as a hard limit. Every Wound draw in
+        /// the engine funnels through here (GainWound, Rend, Painkillers, Neurotoxin) so the
+        /// reshuffle applies uniformly. If both the deck and the discard pile are empty, every
+        /// one of the 26 Wound cards is currently sitting in a Wound slot somewhere on the
+        /// board — a state this throws for rather than silently fabricating a card.
+        /// </summary>
+        private string DrawWound()
+        {
+            if (State.WoundDeck.Count == 0)
+            {
+                if (State.WoundDiscard.Count == 0)
+                {
+                    throw new InvalidOperationException(
+                        "No Wound cards remain to draw: all 26 are on player boards.");
+                }
+                State.WoundDeck.AddRange(State.WoundDiscard);
+                State.WoundDiscard.Clear();
+                _rng.Shuffle(State.WoundDeck);
+                SaveRng();
+                Log("deck", "wound discards reshuffled");
+            }
+            return Draw(State.WoundDeck, "wound");
         }
 
         private string DrawMedicalItem()

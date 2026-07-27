@@ -36,6 +36,17 @@ namespace StiflingDark.Engine.Core
         /// <summary>Extra adjacencies created by Secret Passage tokens (canonical keys).</summary>
         public HashSet<string> SecretPassages { get; } = new HashSet<string>();
 
+        /// <summary>
+        /// Spaces the Adversary alone may not enter: Lucy Belle's Barricade tokens, which
+        /// "work like Doors for the Adversary" but which "Investigators may Move through" and
+        /// which "do not block line of sight". A separate set from
+        /// <see cref="DoorStates"/> for exactly that reason — a Door token blocks every
+        /// non-Spirit figure, a Barricade blocks only the Adversary — and the "within X spaces"
+        /// distance metric ignores it too. Only <see cref="MapGraph.TryStep"/> consults it, and
+        /// only for <see cref="FigureKind.Adversary"/>. Written by Game.InvestigatorAbilities.cs.
+        /// </summary>
+        public HashSet<string> AdversaryBarriers { get; } = new HashSet<string>();
+
         public static string EdgeKey(string a, string b) =>
             string.CompareOrdinal(a, b) <= 0 ? a + "|" + b : b + "|" + a;
 
@@ -168,6 +179,12 @@ namespace StiflingDark.Engine.Core
 
             // Destination door tokens. Spirits are not affected by anything that affects movement.
             if (figure != FigureKind.Spirit && BlocksMovement(overlay.DoorState(to)))
+            {
+                return null;
+            }
+
+            // Barricade tokens are Doors for the Adversary and nothing at all for anyone else.
+            if (figure == FigureKind.Adversary && overlay.AdversaryBarriers.Contains(to))
             {
                 return null;
             }

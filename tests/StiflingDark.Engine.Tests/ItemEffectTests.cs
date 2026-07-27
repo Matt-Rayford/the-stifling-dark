@@ -317,8 +317,10 @@ namespace StiflingDark.Engine.Tests
             aira.Items.Add("blood-chalice");
 
             game.BeginInvestigatorTurn("aira");
-            game.UseItem("blood-chalice");
-            game.UseItem("blood-chalice");
+            // Blood Chalice now names the Investigator whose Major Ability is borrowed;
+            // Ibraheem is not in this game, which the card explicitly allows.
+            game.UseItem("blood-chalice", new List<string> { "ibraheem" });
+            game.UseItem("blood-chalice", new List<string> { "ibraheem" });
 
             Assert.Contains("blood-chalice", aira.Items);
             Assert.Equal(2, aira.Wounds.Count(w => w.FaceUp));

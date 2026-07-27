@@ -37,6 +37,15 @@ namespace StiflingDark.Engine.Core
         /// the turn ends (Decay's Charge surcharge, Unblinking Eye, Tunnel Vision).</summary>
         partial void OnFlashlightPlaced(InvestigatorState inv);
 
+        /// <summary>The Charge Final Action has just been declared legal and committed to
+        /// (<see cref="FinalActionKind.Charge"/> is already set), before the Charge point is
+        /// granted or the turn ends. Any cost a card attaches to *taking* Charge (Gear Jam's
+        /// Stamina) must be paid here rather than in <see cref="OnInvestigatorTurnEnd"/>: that
+        /// fanout also runs Wound/Condition effects that can drain the same resource first
+        /// (Breathless's own end-of-turn Stamina loss), and paying late can throw a card's
+        /// own cost out of EndTurn instead of refusing the Action up front.</summary>
+        partial void OnChargeDeclared(InvestigatorState inv);
+
         /// <summary>End of a round, before the round counter advances and while the round's
         /// Bright spaces are still lit (token expiry, Neurotoxin's 2-Wound discard).</summary>
         partial void OnRoundEnd();
@@ -92,6 +101,24 @@ namespace StiflingDark.Engine.Core
         /// can still write a modifier that covers this whole round (the Butcher's Decay).</summary>
         partial void OnRoundStart();
 
+        /// <summary>One completed Adversary movement step, after the figure has arrived and the
+        /// cost has been paid, so <see cref="AdversaryState.Space"/> is already the new space
+        /// (Brielle's Can tokens flipping to their Noise side).</summary>
+        partial void OnAdversaryMoveStep(string from, string to);
+
+        /// <summary>An Adversary figure has just been Revealed. <paramref name="figureId"/> is
+        /// "main" for the Adversary's own standee, or the extra figure's id for a Cultist
+        /// (Mada's Coin token).</summary>
+        partial void OnAdversaryRevealed(string figureId);
+
+        /// <summary>The MP one Investigator Move step is about to cost, still mutable and not
+        /// yet charged. <paramref name="costBox"/> is a single-element cell holding MapGraph's
+        /// printed cost; Game.MoveStep floors the result at 1. Implementations must be free of
+        /// side effects — the step may still be refused for want of MP — so an allowance an
+        /// adjustment draws on is spent from <see cref="OnInvestigatorMoveStep"/> instead, once
+        /// the step has actually happened (Dylan's Dark-as-Dim discount).</summary>
+        partial void AdjustMoveCost(InvestigatorState inv, string from, string to, List<int> costBox);
+
         // ---------- Action keys (RequireActionAllowed / CollectActionBlockers) ----------
 
         /// <summary>The Sprint core action.</summary>
@@ -116,6 +143,8 @@ namespace StiflingDark.Engine.Core
         public const string ActionUseItem = "use-item";
         /// <summary>One Move step.</summary>
         public const string ActionMove = "move";
+        /// <summary>Using your Investigator's printed Minor or Major Ability (Disoriented).</summary>
+        public const string ActionUseAbility = "use-ability";
 
         // ---------- Wound origin tags (GainWound / OnWoundGained) ----------
 

@@ -100,6 +100,12 @@ namespace StiflingDark.Engine.Core
         public bool CursedFront { get; set; }
         public bool Revealed { get; set; }
         public bool Collected { get; set; }
+        /// <summary>Vincent's Scout forced the Adversary to place this token face-down on the
+        /// main board: its space is public knowledge, its face is not. Informational only —
+        /// this engine has no hidden-information layer, so <see cref="TokenSpace"/> and
+        /// <see cref="CursedFront"/> are recorded from setup either way, and picking the token
+        /// up still needs it <see cref="Revealed"/>.</summary>
+        public bool ScoutedFaceDown { get; set; }
     }
 
     public sealed class CooldownCard
@@ -228,6 +234,15 @@ namespace StiflingDark.Engine.Core
         public List<string> GeneralItemDeck { get; set; } = new List<string>();
         public List<string> CursedItemDeck { get; set; } = new List<string>();
         public List<string> WoundDeck { get; set; } = new List<string>();
+        /// <summary>
+        /// Wound cards that left play by discard rather than by staying in an Investigator's
+        /// Wound slots: Rend's 2 undealt draws, Painkillers' undrafted/replaced cards,
+        /// Commiserate, and Neurotoxin's 2-Wound payoff. Reshuffled into <see cref="WoundDeck"/>
+        /// by <see cref="Game.DrawWound"/> once the deck runs dry. Wounds that are simply held
+        /// face-up or face-down in an Investigator's slots never come here — those cards stay
+        /// out of circulation until the game ends.
+        /// </summary>
+        public List<string> WoundDiscard { get; set; } = new List<string>();
 
         /// <summary>
         /// Card-placed board tokens: token instance id -> space id. Instance ids are

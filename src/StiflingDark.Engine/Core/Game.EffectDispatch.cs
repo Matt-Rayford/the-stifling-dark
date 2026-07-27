@@ -22,6 +22,7 @@ namespace StiflingDark.Engine.Core
         partial void WoundsOnWoundGained(InvestigatorState inv, WoundInstance wound, string origin);
         partial void ConditionsOnTurnStart(InvestigatorState inv);
         partial void ConditionsOnTurnEnd(InvestigatorState inv);
+        partial void ConditionsOnChargeDeclared(InvestigatorState inv);
         partial void ConditionsOnMoveStep(InvestigatorState inv, string from, string to);
         partial void ConditionsOnFlashlightPlaced(InvestigatorState inv);
         partial void ConditionsOnRoundEnd();
@@ -63,6 +64,20 @@ namespace StiflingDark.Engine.Core
         partial void SpiritsOnRoundEnd();
         partial void SpiritsOnInvestigatorDeath(InvestigatorState inv);
 
+        // Investigator Minor/Major Ability sub-hooks (Game.InvestigatorAbilities.cs). Ordering
+        // inside the fanouts matters twice and is called out at each call site: Abilities go
+        // *last* on turn start (Ibraheem's Footprint floor has to see every card's MP cut
+        // first) and *first* on the Sprint roll (Lucy Belle reinterprets the die face, before
+        // the cards that subtract from the result).
+        partial void AbilitiesOnTurnStart(InvestigatorState inv);
+        partial void AbilitiesOnTurnEnd(InvestigatorState inv);
+        partial void AbilitiesOnMoveStep(InvestigatorState inv, string from, string to);
+        partial void AbilitiesCollectActionBlockers(InvestigatorState inv, string actionKey, List<string> blockers);
+        partial void AbilitiesModifySprintRoll(InvestigatorState inv, List<int> rollBox);
+        partial void AbilitiesAdjustMoveCost(InvestigatorState inv, string from, string to, List<int> costBox);
+        partial void AbilitiesOnAdversaryMoveStep(string from, string to);
+        partial void AbilitiesOnAdversaryRevealed(string figureId);
+
         partial void OnInvestigatorDeath(InvestigatorState inv)
         {
             SpiritsOnInvestigatorDeath(inv);
@@ -87,6 +102,9 @@ namespace StiflingDark.Engine.Core
             ConditionsOnTurnStart(inv);
             ItemsOnTurnStart(inv);
             EventsOnTurnStart(inv);
+            // Last: Ibraheem's "your Footprint can never drop below 4" has to see the MP after
+            // every card above has already taken its bite out of it.
+            AbilitiesOnTurnStart(inv);
         }
 
         partial void OnInvestigatorTurnEnd(InvestigatorState inv)
@@ -98,6 +116,7 @@ namespace StiflingDark.Engine.Core
             WoundsOnTurnEnd(inv);
             ConditionsOnTurnEnd(inv);
             ItemsOnTurnEnd(inv);
+            AbilitiesOnTurnEnd(inv);
             AdversaryOnInvestigatorTurnEnd(inv);
         }
 
@@ -111,7 +130,27 @@ namespace StiflingDark.Engine.Core
             ConditionsOnMoveStep(inv, from, to);
             ItemsOnMoveStep(inv, from, to);
             EventsOnMoveStep(inv, from, to);
+            AbilitiesOnMoveStep(inv, from, to);
             AdversaryOnInvestigatorMoveStep(inv, from, to);
+        }
+
+        partial void AdjustMoveCost(InvestigatorState inv, string from, string to, List<int> costBox)
+        {
+            if (SkipCardHooksForSpirit(inv))
+            {
+                return;
+            }
+            AbilitiesAdjustMoveCost(inv, from, to, costBox);
+        }
+
+        partial void OnAdversaryMoveStep(string from, string to)
+        {
+            AbilitiesOnAdversaryMoveStep(from, to);
+        }
+
+        partial void OnAdversaryRevealed(string figureId)
+        {
+            AbilitiesOnAdversaryRevealed(figureId);
         }
 
         partial void OnFlashlightPlaced(InvestigatorState inv)
@@ -119,6 +158,11 @@ namespace StiflingDark.Engine.Core
             ConditionsOnFlashlightPlaced(inv);
             ItemsOnFlashlightPlaced(inv);
             EventsOnFlashlightPlaced(inv);
+        }
+
+        partial void OnChargeDeclared(InvestigatorState inv)
+        {
+            ConditionsOnChargeDeclared(inv);
         }
 
         partial void OnRoundEnd()
@@ -132,6 +176,14 @@ namespace StiflingDark.Engine.Core
 
         partial void ResolveWoundFaceUp(InvestigatorState inv, WoundInstance wound)
         {
+            // Asher ignores the effects of the face-up Wound in his first slot (Minor) or of
+            // every one he holds for a turn (Major), and "the effects" include the card's
+            // immediate "when you receive or flip this face-up" text, not just its ongoing one.
+            if (IgnoresFaceUpWound(inv, wound))
+            {
+                Log("ability", $"{inv.DefId} ignores {wound.CardId}'s effects");
+                return;
+            }
             WoundsResolveFaceUp(inv, wound);
         }
 
@@ -142,10 +194,14 @@ namespace StiflingDark.Engine.Core
             ItemsCollectActionBlockers(inv, actionKey, blockers);
             EventsCollectActionBlockers(inv, actionKey, blockers);
             SpiritsCollectActionBlockers(inv, actionKey, blockers);
+            AbilitiesCollectActionBlockers(inv, actionKey, blockers);
         }
 
         partial void ModifySprintRoll(InvestigatorState inv, List<int> rollBox)
         {
+            // First: Lucy Belle's Minor reinterprets the rolled *face* (a 2 counts as a 3), so
+            // the cards that subtract from the result work off the reinterpreted number.
+            AbilitiesModifySprintRoll(inv, rollBox);
             WoundsModifySprintRoll(inv, rollBox);
             ConditionsModifySprintRoll(inv, rollBox);
             ItemsModifySprintRoll(inv, rollBox);

@@ -462,8 +462,8 @@ namespace StiflingDark.Engine.Core
             SpendStalk(1);
             State.Adversary.ShadowTokens["main"] = State.Adversary.Space;
             GainWound(target, faceUp: true);
-            Draw(State.WoundDeck, "wound"); // drawn only to be discarded
-            Draw(State.WoundDeck, "wound"); // drawn only to be discarded
+            State.WoundDiscard.Add(DrawWound()); // drawn only to be discarded
+            State.WoundDiscard.Add(DrawWound()); // drawn only to be discarded
             GrantConditionWithSubstitution(target, "mauled");
         }
 

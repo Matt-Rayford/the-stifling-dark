@@ -7,9 +7,20 @@ namespace StiflingDark.Engine.Tests
     /// game resuming after the fact, a stuck "every survivor escaped" win, adversary actions
     /// marked used before their validation finished, the Butcher acting after Disappearing,
     /// an unenforced Ability ban, and Immolate wounding a target before its 2nd was validated.
-    /// Also covers 2 designer rulings: a mixed outcome ("some lived, some did not") is a Draw,
-    /// not an Investigators win, whether it is a death or the round-limit timeout that decides
-    /// it; and Cult figures (Cultists and Mor'gonnod) can never stack.
+    /// Also covers 2 designer rulings: deaths no longer downgrade an escape to a Draw — dead
+    /// Investigators play on as Spirits, so every living Investigator escaping while the
+    /// Adversary's kill condition is unmet is an outright Investigators win, regardless of
+    /// prior deaths (the round-limit timeout still counts on-board survivors as killed and can
+    /// still produce a Draw); and Cult figures (Cultists and Mor'gonnod) can never stack.
+    ///
+    /// 3 more turn-lock bugs found by a later self-play run: Fear's "unable to use it" clause
+    /// was never checked (only whether a Major Ability token was held), hard-locking an
+    /// Investigator whose Major could never legally resolve (Mada below 5 Stamina, etc.);
+    /// Dylan's free Escape Artist return skipped clearing Fear's compulsion, hard-locking a
+    /// Fear'd Dylan while his token was out; and Gear Jam's Stamina cost was paid in the
+    /// end-of-turn hooks, after Breathless could already have drained the same Stamina,
+    /// throwing out of EndTurn. Plus a designer ruling on Mitchell's Sweep: the 2nd Flashlight
+    /// position replaces the 1st (its Reveals stand, its Bright coverage does not).
     /// </summary>
     public class ArenaRegressionTests
     {
@@ -171,6 +182,47 @@ namespace StiflingDark.Engine.Tests
             }
         }
 
+        /// <summary>Finish the round (every remaining Investigator turn, then the Adversary's).</summary>
+        private static void FinishRound(Game game)
+        {
+            FinishInvestigatorTurns(game);
+            game.AdversaryEndTurn();
+        }
+
+        // ---------- Helpers for the Fear / Gear Jam / Sweep regressions below: these need an
+        // arbitrary Investigator roster (Mada, Dylan), not the fixed aira/lucy-belle/mitchell/
+        // vincent one NewSawmillGame hands out. ----------
+
+        private static readonly string[] AbilityGameStartSpaces = { "285", "286", "305", "307" };
+
+        private static Game NewAbilityGame(string[] invIds, ulong seed = 1234, string adversary = "butcher")
+        {
+            var starts = new Dictionary<string, string>();
+            for (int i = 0; i < invIds.Length; i++)
+            {
+                starts[invIds[i]] = AbilityGameStartSpaces[i];
+            }
+            int medical = TestData.Db.Config.ByInvestigatorCount[invIds.Length].MedicalItemsOnBoard;
+            var game = Game.NewGame(TestData.Db, new GameSetup
+            {
+                ScenarioId = "sawmill",
+                Seed = seed,
+                AdversaryId = adversary,
+                InvestigatorStartSpaces = starts,
+                MedicalItemSpaces = new List<string> { "24", "208" }.Take(medical).ToList(),
+            });
+            FinishAdversarySetup(game);
+            return game;
+        }
+
+        private static WoundInstance GiveFaceUpWound(Game game, InvestigatorState inv, string cardId)
+        {
+            var wound = new WoundInstance { CardId = cardId, FaceUp = false };
+            inv.Wounds.Add(wound);
+            game.FlipWoundFaceUp(inv, wound);
+            return wound;
+        }
+
         // ---------- Bug 1: a decided game must stay decided ----------
 
         [Fact]
@@ -208,11 +260,11 @@ namespace StiflingDark.Engine.Tests
         // ---------- Bug 2: a death that leaves only escapees must decide the game, not deadlock ----------
 
         [Fact]
-        public void Last_living_investigator_dying_after_a_teammate_escaped_ends_the_game_in_a_draw()
+        public void Last_living_investigator_dying_after_a_teammate_escaped_ends_the_game_in_an_investigators_win()
         {
-            // Designer ruling: "some lived, some did not" is a Draw, not an Investigators win.
-            // Pre-ruling this asserted InvestigatorsWin; the bug this guards against (the game
-            // deadlocking, Phase stuck at InvestigatorTurns/AdversaryTurn forever) is unchanged.
+            // Revised designer ruling: deaths no longer downgrade an escape to a Draw. The bug
+            // this guards against (the game deadlocking, Phase stuck at
+            // InvestigatorTurns/AdversaryTurn forever) is unchanged.
             var game = New2InvestigatorHorrorGame("bufotoxin", new List<string> { "devour" });
             var aira = Inv(game, "aira");
             var lucy = Inv(game, "lucy-belle");
@@ -226,7 +278,7 @@ namespace StiflingDark.Engine.Tests
             // Below the Horror's KillsToWin of 2: the Adversary has not won this outright.
             Assert.Equal(1, game.State.Adversary.Kills);
             Assert.Equal(GamePhase.GameOver, game.State.Phase);
-            Assert.Equal(GameResult.Draw, game.State.Result);
+            Assert.Equal(GameResult.InvestigatorsWin, game.State.Result);
         }
 
         // ---------- Designer ruling: full-team escape with no deaths is still an outright win ----------
@@ -256,10 +308,10 @@ namespace StiflingDark.Engine.Tests
             Assert.Equal(GameResult.InvestigatorsWin, game.State.Result);
         }
 
-        // ---------- Designer ruling: 1 death then the rest escaping is a Draw ----------
+        // ---------- Designer ruling: 1 death then the rest escaping is an Investigators win ----------
 
         [Fact]
-        public void One_death_then_the_rest_escaping_ends_the_game_in_a_draw()
+        public void One_death_then_the_rest_escaping_ends_the_game_in_an_investigators_win()
         {
             var game = NewSawmillGame("insatiable-horror"); // KillsToWin = 2
             var aira = Inv(game, "aira");
@@ -288,7 +340,7 @@ namespace StiflingDark.Engine.Tests
             }
 
             Assert.Equal(GamePhase.GameOver, game.State.Phase);
-            Assert.Equal(GameResult.Draw, game.State.Result);
+            Assert.Equal(GameResult.InvestigatorsWin, game.State.Result);
         }
 
         // ---------- Designer ruling: round-limit timeout counts unescaped survivors as killed ----------
@@ -320,7 +372,7 @@ namespace StiflingDark.Engine.Tests
         }
 
         [Fact]
-        public void Timeout_with_two_escapes_below_kills_to_win_is_a_draw()
+        public void Timeout_is_an_adversary_win_even_with_escapes_below_kills_to_win()
         {
             var game = New3InvestigatorHorrorGame("bufotoxin", new List<string> { "devour" });
             var lucy = Inv(game, "lucy-belle");
@@ -342,7 +394,7 @@ namespace StiflingDark.Engine.Tests
             Assert.Equal(17, game.State.Round);
             // killedAtTimeout = 1 (aira); Kills(0) + 1 = 1 < KillsToWin(2), but some Investigators
             // did escape, so this is a Draw rather than a default Adversary win.
-            Assert.Equal(GameResult.Draw, game.State.Result);
+            Assert.Equal(GameResult.AdversaryWins, game.State.Result);
         }
 
         // ---------- Designer ruling: Cult figures can never stack ----------
@@ -527,6 +579,149 @@ namespace StiflingDark.Engine.Tests
             // illegal one) was found invalid.
             Assert.Empty(aira.Wounds);
             Assert.Empty(lucy.Wounds);
+        }
+
+        // ---------- Bug 6: Fear must release when the Major Ability can never resolve ----------
+
+        [Fact]
+        public void Fear_releases_for_mada_below_5_stamina_instead_of_locking_the_turn()
+        {
+            var game = NewAbilityGame(new[] { "mada", "mitchell" });
+            var mada = Inv(game, "mada");
+
+            game.BeginInvestigatorTurn("mada");
+            GiveFaceUpWound(game, mada, "fear");
+            game.EndTurnWithoutFinalAction(); // this turn is unaffected ("your next turn")
+            FinishRound(game);
+
+            mada.Stamina = 3; // below MadaMajorStaminaCost (5): his Major can never resolve
+            game.BeginInvestigatorTurn("mada");
+
+            // Pre-fix: ForcedMajorAbilityPending only checked MajorAbilityTokens >= 1, so this
+            // threw forever (an 8/1000-game hard lock) instead of releasing the compulsion.
+            game.EndTurnWithoutFinalAction();
+
+            Assert.Null(game.State.ActiveInvestigator);
+            Assert.Equal(1, mada.MajorAbilityTokens); // never spent
+            Assert.Contains(game.State.Log, e => e.Type == "wound" && e.Detail.Contains("released"));
+        }
+
+        [Fact]
+        public void Fear_is_still_enforced_when_the_major_ability_is_resolvable()
+        {
+            var game = NewAbilityGame(new[] { "mada", "mitchell" });
+            var mada = Inv(game, "mada");
+
+            game.BeginInvestigatorTurn("mada");
+            GiveFaceUpWound(game, mada, "fear");
+            game.EndTurnWithoutFinalAction();
+            FinishRound(game);
+
+            mada.Stamina = 5; // exactly MadaMajorStaminaCost: his Major *can* resolve
+            game.BeginInvestigatorTurn("mada");
+            Assert.NotEmpty(game.ActionBlockers("mada", Game.ActionCharge));
+            Assert.Throws<InvalidOperationException>(() => game.EndTurnWithoutFinalAction());
+            Assert.Throws<InvalidOperationException>(() => game.ChargeFlashlight());
+
+            game.UseMajorAbility(); // MadaTripleSprint: spends the 5 Stamina, satisfies Fear
+            game.EndTurnWithoutFinalAction();
+
+            Assert.Null(game.State.ActiveInvestigator);
+            Assert.Equal(0, mada.MajorAbilityTokens);
+        }
+
+        // ---------- Bug 7: Dylan's free Escape Artist return must satisfy Fear ----------
+
+        [Fact]
+        public void Fear_is_satisfied_by_dylans_free_escape_artist_return()
+        {
+            var game = NewAbilityGame(new[] { "dylan", "mitchell" });
+            var dylan = Inv(game, "dylan");
+
+            game.BeginInvestigatorTurn("dylan");
+            game.UseMajorAbility(args: new List<string> { "271" }); // drops the token, spends it
+            Assert.Equal(0, dylan.MajorAbilityTokens);
+            GiveFaceUpWound(game, dylan, "fear");
+            game.EndTurnWithoutFinalAction(); // this turn is unaffected
+            FinishRound(game);
+
+            // A fresh Major Ability token (e.g. the Evidence economy) while the Escape Artist
+            // token is still out and inside its window: UseMajorAbility always takes the free
+            // return branch here, per the card's own two-part design.
+            dylan.MajorAbilityTokens = 1;
+            game.BeginInvestigatorTurn("dylan");
+            Assert.Equal("271", game.BoardTokenSpace("escape-artist:dylan"));
+
+            // Pre-fix: the free-return branch in UseMajorAbility returned before clearing the
+            // Fear compulsion, so this stayed forced forever even after "using" the Major.
+            Assert.Throws<InvalidOperationException>(() => game.EndTurnWithoutFinalAction());
+
+            game.UseMajorAbility(); // free return: no args, no token spent
+            Assert.Equal("271", dylan.Space);
+            Assert.Equal(1, dylan.MajorAbilityTokens); // the return is free
+
+            game.EndTurnWithoutFinalAction();
+            Assert.Null(game.State.ActiveInvestigator);
+        }
+
+        // ---------- Bug 8: Gear Jam's Stamina cost must not race Breathless at end of turn ----------
+
+        [Fact]
+        public void Gear_jam_and_breathless_together_no_longer_lock_the_turn()
+        {
+            var game = NewAbilityGame(new[] { "aira", "mitchell" });
+            var aira = Inv(game, "aira");
+            game.GrantConditionWithSubstitution(aira, "gear-jam");
+
+            game.BeginInvestigatorTurn("aira");
+            GiveFaceUpWound(game, aira, "breathless"); // "lose 1 Stamina at the end of each of your turns"
+            aira.Stamina = 1; // just enough for Gear Jam's spend; Breathless would then overdraw
+            aira.Charge = 0;
+
+            // Pre-fix: Gear Jam's SpendStamina ran in ConditionsOnTurnEnd, *after* Breathless's
+            // own end-of-turn Stamina loss in the same OnInvestigatorTurnEnd fanout had already
+            // spent the last point, throwing "Not enough Stamina" out of EndTurn (seed 680).
+            game.ChargeFlashlight();
+
+            Assert.Equal(1, aira.Charge); // the Charge Action still happened
+            Assert.Equal(0, aira.Stamina); // Gear Jam's 1, then Breathless's 1, clamped at 0
+            Assert.Null(game.State.ActiveInvestigator); // the turn ended cleanly
+        }
+
+        // ---------- Designer ruling: Mitchell's Sweep replaces the 1st cone, not adds to it ----------
+
+        [Fact]
+        public void Mitchell_sweep_replaces_the_1st_flashlight_cone_but_keeps_its_reveals()
+        {
+            var game = NewAbilityGame(new[] { "mitchell", "aira" });
+            // "274" is only in the 1st cone (angle 0.0) of Mitchell's default Sawmill start
+            // space; not in the 2nd (angle pi). Confirmed by direct inspection of both cones.
+            game.State.Adversary.Space = "274";
+
+            game.BeginInvestigatorTurn("mitchell");
+            game.PlaceFlashlight(0.0);
+            var placement = game.State.Flashlights.Single(f => f.InvestigatorId == "mitchell");
+            var firstCone = placement.BrightSpaces.ToList();
+            Assert.Contains("274", firstCone);
+            Assert.True(game.State.Adversary.Revealed); // caught by the 1st cone
+
+            game.UseMinorAbility("mitchell", new List<string> { "3.14159265" }); // ~pi: the opposite direction
+            var secondCone = placement.BrightSpaces.ToList();
+
+            // The 2nd cone is lit...
+            Assert.All(secondCone, s => Assert.Contains(s, game.State.Overlay.BrightSpaces));
+            // ...and every space only the 1st cone lit (minus any overlap with the 2nd, and
+            // Mitchell's own space, which both cones always include) is dark again.
+            foreach (string space in firstCone.Where(s => !secondCone.Contains(s)))
+            {
+                Assert.DoesNotContain(space, game.State.Overlay.BrightSpaces);
+            }
+            Assert.DoesNotContain("274", secondCone);
+            Assert.DoesNotContain("274", game.State.Overlay.BrightSpaces);
+
+            // Reveals are permanent: the Adversary caught by the 1st cone stays Revealed even
+            // though the space that caught them has gone dark again.
+            Assert.True(game.State.Adversary.Revealed);
         }
     }
 }
