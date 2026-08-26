@@ -1,11 +1,8 @@
 using System;
 using System.IO;
-using System.Linq;
 using StiflingDark.Engine.Data;
 using StiflingDark.Protocol;
-using TMPro;
 using UnityEngine;
-using UnityEngine.UI;
 
 namespace StiflingDark.Unity
 {
@@ -17,14 +14,17 @@ namespace StiflingDark.Unity
     /// Everything about the game is server-authoritative. The client's only local computation
     /// is geometry: the flashlight beam preview, move-cost highlighting, and the light mask,
     /// all of them running the engine's own code out of Assets/Plugins.
+    ///
+    /// The menu's own screens (root / online / solo setup) live in StiflingDarkApp.Menu.cs.
     /// </summary>
-    public sealed class StiflingDarkApp : MonoBehaviour
+    public sealed partial class StiflingDarkApp : MonoBehaviour
     {
         private const string PrefServer = "sd_server";
         private const string PrefName = "sd_name";
         private const string PrefKey = "sd_player_key";
         private const string PrefLastRoom = "sd_last_room";
         private const string DefaultServer = "ws://localhost:5226/ws";
+        private const string DefaultPlayerName = "Matt";
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
         private static void Boot()
@@ -64,27 +64,8 @@ namespace StiflingDark.Unity
         private IGameSession _gameSession;
 
         private Stage _stage = Stage.Menu;
-        private RectTransform _menu;
-        private RectTransform _menuBody;
-        private TMP_Text _menuStatus;
-        private TMP_InputField _nameInput;
-        private TMP_InputField _serverInput;
-        private TMP_InputField _codeInput;
-        private TMP_Text _toast;
-        private float _toastUntil;
-        private int _menuRevision = -1;
-        /// <summary>Room code whose My Games × is one click from ending the game.</summary>
-        private string _confirmEndCode = "";
         private string _dataDir = "";
         private string _loadError = "";
-
-        // ---- offline setup, as the solo panel has it dialled in
-        private bool _soloPanelOpen;
-        private string _soloScenario = "sawmill";
-        private string _soloAdversary = "butcher";
-        private SeatRole _soloRole = SeatRole.Investigator;
-        private string _soloInvestigator = "";
-        private int _soloInvestigatorCount = 3;
 
         private void Start()
         {
@@ -109,66 +90,7 @@ namespace StiflingDark.Unity
             ShowStage(Stage.Menu);
         }
 
-        // ---------------------------------------------------------------- menu
-
-        private void BuildMenu(Transform canvas)
-        {
-            _menu = UiKit.CreatePanel(canvas, "Menu", new Color(0.03f, 0.035f, 0.045f, 1f));
-            UiKit.Anchor(_menu, Vector2.zero, Vector2.one);
-
-            var title = UiKit.CreateText(_menu, "THE STIFLING DARK", 84, TextAnchor.MiddleCenter,
-                UiKit.AccentColor);
-            title.font = UiKit.TitleFont;
-            UiKit.Anchor((RectTransform)title.transform, new Vector2(0, 0.87f), new Vector2(1, 0.97f));
-            var subtitle = UiKit.CreateText(_menu,
-                "Keep your friends close, and your flashlight closer", 16, TextAnchor.MiddleCenter,
-                UiKit.MutedColor);
-            UiKit.Anchor((RectTransform)subtitle.transform, new Vector2(0, 0.83f), new Vector2(1, 0.87f));
-
-            // One centred column, Lemonade Wars style: every control full-width on its own row,
-            // with the connected sections (New Table / Join / My Games) scrolling below.
-            var column = UiKit.CreateGroup(_menu, "MenuColumn");
-            UiKit.Anchor(column, new Vector2(0.32f, 0.07f), new Vector2(0.68f, 0.82f));
-            var layout = column.gameObject.AddComponent<VerticalLayoutGroup>();
-            layout.spacing = 8;
-            layout.childControlHeight = true;
-            layout.childControlWidth = true;
-            layout.childForceExpandHeight = false;
-
-            UiKit.CreateButton(column, "PLAY VS BOTS", 20, OpenSoloPanel)
-                .GetComponent<LayoutElement>().minHeight = 52;
-            UiKit.CreateText(column, "Offline — one human seat, bots in all the others", 13,
-                TextAnchor.MiddleCenter, UiKit.MutedColor)
-                .gameObject.AddComponent<LayoutElement>().minHeight = 22;
-
-            UiKit.CreateText(column, "Your name", 14, TextAnchor.MiddleLeft, UiKit.MutedColor)
-                .gameObject.AddComponent<LayoutElement>().minHeight = 20;
-            _nameInput = UiKit.CreateInput(column, "name", PlayerPrefs.GetString(PrefName, "Matt"));
-            UiKit.CreateText(column, "Server", 14, TextAnchor.MiddleLeft, UiKit.MutedColor)
-                .gameObject.AddComponent<LayoutElement>().minHeight = 20;
-            _serverInput = UiKit.CreateInput(column, DefaultServer, LoadServerUrl());
-
-            UiKit.CreateButton(column, "Connect", 18, Connect)
-                .GetComponent<LayoutElement>().minHeight = 44;
-            UiKit.CreateButton(column, "Use localhost", 18, () =>
-            {
-                _serverInput.text = DefaultServer;
-                Connect();
-            }).GetComponent<LayoutElement>().minHeight = 44;
-
-            _menuStatus = UiKit.CreateText(column, "", 15, TextAnchor.MiddleCenter, UiKit.MutedColor);
-            _menuStatus.gameObject.AddComponent<LayoutElement>().minHeight = 28;
-
-            var actions = UiKit.CreatePanel(column, "Actions", UiKit.PanelColor);
-            var actionsElement = actions.gameObject.AddComponent<LayoutElement>();
-            actionsElement.flexibleHeight = 1;
-            actionsElement.minHeight = 120;
-            _menuBody = UiKit.CreateScrollList(actions, 6f);
-
-            _toast = UiKit.CreateText(_menu, "", 18, TextAnchor.MiddleCenter, UiKit.AccentColor);
-            UiKit.Anchor((RectTransform)_toast.transform, Vector2.zero, new Vector2(1, 0),
-                new Vector2(80, 16), new Vector2(-80, 52));
-        }
+        // -------------------------------------------------------- connection
 
         /// <summary>
         /// Last URL actually connected to wins; then StreamingAssets/client-config.json (written
@@ -266,17 +188,18 @@ namespace StiflingDark.Unity
             _session.RoomClosed += (code, by) =>
             {
                 Toast("Game " + code + " was ended by " + by + ".");
-                // Kicked out from under us: drop back to the menu instead of a dead table.
+                // Kicked out from under us: drop back to the online screen we came from
+                // instead of a dead table.
                 if (_session.Room.Code == code && _stage != Stage.Menu)
                 {
-                    ShowStage(Stage.Menu);
+                    ReturnToMenu(MenuScreen.Online);
                 }
             };
             _menuRevision = -1;
 
             // The lobby and table are built against a live session, so rebuild them per connect.
             _lobby = new LobbyUi(_menu.parent, _session, _describe);
-            _lobby.LeaveRequested = () => ShowStage(Stage.Menu);
+            _lobby.LeaveRequested = () => ReturnToMenu(MenuScreen.Online);
             _lobby.SetActive(false);
         }
 
@@ -299,210 +222,7 @@ namespace StiflingDark.Unity
             }
         }
 
-        private void Toast(string message)
-        {
-            if (_toast != null)
-            {
-                _toast.text = message;
-                _toastUntil = Time.time + 6f;
-            }
-        }
-
-        private void RenderMenu()
-        {
-            UiKit.Clear(_menuBody);
-            if (_loadError.Length > 0)
-            {
-                _menuStatus.text = "game-data did not load:\n" + _loadError +
-                    "\n\nRun tools/sync_unity.sh, then reopen the project.";
-                return;
-            }
-            if (_soloPanelOpen)
-            {
-                RenderSoloPanel();
-                return;
-            }
-            if (_session == null)
-            {
-                _menuStatus.text = "Not connected.";
-                return;
-            }
-            _menuStatus.text = _session.Connected
-                ? (_session.Greeted
-                    ? "Connected as " + _session.PlayerId
-                    : "Connected — identifying…")
-                : _session.ConnectionError.Length > 0
-                    ? "Not connected: " + _session.ConnectionError
-                    : "Connecting to " + _session.Url + "…";
-
-            if (!_session.Greeted)
-            {
-                return;
-            }
-
-            Head("NEW TABLE");
-            UiKit.CreateButton(_menuBody, "Create a room — I play an Investigator", 18,
-                () => _session.CreateRoom(NameOrDefault(), SeatRole.Investigator));
-            UiKit.CreateButton(_menuBody, "Create a room — I play the Adversary", 18,
-                () => _session.CreateRoom(NameOrDefault(), SeatRole.Adversary));
-
-            Head("JOIN BY CODE");
-            _codeInput = UiKit.CreateInput(_menuBody, "5-letter room code");
-            UiKit.CreateButton(_menuBody, "Join as Investigator", 17,
-                () => Join(SeatRole.Investigator));
-            UiKit.CreateButton(_menuBody, "Join as Adversary", 17, () => Join(SeatRole.Adversary));
-
-            string lastRoom = PlayerPrefs.GetString(PrefLastRoom, "");
-            if (lastRoom.Length > 0)
-            {
-                UiKit.CreateButton(_menuBody, "Rejoin " + lastRoom + " (with saved token)", 17,
-                    () => _session.JoinRoom(lastRoom, NameOrDefault(),
-                        PlayerPrefs.GetString("sd_token_" + lastRoom, ""), SeatRole.Investigator));
-            }
-
-            Head("MY GAMES");
-            if (_session.GamesList.Count == 0)
-            {
-                UiKit.CreateText(_menuBody, "(none yet)", 15, TextAnchor.MiddleLeft, UiKit.MutedColor)
-                    .gameObject.AddComponent<LayoutElement>().minHeight = 24;
-            }
-            foreach (var summary in _session.GamesList)
-            {
-                var captured = summary;
-                string label = captured.Code + "   " +
-                    Describe.Scenario(captured.ScenarioId) + " vs " +
-                    Describe.Adversary(captured.AdversaryId) +
-                    "   round " + captured.Round +
-                    (captured.Finished ? "   FINISHED" : captured.YourTurn ? "   ← YOUR TURN" : "") +
-                    "   (" + string.Join(", ", captured.Players) + ")";
-                var row = UiKit.CreateRow(_menuBody, "Game " + captured.Code);
-                var join = UiKit.CreateButton(row, label, 15, () => _session.JoinRoom(captured.Code,
-                    NameOrDefault(), PlayerPrefs.GetString("sd_token_" + captured.Code, ""),
-                    captured.YourRole));
-                var joinLayout = join.GetComponent<LayoutElement>();
-                joinLayout.flexibleWidth = 1;
-                // That label runs to ~100 characters, so the label-derived preferred width is
-                // far wider than the row. When preferred widths do not fit, a
-                // HorizontalLayoutGroup shrinks EVERY child toward its minWidth — which is how
-                // the × ended up a thin red sliver. Ask for a modest slice and let
-                // flexibleWidth do the filling: the row's preferred total then fits, so the ×
-                // gets exactly its own (fixed) width and this button still spans the rest.
-                joinLayout.preferredWidth = 240f;
-                // End-for-everyone, two clicks: the × arms, "end?" fires. Any re-render
-                // (refresh, another row's ×) disarms it again.
-                bool armed = _confirmEndCode == captured.Code;
-                UiKit.CreateButton(row, armed ? "end?" : "×", 15, () =>
-                {
-                    if (_confirmEndCode == captured.Code)
-                    {
-                        _confirmEndCode = "";
-                        _session.AbandonGame(captured.Code);
-                        Toast("Ending game " + captured.Code + " for everyone…");
-                    }
-                    else
-                    {
-                        _confirmEndCode = captured.Code;
-                        RenderMenu();
-                    }
-                }, danger: true,
-                    // A square icon while idle, a little wider once armed so "end?" reads.
-                    // fixedWidth pins minWidth too, so neither state can be squeezed flat.
-                    fixedWidth: armed ? 56f : 34f);
-            }
-            UiKit.CreateButton(_menuBody, "Refresh My Games", 15, () =>
-            {
-                _confirmEndCode = "";
-                _session.ListGames();
-            });
-        }
-
-        // ----------------------------------------------------------- play vs bots
-
-        private void OpenSoloPanel()
-        {
-            if (_describe == null)
-            {
-                Toast("game-data did not load — offline play needs it.");
-                return;
-            }
-            if (_soloInvestigator.Length == 0 && _describe.BaseInvestigators.Count > 0)
-            {
-                _soloInvestigator = _describe.BaseInvestigators[0].Id;
-            }
-            _soloPanelOpen = true;
-            RenderMenu();
-        }
-
-        private void RenderSoloPanel()
-        {
-            _menuStatus.text = "Offline game — no server, nothing saved when you leave.";
-
-            Head("SCENARIO");
-            foreach (string scenario in new[] { "sawmill", "amusement-park" })
-            {
-                string captured = scenario;
-                Choice(Describe.Scenario(captured), _soloScenario == captured,
-                    () => _soloScenario = captured);
-            }
-
-            Head("ADVERSARY");
-            foreach (string adversary in new[] { "butcher", "cult-of-hunlow", "insatiable-horror" })
-            {
-                string captured = adversary;
-                Choice(Describe.Adversary(captured), _soloAdversary == captured,
-                    () => _soloAdversary = captured);
-            }
-
-            Head("YOU PLAY");
-            Choice("An Investigator", _soloRole == SeatRole.Investigator,
-                () => _soloRole = SeatRole.Investigator);
-            Choice("The Adversary", _soloRole == SeatRole.Adversary,
-                () => _soloRole = SeatRole.Adversary);
-
-            if (_soloRole == SeatRole.Investigator)
-            {
-                Head("YOUR INVESTIGATOR");
-                foreach (var def in _describe.BaseInvestigators)
-                {
-                    var captured = def;
-                    Choice(captured.Name + "   ·   MP " + captured.Mp + "   ·   " +
-                        captured.MinorAbility.Name + " / " + captured.MajorAbility.Name,
-                        _soloInvestigator == captured.Id, () => _soloInvestigator = captured.Id);
-                }
-            }
-
-            Head("INVESTIGATORS AT THE TABLE");
-            var sizes = UiKit.CreateRow(_menuBody, "PartySize", 6f, 34f);
-            foreach (int size in new[] { 2, 3, 4 })
-            {
-                int captured = size;
-                UiKit.CreateButton(sizes,
-                    (_soloInvestigatorCount == captured ? "●  " : "○  ") + captured, 16,
-                    () =>
-                    {
-                        _soloInvestigatorCount = captured;
-                        RenderMenu();
-                    });
-            }
-
-            UiKit.CreateButton(_menuBody, "START", 20, StartSoloGame)
-                .GetComponent<LayoutElement>().minHeight = 48;
-            UiKit.CreateButton(_menuBody, "Back", 16, () =>
-            {
-                _soloPanelOpen = false;
-                RenderMenu();
-            });
-        }
-
-        /// <summary>One radio row of the solo panel; picking re-renders so the dot moves.</summary>
-        private void Choice(string label, bool current, Action pick)
-        {
-            UiKit.CreateButton(_menuBody, (current ? "●  " : "○  ") + label, 16, () =>
-            {
-                pick();
-                RenderMenu();
-            });
-        }
+        // ------------------------------------------------------- offline play
 
         private void StartSoloGame()
         {
@@ -524,7 +244,6 @@ namespace StiflingDark.Unity
                 return;
             }
             _solo.ErrorReceived += OnSessionError;
-            _soloPanelOpen = false;
         }
 
         /// <summary>Offline games are session-only: leaving discards the whole thing.</summary>
@@ -533,35 +252,10 @@ namespace StiflingDark.Unity
             _solo?.Dispose();
             _solo = null;
             DestroyTable();
-            _menuRevision = -1;
-            ShowStage(Stage.Menu);
+            ReturnToMenu(MenuScreen.Solo);
         }
 
-        private string NameOrDefault()
-        {
-            string name = (_nameInput.text ?? "").Trim();
-            return name.Length == 0 ? "Player" : name;
-        }
-
-        private void Join(SeatRole role)
-        {
-            string code = (_codeInput?.text ?? "").Trim().ToUpperInvariant();
-            if (code.Length == 0)
-            {
-                Toast("Enter a room code first.");
-                return;
-            }
-            _session.JoinRoom(code, NameOrDefault(),
-                PlayerPrefs.GetString("sd_token_" + code, ""), role);
-        }
-
-        private void Head(string title)
-        {
-            var text = UiKit.CreateText(_menuBody, title, 13, TextAnchor.MiddleLeft, UiKit.AccentColor);
-            text.gameObject.AddComponent<LayoutElement>().minHeight = 28;
-        }
-
-        // -------------------------------------------------------------- screens
+        // -------------------------------------------------------------- stages
 
         private void ShowStage(Stage stage)
         {
@@ -575,13 +269,16 @@ namespace StiflingDark.Unity
             }
         }
 
+        /// <summary>Back out of a table onto the menu screen that launched it.</summary>
+        private void ReturnToMenu(MenuScreen screen)
+        {
+            ShowStage(Stage.Menu);
+            ShowMenuScreen(screen);
+        }
+
         private void Update()
         {
-            if (_toast != null && _toastUntil > 0f && Time.time > _toastUntil)
-            {
-                _toast.text = "";
-                _toastUntil = 0f;
-            }
+            TickToast();
             if (_solo != null)
             {
                 TickSoloGame();
@@ -617,7 +314,7 @@ namespace StiflingDark.Unity
             }
             else if (_stage != Stage.Menu && !inRoom)
             {
-                ShowStage(Stage.Menu);
+                ReturnToMenu(MenuScreen.Online);
             }
 
             switch (_stage)
@@ -687,7 +384,7 @@ namespace StiflingDark.Unity
                     : () =>
                     {
                         _session.LeaveRoom();
-                        ShowStage(Stage.Menu);
+                        ReturnToMenu(MenuScreen.Online);
                     };
                 _gameSession = session;
                 _builtScenario = scenarioId;
