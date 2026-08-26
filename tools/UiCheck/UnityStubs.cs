@@ -186,6 +186,11 @@ namespace UnityEngine
 
     public sealed class Font : Object { }
 
+    public static class Resources
+    {
+        public static T Load<T>(string path) where T : Object => null;
+    }
+
     public class GameObject : Object
     {
         public GameObject() { }
@@ -484,6 +489,7 @@ namespace TMPro
     public sealed class TMP_FontAsset : UnityEngine.Object
     {
         public List<TMP_FontAsset> fallbackFontAssetTable { get; set; }
+        public static TMP_FontAsset CreateFontAsset(UnityEngine.Font font) => null;
     }
 
     public static class TMP_Settings

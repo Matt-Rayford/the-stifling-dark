@@ -104,46 +104,47 @@ namespace StiflingDark.Unity
             _menu = UiKit.CreatePanel(canvas, "Menu", new Color(0.03f, 0.035f, 0.045f, 1f));
             UiKit.Anchor(_menu, Vector2.zero, Vector2.one);
 
-            var title = UiKit.CreateText(_menu, "THE STIFLING DARK", 44, TextAnchor.MiddleLeft,
+            var title = UiKit.CreateText(_menu, "THE STIFLING DARK", 84, TextAnchor.MiddleCenter,
                 UiKit.AccentColor);
-            UiKit.Anchor((RectTransform)title.transform, new Vector2(0, 1), new Vector2(1, 1),
-                new Vector2(80, -140), new Vector2(-80, -60));
+            title.font = UiKit.TitleFont;
+            UiKit.Anchor((RectTransform)title.transform, new Vector2(0, 0.87f), new Vector2(1, 0.97f));
             var subtitle = UiKit.CreateText(_menu,
-                "Unity client v1 — the server rules, this draws it.", 18, TextAnchor.MiddleLeft,
+                "Keep your friends close, and your flashlight closer", 16, TextAnchor.MiddleCenter,
                 UiKit.MutedColor);
-            UiKit.Anchor((RectTransform)subtitle.transform, new Vector2(0, 1), new Vector2(1, 1),
-                new Vector2(82, -172), new Vector2(-80, -140));
+            UiKit.Anchor((RectTransform)subtitle.transform, new Vector2(0, 0.83f), new Vector2(1, 0.87f));
 
-            var form = UiKit.CreateGroup(_menu, "Form");
-            UiKit.Anchor(form, new Vector2(0, 1), new Vector2(0.55f, 1),
-                new Vector2(80, -420), new Vector2(-20, -190));
-            var formLayout = form.gameObject.AddComponent<VerticalLayoutGroup>();
-            formLayout.spacing = 8;
-            formLayout.childControlHeight = true;
-            formLayout.childControlWidth = true;
-            formLayout.childForceExpandHeight = false;
+            // One centred column, Lemonade Wars style: every control full-width on its own row,
+            // with the connected sections (New Table / Join / My Games) scrolling below.
+            var column = UiKit.CreateGroup(_menu, "MenuColumn");
+            UiKit.Anchor(column, new Vector2(0.32f, 0.07f), new Vector2(0.68f, 0.82f));
+            var layout = column.gameObject.AddComponent<VerticalLayoutGroup>();
+            layout.spacing = 8;
+            layout.childControlHeight = true;
+            layout.childControlWidth = true;
+            layout.childForceExpandHeight = false;
 
-            UiKit.CreateText(form, "Your name", 14, TextAnchor.MiddleLeft, UiKit.MutedColor)
+            UiKit.CreateText(column, "Your name", 14, TextAnchor.MiddleLeft, UiKit.MutedColor)
                 .gameObject.AddComponent<LayoutElement>().minHeight = 20;
-            _nameInput = UiKit.CreateInput(form, "name", PlayerPrefs.GetString(PrefName, "Matt"));
-            UiKit.CreateText(form, "Server", 14, TextAnchor.MiddleLeft, UiKit.MutedColor)
+            _nameInput = UiKit.CreateInput(column, "name", PlayerPrefs.GetString(PrefName, "Matt"));
+            UiKit.CreateText(column, "Server", 14, TextAnchor.MiddleLeft, UiKit.MutedColor)
                 .gameObject.AddComponent<LayoutElement>().minHeight = 20;
-            _serverInput = UiKit.CreateInput(form, DefaultServer, LoadServerUrl());
-            var connectRow = UiKit.CreateRow(form, "ConnectRow", 8f, 42f);
-            UiKit.CreateButton(connectRow, "CONNECT", 20, Connect);
-            UiKit.CreateButton(connectRow, "localhost", 15, () =>
+            _serverInput = UiKit.CreateInput(column, DefaultServer, LoadServerUrl());
+
+            UiKit.CreateButton(column, "Connect", 18, Connect)
+                .GetComponent<LayoutElement>().minHeight = 44;
+            UiKit.CreateButton(column, "Use localhost", 18, () =>
             {
                 _serverInput.text = DefaultServer;
                 Connect();
-            });
+            }).GetComponent<LayoutElement>().minHeight = 44;
 
-            _menuStatus = UiKit.CreateText(_menu, "", 16, TextAnchor.UpperLeft, UiKit.MutedColor);
-            UiKit.Anchor((RectTransform)_menuStatus.transform, new Vector2(0, 1), new Vector2(0.55f, 1),
-                new Vector2(80, -500), new Vector2(-20, -420));
+            _menuStatus = UiKit.CreateText(column, "", 15, TextAnchor.MiddleCenter, UiKit.MutedColor);
+            _menuStatus.gameObject.AddComponent<LayoutElement>().minHeight = 28;
 
-            var actions = UiKit.CreatePanel(_menu, "Actions", UiKit.PanelColor);
-            UiKit.Anchor(actions, new Vector2(0.55f, 0), new Vector2(1, 1),
-                new Vector2(20, 60), new Vector2(-80, -190));
+            var actions = UiKit.CreatePanel(column, "Actions", UiKit.PanelColor);
+            var actionsElement = actions.gameObject.AddComponent<LayoutElement>();
+            actionsElement.flexibleHeight = 1;
+            actionsElement.minHeight = 120;
             _menuBody = UiKit.CreateScrollList(actions, 6f);
 
             _toast = UiKit.CreateText(_menu, "", 18, TextAnchor.MiddleCenter, UiKit.AccentColor);
@@ -305,9 +306,7 @@ namespace StiflingDark.Unity
             }
             if (_session == null)
             {
-                _menuStatus.text = "Start the server with\n" +
-                    "  ~/.dotnet/dotnet run --project src/StiflingDark.Server\n" +
-                    "then connect. Default " + DefaultServer + ".";
+                _menuStatus.text = "Not connected.";
                 return;
             }
             _menuStatus.text = _session.Connected
@@ -362,7 +361,15 @@ namespace StiflingDark.Unity
                 var join = UiKit.CreateButton(row, label, 15, () => _session.JoinRoom(captured.Code,
                     NameOrDefault(), PlayerPrefs.GetString("sd_token_" + captured.Code, ""),
                     captured.YourRole));
-                join.GetComponent<LayoutElement>().flexibleWidth = 1;
+                var joinLayout = join.GetComponent<LayoutElement>();
+                joinLayout.flexibleWidth = 1;
+                // That label runs to ~100 characters, so the label-derived preferred width is
+                // far wider than the row. When preferred widths do not fit, a
+                // HorizontalLayoutGroup shrinks EVERY child toward its minWidth — which is how
+                // the × ended up a thin red sliver. Ask for a modest slice and let
+                // flexibleWidth do the filling: the row's preferred total then fits, so the ×
+                // gets exactly its own (fixed) width and this button still spans the rest.
+                joinLayout.preferredWidth = 240f;
                 // End-for-everyone, two clicks: the × arms, "end?" fires. Any re-render
                 // (refresh, another row's ×) disarms it again.
                 bool armed = _confirmEndCode == captured.Code;
@@ -379,7 +386,10 @@ namespace StiflingDark.Unity
                         _confirmEndCode = captured.Code;
                         RenderMenu();
                     }
-                }, danger: true);
+                }, danger: true,
+                    // A square icon while idle, a little wider once armed so "end?" reads.
+                    // fixedWidth pins minWidth too, so neither state can be squeezed flat.
+                    fixedWidth: armed ? 56f : 34f);
             }
             UiKit.CreateButton(_menuBody, "Refresh My Games", 15, () =>
             {

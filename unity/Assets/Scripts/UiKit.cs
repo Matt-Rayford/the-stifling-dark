@@ -22,11 +22,11 @@ namespace StiflingDark.Unity
         public static readonly Color GoodColor = new Color(0.45f, 0.80f, 0.52f);
 
         private static TMP_FontAsset _font;
+        private static TMP_FontAsset _titleFont;
 
         /// <summary>
-        /// The one font. TSD ships no fonts of its own in game-assets, so this is TMP's
-        /// bundled Liberation Sans SDF (Assets/TextMesh Pro, committed) — legible at HUD
-        /// sizes, every glyph present, nothing to import.
+        /// The body font: TMP's bundled Liberation Sans SDF (Assets/TextMesh Pro, committed) —
+        /// legible at HUD sizes, every glyph present, nothing to import.
         /// </summary>
         public static TMP_FontAsset Font
         {
@@ -37,6 +37,34 @@ namespace StiflingDark.Unity
                     _font = TMP_Settings.defaultFontAsset;
                 }
                 return _font;
+            }
+        }
+
+        /// <summary>
+        /// Display font for big headings: "The Macabre" from game-assets/fonts, which
+        /// tools/sync_unity.sh copies into Assets/Resources/Fonts so Unity imports it. Built
+        /// as a dynamic TMP asset at runtime (glyphs rasterize on demand), with the body font
+        /// as glyph fallback; when the file was never synced this IS the body font.
+        /// </summary>
+        public static TMP_FontAsset TitleFont
+        {
+            get
+            {
+                if (_titleFont == null)
+                {
+                    var source = Resources.Load<Font>("Fonts/The Macabre");
+                    if (source == null)
+                    {
+                        _titleFont = Font;
+                    }
+                    else
+                    {
+                        _titleFont = TMP_FontAsset.CreateFontAsset(source);
+                        _titleFont.fallbackFontAssetTable =
+                            new System.Collections.Generic.List<TMP_FontAsset> { Font };
+                    }
+                }
+                return _titleFont;
             }
         }
 
@@ -124,10 +152,15 @@ namespace StiflingDark.Unity
         /// the designer is hunting rules bugs, and "why is this greyed out?" is a better
         /// question than "where did that button go?". <paramref name="tooltip"/> shows the
         /// reason on hover.
+        ///
+        /// <paramref name="fixedWidth"/> pins the width instead of deriving it from the label:
+        /// a horizontal row that cannot fit every child's preferred width shrinks them all
+        /// toward their minWidth, so a small icon button beside a wide one needs a minWidth
+        /// too or it collapses into a sliver. Fixed-width buttons centre their label.
         /// </summary>
         public static Button CreateButton(Transform parent, string label, int fontSize,
             UnityEngine.Events.UnityAction onClick, bool enabled = true, string tooltip = null,
-            bool danger = false)
+            bool danger = false, float fixedWidth = 0f)
         {
             var go = new GameObject("Button", typeof(RectTransform), typeof(Image), typeof(Button),
                 typeof(LayoutElement));
@@ -136,7 +169,14 @@ namespace StiflingDark.Unity
             element.minHeight = 32;
             // Horizontal rows hand each child its PREFERRED width; without one a button
             // collapses to nothing. Vertical lists force-expand width and ignore this.
-            element.preferredWidth = label.Length * fontSize * 0.56f + 26f;
+            element.preferredWidth = fixedWidth > 0f
+                ? fixedWidth
+                : label.Length * fontSize * 0.56f + 26f;
+            if (fixedWidth > 0f)
+            {
+                element.minWidth = fixedWidth;
+                element.flexibleWidth = 0;
+            }
             var button = go.GetComponent<Button>();
             button.transition = Selectable.Transition.None;
             button.onClick.AddListener(onClick);
@@ -153,9 +193,11 @@ namespace StiflingDark.Unity
             var image = go.GetComponent<Image>();
             image.color = idleBackground;
 
-            var text = CreateText(go.transform, label, fontSize, TextAnchor.MiddleLeft, idleText);
+            var text = CreateText(go.transform, label, fontSize,
+                fixedWidth > 0f ? TextAnchor.MiddleCenter : TextAnchor.MiddleLeft, idleText);
             Anchor((RectTransform)text.transform, Vector2.zero, Vector2.one,
-                new Vector2(10, 2), new Vector2(-8, -2));
+                fixedWidth > 0f ? new Vector2(2, 2) : new Vector2(10, 2),
+                fixedWidth > 0f ? new Vector2(-2, -2) : new Vector2(-8, -2));
 
             if (enabled)
             {

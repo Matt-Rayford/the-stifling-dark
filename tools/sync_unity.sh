@@ -54,6 +54,14 @@ if [ -f game-assets/other/small-flashlight-transparent.png ]; then
   cp game-assets/other/small-flashlight-transparent.png "$STREAMING/tokens/other/"
 fi
 
+echo "== syncing fonts =="
+# Display fonts go under Assets/Resources so Unity imports them and the code-built UI can
+# Resources.Load them at runtime (StreamingAssets files never become Font assets).
+if [ -d game-assets/fonts ]; then
+  mkdir -p "$UNITY_DIR/Assets/Resources/Fonts"
+  cp game-assets/fonts/*.otf game-assets/fonts/*.ttf "$UNITY_DIR/Assets/Resources/Fonts/" 2>/dev/null || true
+fi
+
 echo "== board textures =="
 # Rendered straight from the print PDFs with pdftoppm and scaled to 4096 on the long edge.
 # game-data/maps/*.json records the FULL-res render (source.imageSize / source.renderDpi);

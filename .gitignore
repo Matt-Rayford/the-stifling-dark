@@ -24,3 +24,6 @@ unity/Assets/StreamingAssets/
 unity/Assets/StreamingAssets.meta
 unity/Assets/Textures/
 unity/Assets/Textures.meta
+unity/Assets/Resources/Fonts/
+unity/Assets/Resources/Fonts.meta
+server.log

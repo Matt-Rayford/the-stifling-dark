@@ -548,6 +548,25 @@ public class ServerTests : IClassFixture<WebApplicationFactory<Program>>
         Assert.Contains("No room", (string)gone["message"]!);
     }
 
+    [Fact]
+    public void Wire_serialization_preserves_dictionary_key_case()
+    {
+        // CamelCasePropertyNamesContractResolver camel-cases dictionary KEYS as well as
+        // property names — DoorStates["O-11"] became "o-11" on the wire, a space id no
+        // client could resolve, so locked doors silently never rendered. Property names
+        // must stay camelCase; dictionary keys must travel verbatim.
+        var view = new PlayerView();
+        view.Overlay.DoorStates["O-11"] = DoorState.Locked;
+        string json = Newtonsoft.Json.JsonConvert.SerializeObject(view, Protocol.WireCodec.Settings);
+
+        Assert.Contains("\"O-11\"", json);
+        Assert.Contains("\"doorStates\"", json); // property names still camelCase
+
+        var back = Newtonsoft.Json.JsonConvert.DeserializeObject<PlayerView>(
+            json, Protocol.WireCodec.Settings)!;
+        Assert.Equal(DoorState.Locked, back.Overlay.DoorStates["O-11"]);
+    }
+
     // ------------------------------------------------------------- helpers
 
     private static async Task<JObject> Room(TestClient client, string code)

@@ -17,7 +17,17 @@ namespace StiflingDark.Protocol
     {
         public static JsonSerializerSettings Settings { get; } = new JsonSerializerSettings
         {
-            ContractResolver = new CamelCasePropertyNamesContractResolver(),
+            // NOT CamelCasePropertyNamesContractResolver: that resolver also camel-cases
+            // DICTIONARY KEYS, silently turning DoorStates["O-11"] into "o-11" on the wire —
+            // a space id no client can look up. Property names still travel camelCase;
+            // dictionary keys are data and travel verbatim.
+            ContractResolver = new DefaultContractResolver
+            {
+                NamingStrategy = new CamelCaseNamingStrategy
+                {
+                    ProcessDictionaryKeys = false,
+                },
+            },
             // A redacted field is ABSENT, not null: dropping nulls is what makes "hidden" and
             // "not there" indistinguishable in the bytes a client receives.
             NullValueHandling = NullValueHandling.Ignore,
