@@ -26,6 +26,7 @@
 
   <ItemGroup>
     <ProjectReference Include="../../src/StiflingDark.Protocol/StiflingDark.Protocol.csproj" />
+    <ProjectReference Include="../../src/StiflingDark.Bots/StiflingDark.Bots.csproj" />
   </ItemGroup>
 
   <ItemGroup>

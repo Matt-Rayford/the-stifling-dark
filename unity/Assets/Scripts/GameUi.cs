@@ -25,7 +25,7 @@ namespace StiflingDark.Unity
     /// </summary>
     public sealed class GameUi
     {
-        private readonly ServerSession _session;
+        private readonly IGameSession _session;
         private readonly BoardModel _board;
         private readonly BoardView _boardView;
         private readonly Describe _describe;
@@ -57,7 +57,7 @@ namespace StiflingDark.Unity
         /// <summary>Leave the table and go back to the menu.</summary>
         public Action LeaveRequested;
 
-        public GameUi(Transform canvas, ServerSession session, BoardModel board,
+        public GameUi(Transform canvas, IGameSession session, BoardModel board,
             BoardView boardView, Describe describe, Prompt prompt)
         {
             _session = session;

@@ -32,6 +32,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <Compile Include="../../unity/Assets/Scripts/IGameSession.cs" />
     <Compile Include="../../unity/Assets/Scripts/Session.cs" />
     <Compile Include="../../unity/Assets/Scripts/BoardModel.cs" />
     <Compile Include="../../unity/Assets/Scripts/Describe.cs" />

@@ -44,7 +44,7 @@ namespace StiflingDark.Unity
     /// The server is authoritative for every rule: this class never validates a command, it
     /// posts it and shows whatever <c>error</c> comes back.
     /// </summary>
-    public sealed class ServerSession : IDisposable
+    public sealed class ServerSession : IGameSession
     {
         private readonly ClientWebSocket _socket = new ClientWebSocket();
         private readonly ConcurrentQueue<JObject> _inbox = new ConcurrentQueue<JObject>();

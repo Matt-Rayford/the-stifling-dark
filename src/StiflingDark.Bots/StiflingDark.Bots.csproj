@@ -1,12 +1,13 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <!-- The engine is netstandard2.1 so it can be dropped into Unity; the bots cannot follow it
-         there. InvestigatorTeam.CostField runs Dijkstra on System.Collections.Generic
-         .PriorityQueue<,>, which is .NET 6+. Hand-rolling a heap would change the (deliberately
-         unspecified) tie-break order of the BCL's, and with it the bots' pathing, so the bots
-         target net8.0 and the engine stays portable on its own. -->
-    <TargetFramework>net8.0</TargetFramework>
+    <!-- netstandard2.1 so the bot brains can be dropped into Unity for offline play, matching
+         the engine. System.Collections.Generic.PriorityQueue<,> is .NET 6+; PriorityQueueShim.cs
+         ports the BCL's exact 4-ary heap (default comparer only, the only overload the bots use)
+         so InvestigatorTeam.CostField's tie-break order — and with it the bots' pathing — is
+         unchanged from the net8.0 build. -->
+    <TargetFramework>netstandard2.1</TargetFramework>
+    <LangVersion>latest</LangVersion>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <RootNamespace>StiflingDark.Bots</RootNamespace>

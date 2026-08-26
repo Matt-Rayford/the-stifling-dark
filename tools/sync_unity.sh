@@ -3,10 +3,11 @@
 #
 #   tools/sync_unity.sh
 #
-# 1. Builds StiflingDark.Engine + StiflingDark.Protocol (Release, netstandard2.1) and copies
-#    the DLLs into Assets/Plugins. The client uses them for local geometry — the flashlight
-#    beam preview runs FlashlightBeam + RasterLineOfSightBlocker + MapGraph in-process — while
-#    the SERVER stays authoritative for every rule.
+# 1. Builds StiflingDark.Engine + StiflingDark.Protocol + StiflingDark.Bots (Release,
+#    netstandard2.1) and copies the DLLs into Assets/Plugins. The client uses them for local
+#    geometry — the flashlight beam preview runs FlashlightBeam + RasterLineOfSightBlocker +
+#    MapGraph in-process — and for an offline "play vs bots" mode driven by the same bot
+#    brains the arena plays with, while the SERVER stays authoritative for every online rule.
 #    (Newtonsoft.Json is NOT copied — Unity's com.unity.nuget.newtonsoft-json provides it.)
 # 2. Copies game-data/ (maps/*.json, the *-los-mask.bin rasters, flashlight.json, config,
 #    cards) and game-assets/tokens/ into Assets/StreamingAssets.
@@ -26,10 +27,14 @@ TEXTURES="$UNITY_DIR/Assets/Textures"
 echo "== building engine + protocol =="
 "$DOTNET" build src/StiflingDark.Protocol -c Release --nologo -v quiet
 
+echo "== building bots =="
+"$DOTNET" build src/StiflingDark.Bots -c Release --nologo -v quiet
+
 echo "== syncing DLLs =="
 mkdir -p "$PLUGINS"
 cp src/StiflingDark.Engine/bin/Release/netstandard2.1/StiflingDark.Engine.dll "$PLUGINS/"
 cp src/StiflingDark.Protocol/bin/Release/netstandard2.1/StiflingDark.Protocol.dll "$PLUGINS/"
+cp src/StiflingDark.Bots/bin/Release/netstandard2.1/StiflingDark.Bots.dll "$PLUGINS/"
 
 echo "== syncing game data =="
 # The client loads this with the engine's own GameDatabase.Load(), so the layout under

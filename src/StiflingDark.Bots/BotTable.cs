@@ -1,7 +1,6 @@
-using StiflingDark.Bots;
 using StiflingDark.Engine.Core;
 
-namespace StiflingDark.Server;
+namespace StiflingDark.Bots;
 
 /// <summary>
 /// Drives every BOT-filled seat in one room, using the same brains the arena plays with.
@@ -10,7 +9,7 @@ namespace StiflingDark.Server;
 /// <see cref="AdversaryBot.TakeTurn"/> both play a whole turn against the engine directly, so
 /// the room paces bot seats one turn at a time rather than one action at a time.
 /// </summary>
-internal sealed class BotTable : IAnomalySink
+public sealed class BotTable : IAnomalySink
 {
     private readonly Game _game;
     private readonly DeterministicRng _rng;

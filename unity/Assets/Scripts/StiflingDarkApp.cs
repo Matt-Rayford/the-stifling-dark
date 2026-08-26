@@ -52,12 +52,16 @@ namespace StiflingDark.Unity
         private Describe _describe;
         private TokenArt _art;
         private ServerSession _session;
+        private LocalGameSession _solo;
         private Prompt _prompt;
         private LobbyUi _lobby;
         private GameUi _game;
         private BoardView _boardView;
         private BoardModel _boardModel;
         private string _builtScenario = "";
+        /// <summary>The session <see cref="_game"/> was built against; a different one needs a
+        /// fresh HUD, because the table holds its session for life.</summary>
+        private IGameSession _gameSession;
 
         private Stage _stage = Stage.Menu;
         private RectTransform _menu;
@@ -73,6 +77,14 @@ namespace StiflingDark.Unity
         private string _confirmEndCode = "";
         private string _dataDir = "";
         private string _loadError = "";
+
+        // ---- offline setup, as the solo panel has it dialled in
+        private bool _soloPanelOpen;
+        private string _soloScenario = "sawmill";
+        private string _soloAdversary = "butcher";
+        private SeatRole _soloRole = SeatRole.Investigator;
+        private string _soloInvestigator = "";
+        private int _soloInvestigatorCount = 3;
 
         private void Start()
         {
@@ -122,6 +134,12 @@ namespace StiflingDark.Unity
             layout.childControlHeight = true;
             layout.childControlWidth = true;
             layout.childForceExpandHeight = false;
+
+            UiKit.CreateButton(column, "PLAY VS BOTS", 20, OpenSoloPanel)
+                .GetComponent<LayoutElement>().minHeight = 52;
+            UiKit.CreateText(column, "Offline — one human seat, bots in all the others", 13,
+                TextAnchor.MiddleCenter, UiKit.MutedColor)
+                .gameObject.AddComponent<LayoutElement>().minHeight = 22;
 
             UiKit.CreateText(column, "Your name", 14, TextAnchor.MiddleLeft, UiKit.MutedColor)
                 .gameObject.AddComponent<LayoutElement>().minHeight = 20;
@@ -239,13 +257,10 @@ namespace StiflingDark.Unity
             // A reconnect starts a fresh conversation, so the lobby and table are rebuilt
             // against the new session rather than left holding a dead one.
             _lobby?.Destroy();
-            _game?.Destroy();
-            _boardView?.Destroy();
             _lobby = null;
-            _game = null;
-            _boardView = null;
+            DestroyTable();
             _session = ServerSession.Connect(url, PlayerKey(), name);
-            _session.ErrorReceived += OnServerError;
+            _session.ErrorReceived += OnSessionError;
             _session.TurnAlert += code => Toast("Another game needs you: room " + code);
             _session.RoomChanged += OnRoomChanged;
             _session.RoomClosed += (code, by) =>
@@ -263,14 +278,12 @@ namespace StiflingDark.Unity
             _lobby = new LobbyUi(_menu.parent, _session, _describe);
             _lobby.LeaveRequested = () => ShowStage(Stage.Menu);
             _lobby.SetActive(false);
-            _game = null;
-            _builtScenario = "";
         }
 
-        private void OnServerError(string message)
+        private void OnSessionError(string message)
         {
             Toast(message);
-            Debug.Log("server error: " + message);
+            Debug.Log("session error: " + message);
         }
 
         private void OnRoomChanged()
@@ -302,6 +315,11 @@ namespace StiflingDark.Unity
             {
                 _menuStatus.text = "game-data did not load:\n" + _loadError +
                     "\n\nRun tools/sync_unity.sh, then reopen the project.";
+                return;
+            }
+            if (_soloPanelOpen)
+            {
+                RenderSoloPanel();
                 return;
             }
             if (_session == null)
@@ -398,6 +416,127 @@ namespace StiflingDark.Unity
             });
         }
 
+        // ----------------------------------------------------------- play vs bots
+
+        private void OpenSoloPanel()
+        {
+            if (_describe == null)
+            {
+                Toast("game-data did not load — offline play needs it.");
+                return;
+            }
+            if (_soloInvestigator.Length == 0 && _describe.BaseInvestigators.Count > 0)
+            {
+                _soloInvestigator = _describe.BaseInvestigators[0].Id;
+            }
+            _soloPanelOpen = true;
+            RenderMenu();
+        }
+
+        private void RenderSoloPanel()
+        {
+            _menuStatus.text = "Offline game — no server, nothing saved when you leave.";
+
+            Head("SCENARIO");
+            foreach (string scenario in new[] { "sawmill", "amusement-park" })
+            {
+                string captured = scenario;
+                Choice(Describe.Scenario(captured), _soloScenario == captured,
+                    () => _soloScenario = captured);
+            }
+
+            Head("ADVERSARY");
+            foreach (string adversary in new[] { "butcher", "cult-of-hunlow", "insatiable-horror" })
+            {
+                string captured = adversary;
+                Choice(Describe.Adversary(captured), _soloAdversary == captured,
+                    () => _soloAdversary = captured);
+            }
+
+            Head("YOU PLAY");
+            Choice("An Investigator", _soloRole == SeatRole.Investigator,
+                () => _soloRole = SeatRole.Investigator);
+            Choice("The Adversary", _soloRole == SeatRole.Adversary,
+                () => _soloRole = SeatRole.Adversary);
+
+            if (_soloRole == SeatRole.Investigator)
+            {
+                Head("YOUR INVESTIGATOR");
+                foreach (var def in _describe.BaseInvestigators)
+                {
+                    var captured = def;
+                    Choice(captured.Name + "   ·   MP " + captured.Mp + "   ·   " +
+                        captured.MinorAbility.Name + " / " + captured.MajorAbility.Name,
+                        _soloInvestigator == captured.Id, () => _soloInvestigator = captured.Id);
+                }
+            }
+
+            Head("INVESTIGATORS AT THE TABLE");
+            var sizes = UiKit.CreateRow(_menuBody, "PartySize", 6f, 34f);
+            foreach (int size in new[] { 2, 3, 4 })
+            {
+                int captured = size;
+                UiKit.CreateButton(sizes,
+                    (_soloInvestigatorCount == captured ? "●  " : "○  ") + captured, 16,
+                    () =>
+                    {
+                        _soloInvestigatorCount = captured;
+                        RenderMenu();
+                    });
+            }
+
+            UiKit.CreateButton(_menuBody, "START", 20, StartSoloGame)
+                .GetComponent<LayoutElement>().minHeight = 48;
+            UiKit.CreateButton(_menuBody, "Back", 16, () =>
+            {
+                _soloPanelOpen = false;
+                RenderMenu();
+            });
+        }
+
+        /// <summary>One radio row of the solo panel; picking re-renders so the dot moves.</summary>
+        private void Choice(string label, bool current, Action pick)
+        {
+            UiKit.CreateButton(_menuBody, (current ? "●  " : "○  ") + label, 16, () =>
+            {
+                pick();
+                RenderMenu();
+            });
+        }
+
+        private void StartSoloGame()
+        {
+            if (_describe == null)
+            {
+                Toast("game-data did not load — offline play needs it.");
+                return;
+            }
+            try
+            {
+                _solo = new LocalGameSession(_db, _soloScenario, _soloAdversary, _soloRole,
+                    _soloInvestigator, _soloInvestigatorCount, NameOrDefault(),
+                    (ulong)DateTime.UtcNow.Ticks);
+            }
+            catch (Exception e)
+            {
+                Debug.LogException(e);
+                Toast("Could not start the offline game: " + e.Message);
+                return;
+            }
+            _solo.ErrorReceived += OnSessionError;
+            _soloPanelOpen = false;
+        }
+
+        /// <summary>Offline games are session-only: leaving discards the whole thing.</summary>
+        private void LeaveSoloGame()
+        {
+            _solo?.Dispose();
+            _solo = null;
+            DestroyTable();
+            _menuRevision = -1;
+            ShowStage(Stage.Menu);
+        }
+
         private string NameOrDefault()
         {
             string name = (_nameInput.text ?? "").Trim();
@@ -443,6 +582,11 @@ namespace StiflingDark.Unity
                 _toast.text = "";
                 _toastUntil = 0f;
             }
+            if (_solo != null)
+            {
+                TickSoloGame();
+                return;
+            }
             if (_session == null)
             {
                 if (_menuRevision != 0)
@@ -458,7 +602,7 @@ namespace StiflingDark.Unity
             bool inRoom = !string.IsNullOrEmpty(room.Code) && room.YourSeat >= 0;
             if (inRoom && room.Started && _session.View != null)
             {
-                EnsureGame(_session.View.ScenarioId);
+                EnsureGame(_session, _session.View.ScenarioId);
                 if (_stage != Stage.Game && _game != null)
                 {
                     ShowStage(Stage.Game);
@@ -494,13 +638,31 @@ namespace StiflingDark.Unity
             }
         }
 
-        /// <summary>
-        /// Build the board once the first update names the scenario. The map, the LoS mask and
-        /// the board texture all key off it, and the server is the one that decides.
-        /// </summary>
-        private void EnsureGame(string scenarioId)
+        private void TickSoloGame()
         {
-            if (_game != null && _builtScenario == scenarioId)
+            _solo.Pump();
+            EnsureGame(_solo, _solo.View.ScenarioId);
+            if (_game == null)
+            {
+                // The board would not build and the toast has already said why; sitting in a
+                // dead offline table would just re-toast every frame.
+                LeaveSoloGame();
+                return;
+            }
+            if (_stage != Stage.Game)
+            {
+                ShowStage(Stage.Game);
+            }
+            _game.Tick();
+        }
+
+        /// <summary>
+        /// Build the board once the session names the scenario. The map, the LoS mask and the
+        /// board texture all key off it, and the session is the one that decides.
+        /// </summary>
+        private void EnsureGame(IGameSession session, string scenarioId)
+        {
+            if (_game != null && _builtScenario == scenarioId && _gameSession == session)
             {
                 return;
             }
@@ -508,6 +670,7 @@ namespace StiflingDark.Unity
             {
                 return;
             }
+            DestroyTable();
             try
             {
                 _boardModel = new BoardModel(_db, scenarioId, _dataDir);
@@ -517,13 +680,16 @@ namespace StiflingDark.Unity
                         " — the flashlight preview will light through walls.");
                 }
                 _boardView = new BoardView(_boardModel, _art, _describe);
-                _game = new GameUi(_menu.parent, _session, _boardModel, _boardView, _describe,
+                _game = new GameUi(_menu.parent, session, _boardModel, _boardView, _describe,
                     _prompt);
-                _game.LeaveRequested = () =>
-                {
-                    _session.LeaveRoom();
-                    ShowStage(Stage.Menu);
-                };
+                _game.LeaveRequested = session == _solo
+                    ? (Action)LeaveSoloGame
+                    : () =>
+                    {
+                        _session.LeaveRoom();
+                        ShowStage(Stage.Menu);
+                    };
+                _gameSession = session;
                 _builtScenario = scenarioId;
             }
             catch (Exception e)
@@ -534,9 +700,21 @@ namespace StiflingDark.Unity
             }
         }
 
+        /// <summary>Drop the HUD and the board so the next table builds against its own session.</summary>
+        private void DestroyTable()
+        {
+            _game?.Destroy();
+            _boardView?.Destroy();
+            _game = null;
+            _boardView = null;
+            _gameSession = null;
+            _builtScenario = "";
+        }
+
         private void OnDestroy()
         {
             _session?.Dispose();
+            _solo?.Dispose();
         }
     }
 }

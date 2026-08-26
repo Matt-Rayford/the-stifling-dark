@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using System.Security.Cryptography;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
+using StiflingDark.Bots;
 using StiflingDark.Engine.Core;
 using StiflingDark.Engine.Data;
 using StiflingDark.Protocol;
