@@ -750,5 +750,48 @@ namespace StiflingDark.Engine.Tests
             // though the space that caught them has gone dark again.
             Assert.True(game.State.Adversary.Revealed);
         }
+
+        // ---------- Designer ruling: Mitchell's placement keeps his turn open to Sweep ----------
+
+        [Fact]
+        public void Mitchell_keeps_his_turn_after_placing_until_he_explicitly_ends_it()
+        {
+            var game = NewAbilityGame(new[] { "mitchell", "aira" });
+            var mitchell = Inv(game, "mitchell");
+            mitchell.Stamina = 3;
+
+            game.BeginInvestigatorTurn("mitchell");
+            game.PlaceFlashlight(0.0);
+
+            // Pre-fix, placing ended the turn instantly and the bots played on between his
+            // two cones. Now the table waits: he is still the active Investigator, movement
+            // is over (the placement was the Final Action), and only Sweep or an explicit
+            // end-of-turn move things along.
+            Assert.Equal("mitchell", game.State.ActiveInvestigator);
+            Assert.False(mitchell.TurnTakenThisRound);
+            Assert.Throws<InvalidOperationException>(() => game.MoveStep("306"));
+            Assert.Throws<InvalidOperationException>(() => game.TakeInvolvedAction());
+
+            game.UseMinorAbility("mitchell", new List<string> { "1.5" }); // the Sweep
+            Assert.Equal("mitchell", game.State.ActiveInvestigator); // still his turn
+
+            game.EndTurnWithoutFinalAction();
+            Assert.Null(game.State.ActiveInvestigator);
+            Assert.True(mitchell.TurnTakenThisRound);
+            // The automatic Rest still lands; the placement forfeited the automatic Charge.
+            Assert.Equal(4, mitchell.Stamina);
+        }
+
+        [Fact]
+        public void Other_investigators_still_end_their_turn_by_placing()
+        {
+            var game = NewAbilityGame(new[] { "mitchell", "aira" });
+
+            game.BeginInvestigatorTurn("aira");
+            game.PlaceFlashlight(0.0);
+
+            Assert.Null(game.State.ActiveInvestigator);
+            Assert.True(Inv(game, "aira").TurnTakenThisRound);
+        }
     }
 }

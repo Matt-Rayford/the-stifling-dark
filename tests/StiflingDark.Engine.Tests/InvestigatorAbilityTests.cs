@@ -465,7 +465,8 @@ namespace StiflingDark.Engine.Tests
             game.PlaceFlashlight(0.0);
             var placement = game.State.Flashlights.Single(f => f.InvestigatorId == "mitchell");
             var first = placement.BrightSpaces.ToList();
-            Assert.Null(game.State.ActiveInvestigator); // placing already ended his turn
+            // Placing keeps HIS turn open (designer ruling): the Sweep is the 2nd half of it.
+            Assert.Equal("mitchell", game.State.ActiveInvestigator);
 
             game.UseMinorAbility("mitchell", new List<string> { "3.14159265" });
 

@@ -611,6 +611,15 @@ namespace StiflingDark.Engine.Core
             Log("flashlight", $"{inv.DefId} lit {bright.Count} spaces");
             RevealOnBright(bright);
             OnFlashlightPlaced(inv);
+            // Designer ruling: Mitchell's Sweep is the second half of placing, so HIS turn
+            // stays open — the table (bots included) waits until he Sweeps and/or explicitly
+            // ends the turn. Movement is still over: the placement was the Final Action.
+            if (inv.DefId == "mitchell")
+            {
+                inv.MovementLocked = true;
+                Log("turn", $"{inv.DefId} may Sweep the Flashlight to a 2nd position, or end their turn");
+                return;
+            }
             EndTurn(inv);
         }
 
