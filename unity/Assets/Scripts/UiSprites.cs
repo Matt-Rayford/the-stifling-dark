@@ -11,6 +11,7 @@ namespace StiflingDark.Unity
         private static Sprite _roundedRect;
         private static Sprite _circle;
         private static Sprite _ring;
+        private static Sprite _rectGlow;
 
         /// <summary>Anti-aliased rounded rectangle, 9-sliced so corners keep their radius.</summary>
         public static Sprite RoundedRect
@@ -49,6 +50,51 @@ namespace StiflingDark.Unity
                 }
                 return _ring;
             }
+        }
+
+        /// <summary>
+        /// Rectangular halo: full alpha in the 9-slice core, fading smoothly to nothing at the
+        /// texture edge — a selection glow for card-shaped things, corners barely rounded by
+        /// the radial falloff alone.
+        /// </summary>
+        public static Sprite RectGlow
+        {
+            get
+            {
+                if (_rectGlow == null)
+                {
+                    _rectGlow = Glow(96, falloff: 34f);
+                }
+                return _rectGlow;
+            }
+        }
+
+        /// <summary>White texture whose alpha eases from 1 inside the slice core to 0 over the
+        /// outer <paramref name="falloff"/> pixels; distance goes radial at the corners so the
+        /// halo wraps them without a hard diagonal.</summary>
+        private static Sprite Glow(int size, float falloff)
+        {
+            var texture = NewTexture(size);
+            var pixels = new Color32[size * size];
+            float inner = falloff;
+            for (int y = 0; y < size; y++)
+            {
+                for (int x = 0; x < size; x++)
+                {
+                    float dx = Mathf.Max(0f, Mathf.Max(inner - x, x - (size - 1 - inner)));
+                    float dy = Mathf.Max(0f, Mathf.Max(inner - y, y - (size - 1 - inner)));
+                    float d = Mathf.Sqrt(dx * dx + dy * dy);
+                    float t = Mathf.Clamp01(1f - d / falloff);
+                    byte alpha = (byte)(255f * t * t);
+                    pixels[y * size + x] = new Color32(255, 255, 255, alpha);
+                }
+            }
+            texture.SetPixels32(pixels);
+            texture.Apply();
+            float border = falloff + 4f;
+            return Sprite.Create(texture, new Rect(0, 0, size, size), new Vector2(0.5f, 0.5f),
+                100f, 0, SpriteMeshType.FullRect,
+                new Vector4(border, border, border, border));
         }
 
         /// <summary>

@@ -76,6 +76,90 @@ namespace StiflingDark.Unity
         }
 
         /// <summary>
+        /// An Investigator's player-board back — the landscape character sheet in
+        /// StreamingAssets/player-boards, name and abilities and bio all rendered into the art.
+        /// </summary>
+        public Sprite PlayerBoard(string investigatorId) =>
+            BoardBack("player-boards", investigatorId);
+
+        /// <summary>The Adversary's own board back, the sheet carrying their rules text.</summary>
+        public Sprite AdversaryBoard(string adversaryId) =>
+            BoardBack("adversary-boards", adversaryId);
+
+        /// <summary>
+        /// A landscape board sheet from one of the StreamingAssets board folders. No circle
+        /// mask: unlike a face token this is a card, and it keeps its corners.
+        /// </summary>
+        private Sprite BoardBack(string folder, string id)
+        {
+            if (string.IsNullOrEmpty(id))
+            {
+                return null;
+            }
+            string key = folder + ":" + id;
+            if (_cache.TryGetValue(key, out var cached))
+            {
+                return cached;
+            }
+            var texture = LoadTextureSharp(Path.Combine(_streamingRoot, folder, id + ".png"));
+            var sprite = texture == null
+                ? null
+                : Sprite.Create(texture, new Rect(0, 0, texture.width, texture.height),
+                    new Vector2(0.5f, 0.5f), 100f, 0, SpriteMeshType.FullRect);
+            _cache[key] = sprite;
+            return sprite;
+        }
+
+        /// <summary>
+        /// Load an image with SHARP mipmaps (the Lemonade Wars technique). Unity's auto-mips
+        /// are box-filtered and smear minified board text; tools/make_mips.py packs Lanczos
+        /// downscales into a sibling `name.mips.png` (levels stacked top-to-bottom) and this
+        /// splits them back into the texture's mip levels. Falls back cleanly to the auto mips
+        /// when no packed file exists.
+        /// </summary>
+        private static Texture2D LoadTextureSharp(string path)
+        {
+            var texture = LoadTexture(path);
+            if (texture == null)
+            {
+                return null;
+            }
+            texture.filterMode = FilterMode.Trilinear;
+            texture.anisoLevel = 4;
+
+            string packedPath = path.Substring(0, path.Length - ".png".Length) + ".mips.png";
+            if (!File.Exists(packedPath))
+            {
+                return texture;
+            }
+            var packed = new Texture2D(2, 2, TextureFormat.RGBA32, false);
+            packed.LoadImage(File.ReadAllBytes(packedPath));
+
+            // Bands are stacked top-to-bottom by the generator; Unity's origin is bottom-left,
+            // so walk DOWN from the top. Stop conditions mirror the generator exactly
+            // (level dims = size >> L, floor 24px).
+            const int minDim = 24;
+            int y = packed.height;
+            for (int level = 1; ; level++)
+            {
+                int levelWidth = texture.width >> level;
+                int levelHeight = texture.height >> level;
+                if (levelWidth < minDim || levelHeight < minDim ||
+                    levelWidth > packed.width || y - levelHeight < 0)
+                {
+                    break;
+                }
+                y -= levelHeight;
+                texture.SetPixels(packed.GetPixels(0, y, levelWidth, levelHeight), level);
+            }
+            // updateMipmaps: false — keep our sharp levels (deeper, tiny levels stay
+            // auto-generated; nothing on screen ever samples them).
+            texture.Apply(false);
+            Object.Destroy(packed);
+            return texture;
+        }
+
+        /// <summary>
         /// The 4096x4096 board render for a map id. Tries StreamingAssets/textures first (what
         /// a built player has), then Assets/Textures (what the editor has straight after the
         /// sync script ran).

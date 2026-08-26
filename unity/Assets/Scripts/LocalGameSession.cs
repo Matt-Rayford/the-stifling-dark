@@ -49,18 +49,17 @@ namespace StiflingDark.Unity
         public event Action GameUpdated;
         public event Action<string> ErrorReceived;
 
-        /// <param name="yourInvestigatorId">Ignored when <paramref name="yourRole"/> is
-        /// Adversary; bots then fill all <paramref name="investigatorCount"/> seats.</param>
+        /// <param name="investigatorPicks">One entry per Investigator seat (2 to 4 of them), the
+        /// human's first when <paramref name="yourRole"/> is Investigator. An empty entry is
+        /// drawn at random, as is one naming an Investigator an earlier seat already took.</param>
         public LocalGameSession(GameDatabase db, string scenarioId, string adversaryId,
-            SeatRole yourRole, string yourInvestigatorId, int investigatorCount, string yourName,
+            SeatRole yourRole, IReadOnlyList<string> investigatorPicks, string yourName,
             ulong seed)
         {
             // Off a different stream than the engine's own RNG, the same split the arena uses,
             // so setup choices and card shuffles do not shadow each other.
             var rng = new DeterministicRng(seed ^ 0xA24BAED4963EE407UL);
-            var roster = ChooseRoster(db, rng, yourRole == SeatRole.Investigator
-                ? yourInvestigatorId
-                : null, investigatorCount);
+            var roster = ChooseRoster(db, rng, investigatorPicks);
 
             var map = db.Map(scenarioId);
             var startSpaces = ChooseStartSpaces(map, rng, roster);
@@ -96,27 +95,24 @@ namespace StiflingDark.Unity
 
         // ---------------------------------------------------------------- setup
 
-        /// <summary>The human's Investigator first (so it takes seat 0), then random others.</summary>
+        /// <summary>Seats keep the Investigator they asked for and hold their order — the human's
+        /// pick is first, so it takes seat 0 — while blanks draw from whoever is left.</summary>
         private static List<string> ChooseRoster(GameDatabase db, DeterministicRng rng,
-            string yourInvestigatorId, int count)
+            IReadOnlyList<string> picks)
         {
             var pool = db.Investigators.Where(i => i.Set == "base").Select(i => i.Id)
                 .OrderBy(id => id, StringComparer.Ordinal).ToList();
             rng.Shuffle(pool);
             var roster = new List<string>();
-            if (!string.IsNullOrEmpty(yourInvestigatorId))
+            foreach (string pick in picks)
             {
-                roster.Add(yourInvestigatorId);
+                roster.Add(!string.IsNullOrEmpty(pick) && !roster.Contains(pick) ? pick : null);
             }
-            foreach (string id in pool)
+            for (int seat = 0; seat < roster.Count; seat++)
             {
-                if (roster.Count >= count)
+                if (roster[seat] == null)
                 {
-                    break;
-                }
-                if (!roster.Contains(id))
-                {
-                    roster.Add(id);
+                    roster[seat] = pool.First(id => !roster.Contains(id));
                 }
             }
             return roster;

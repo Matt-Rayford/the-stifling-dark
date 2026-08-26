@@ -170,9 +170,8 @@ namespace StiflingDark.Unity
             {
                 url = url.TrimEnd('/') + "/ws";
             }
-            string name = (_nameInput.text ?? "").Trim();
+            string name = NameOrDefault();
             PlayerPrefs.SetString(PrefServer, url);
-            PlayerPrefs.SetString(PrefName, name);
             PlayerPrefs.Save();
 
             _session?.Dispose();
@@ -234,8 +233,7 @@ namespace StiflingDark.Unity
             try
             {
                 _solo = new LocalGameSession(_db, _soloScenario, _soloAdversary, _soloRole,
-                    _soloInvestigator, _soloInvestigatorCount, NameOrDefault(),
-                    (ulong)DateTime.UtcNow.Ticks);
+                    SoloInvestigatorPicks(), NameOrDefault(), (ulong)DateTime.UtcNow.Ticks);
             }
             catch (Exception e)
             {
@@ -279,6 +277,7 @@ namespace StiflingDark.Unity
         private void Update()
         {
             TickToast();
+            TickSoloSetup();
             if (_solo != null)
             {
                 TickSoloGame();

@@ -101,6 +101,43 @@ for png in "$TEXTURES"/board-*.png; do
   cp -c "$png" "$STREAMING/textures/" 2>/dev/null || cp "$png" "$STREAMING/textures/"
 done
 
+echo "== player boards =="
+# Investigator player-board BACKS (the character-sheet side) for the solo-setup selector:
+# one PNG per base Investigator, page-mapped from the print PDF (pages 1-10 are the base
+# roster alphabetically; 11-12 are the excluded promos). FORCE_TEXTURES=1 re-renders.
+BOARDS="$STREAMING/player-boards"
+if [ -f game-assets/player-boards/investigator-backs.pdf ] && command -v pdftoppm >/dev/null; then
+  mkdir -p "$BOARDS"
+  page=1
+  for id in aira asher brielle dylan ibraheem lucy-belle mada marci mitchell vincent; do
+    out="$BOARDS/$id.png"
+    if [ ! -f "$out" ] || [ "${FORCE_TEXTURES:-0}" = "1" ]; then
+      pdftoppm -png -f $page -l $page -scale-to 1100 -singlefile \
+        game-assets/player-boards/investigator-backs.pdf "${out%.png}"
+    fi
+    page=$((page+1))
+  done
+  # Sharp minification: pre-baked Lanczos mip pyramids (see tools/make_mips.py).
+  python3 tools/make_mips.py "$BOARDS" || echo "  !! mip packing failed (pip install pillow?)"
+fi
+# Adversary board FRONTS (the rules side) for the solo-setup picker. Page 3 is Mor'gonnod's
+# corporeal flip, not a pickable adversary. (The PDF's filename typo is in game-assets.)
+ADV_BOARDS="$STREAMING/adversary-boards"
+if [ -f "game-assets/player-boards/adersary-fronts.pdf" ] && command -v pdftoppm >/dev/null; then
+  mkdir -p "$ADV_BOARDS"
+  render_adversary() {
+    local page="$1" id="$2" out="$ADV_BOARDS/$2.png"
+    if [ ! -f "$out" ] || [ "${FORCE_TEXTURES:-0}" = "1" ]; then
+      pdftoppm -png -f "$page" -l "$page" -scale-to 1100 -singlefile \
+        "game-assets/player-boards/adersary-fronts.pdf" "${out%.png}"
+    fi
+  }
+  render_adversary 1 butcher
+  render_adversary 2 cult-of-hunlow
+  render_adversary 4 insatiable-horror
+  python3 tools/make_mips.py "$ADV_BOARDS" || echo "  !! mip packing failed (pip install pillow?)"
+fi
+
 echo "== client config =="
 # Baked into builds but never committed (StreamingAssets is gitignored).
 # Set SD_SERVER_URL when building for friends:  SD_SERVER_URL=wss://... tools/sync_unity.sh

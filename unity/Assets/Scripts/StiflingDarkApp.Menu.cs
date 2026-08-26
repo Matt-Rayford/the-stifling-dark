@@ -1,4 +1,3 @@
-using System;
 using StiflingDark.Protocol;
 using TMPro;
 using UnityEngine;
@@ -7,7 +6,7 @@ using UnityEngine.UI;
 namespace StiflingDark.Unity
 {
     /// <summary>
-    /// The menu stage and its three screens. Each is built once and then shown or hidden;
+    /// The menu stage and its four screens. Each is built once and then shown or hidden;
     /// only the scrolling bodies are re-rendered, so what the player typed survives.
     /// </summary>
     public sealed partial class StiflingDarkApp
@@ -17,20 +16,21 @@ namespace StiflingDark.Unity
             Root,
             Online,
             Solo,
+            Settings,
         }
 
         private RectTransform _menu;
         private RectTransform _rootScreen;
         private RectTransform _onlineScreen;
         private RectTransform _soloScreen;
+        private RectTransform _settingsScreen;
         private MenuScreen _menuScreen = MenuScreen.Root;
 
         private TMP_Text _rootStatus;
         private TMP_Text _menuStatus;
         private RectTransform _menuBody;
         private RectTransform _soloBody;
-        private TMP_InputField _nameInput;
-        private TMP_InputField _soloNameInput;
+        private TMP_InputField _settingsNameInput;
         private TMP_InputField _serverInput;
         private TMP_InputField _codeInput;
         private TMP_Text _toast;
@@ -38,13 +38,6 @@ namespace StiflingDark.Unity
         private int _menuRevision = -1;
         /// <summary>Room code whose My Games × is one click from ending the game.</summary>
         private string _confirmEndCode = "";
-
-        // ---- offline setup, as the solo screen has it dialled in
-        private string _soloScenario = "sawmill";
-        private string _soloAdversary = "butcher";
-        private SeatRole _soloRole = SeatRole.Investigator;
-        private string _soloInvestigator = "";
-        private int _soloInvestigatorCount = 3;
 
         // --------------------------------------------------------------- build
 
@@ -56,6 +49,8 @@ namespace StiflingDark.Unity
             BuildRootScreen();
             BuildOnlineScreen();
             BuildSoloScreen();
+            BuildSettingsScreen();
+            BuildSoloOverlays();
 
             // Last child, so the toast draws over whichever screen is up.
             _toast = UiKit.CreateText(_menu, "", 18, TextAnchor.MiddleCenter, UiKit.AccentColor);
@@ -80,12 +75,10 @@ namespace StiflingDark.Unity
             UiKit.Anchor((RectTransform)subtitle.transform, new Vector2(0, 0.66f), new Vector2(1, 0.72f));
 
             var column = MenuColumn(_rootScreen, "RootColumn",
-                new Vector2(0.34f, 0.34f), new Vector2(0.66f, 0.60f), 14);
-            UiKit.CreateButton(column, "Play vs Bots", 24, OpenSoloScreen)
-                .GetComponent<LayoutElement>().minHeight = 64;
-            UiKit.CreateButton(column, "Join with a room code", 24,
-                () => ShowMenuScreen(MenuScreen.Online))
-                .GetComponent<LayoutElement>().minHeight = 64;
+                new Vector2(0.34f, 0.24f), new Vector2(0.66f, 0.60f), 14);
+            MenuButton(column, "Play vs Bots", OpenSoloScreen);
+            MenuButton(column, "Join with a room code", () => ShowMenuScreen(MenuScreen.Online));
+            MenuButton(column, "Settings", () => ShowMenuScreen(MenuScreen.Settings));
 
             _rootStatus = UiKit.CreateText(_rootScreen, "", 15, TextAnchor.UpperCenter,
                 UiKit.MutedColor);
@@ -97,16 +90,14 @@ namespace StiflingDark.Unity
         {
             _onlineScreen = UiKit.CreateGroup(_menu, "MenuOnline");
             UiKit.Anchor(_onlineScreen, Vector2.zero, Vector2.one);
-            CreateBackButton(_onlineScreen);
+            var columnMin = new Vector2(0.30f, 0.06f);
+            CreateBackButton(_onlineScreen, columnMin.x);
             CreateHeading(_onlineScreen, "PLAY ONLINE",
                 "Start a table of your own, or join one with its room code");
 
             var column = MenuColumn(_onlineScreen, "OnlineColumn",
-                new Vector2(0.30f, 0.06f), new Vector2(0.70f, 0.79f), 8);
+                columnMin, new Vector2(0.70f, 0.79f), 8);
 
-            UiKit.CreateText(column, "Your name", 14, TextAnchor.MiddleLeft, UiKit.MutedColor)
-                .gameObject.AddComponent<LayoutElement>().minHeight = 20;
-            _nameInput = UiKit.CreateInput(column, "name", RememberedPlayerName());
             UiKit.CreateText(column, "Server", 14, TextAnchor.MiddleLeft, UiKit.MutedColor)
                 .gameObject.AddComponent<LayoutElement>().minHeight = 20;
             _serverInput = UiKit.CreateInput(column, DefaultServer, LoadServerUrl());
@@ -133,22 +124,39 @@ namespace StiflingDark.Unity
         {
             _soloScreen = UiKit.CreateGroup(_menu, "MenuSolo");
             UiKit.Anchor(_soloScreen, Vector2.zero, Vector2.one);
-            CreateBackButton(_soloScreen);
-            CreateHeading(_soloScreen, "PLAY VS BOTS",
-                "Offline — one human seat, bots in all the others. Nothing is saved.");
+            // Wider than the other screens: the Investigator board strip lives in this column.
+            var columnMin = new Vector2(0.20f, 0.06f);
+            CreateBackButton(_soloScreen, columnMin.x);
+            CreateHeading(_soloScreen, "PLAY VS BOTS", "");
 
             var column = MenuColumn(_soloScreen, "SoloColumn",
-                new Vector2(0.26f, 0.06f), new Vector2(0.74f, 0.79f), 8);
-
-            UiKit.CreateText(column, "Your name", 14, TextAnchor.MiddleLeft, UiKit.MutedColor)
-                .gameObject.AddComponent<LayoutElement>().minHeight = 20;
-            _soloNameInput = UiKit.CreateInput(column, "name", RememberedPlayerName());
+                columnMin, new Vector2(0.80f, 0.79f), 8);
 
             var setup = UiKit.CreatePanel(column, "Setup", UiKit.PanelColor);
             var setupElement = setup.gameObject.AddComponent<LayoutElement>();
             setupElement.flexibleHeight = 1;
             setupElement.minHeight = 200;
             _soloBody = UiKit.CreateScrollList(setup, 6f);
+        }
+
+        private void BuildSettingsScreen()
+        {
+            _settingsScreen = UiKit.CreateGroup(_menu, "MenuSettings");
+            UiKit.Anchor(_settingsScreen, Vector2.zero, Vector2.one);
+            var columnMin = new Vector2(0.34f, 0.50f);
+            CreateBackButton(_settingsScreen, columnMin.x);
+            CreateHeading(_settingsScreen, "SETTINGS", "More settings will land here later");
+
+            var column = MenuColumn(_settingsScreen, "SettingsColumn",
+                columnMin, new Vector2(0.66f, 0.79f), 8);
+
+            UiKit.CreateText(column, "Your name", 14, TextAnchor.MiddleLeft, UiKit.MutedColor)
+                .gameObject.AddComponent<LayoutElement>().minHeight = 20;
+            _settingsNameInput = UiKit.CreateInput(column, "name", RememberedPlayerName());
+            UiKit.CreateButton(column, "Save", 18, () => ShowMenuScreen(MenuScreen.Root))
+                .GetComponent<LayoutElement>().minHeight = 44;
+
+            // Future settings rows go in this column, below Save.
         }
 
         /// <summary>The centred stack of full-width rows every menu screen is laid out in.</summary>
@@ -165,24 +173,70 @@ namespace StiflingDark.Unity
             return column;
         }
 
-        private void CreateBackButton(RectTransform screen)
+        /// <summary>
+        /// The arrow home, sitting on the heading's own line with its left edge flush to the
+        /// screen's content column — <paramref name="columnLeft"/> is that column's left anchor,
+        /// which differs per screen.
+        /// </summary>
+        private void CreateBackButton(RectTransform screen, float columnLeft)
         {
-            var back = UiKit.CreateButton(screen, "←  Back", 18,
-                () => ShowMenuScreen(MenuScreen.Root));
-            UiKit.Anchor((RectTransform)back.transform,
-                new Vector2(0.02f, 0.90f), new Vector2(0.10f, 0.955f));
+            // Bare gold arrow matching the heading; the button skin only appears on hover,
+            // inverting to dark-on-gold.
+            var go = new GameObject("Back", typeof(RectTransform), typeof(Image), typeof(Button));
+            go.transform.SetParent(screen, false);
+            var rect = (RectTransform)go.transform;
+            // Mid-band of the heading (CreateHeading anchors at 0.87..0.96).
+            rect.anchorMin = rect.anchorMax = new Vector2(columnLeft, 0.915f);
+            rect.pivot = new Vector2(0f, 0.5f);
+            rect.sizeDelta = new Vector2(64f, 64f);
+            rect.anchoredPosition = Vector2.zero;
+
+            var background = go.GetComponent<Image>();
+            background.color = Color.clear;
+            var button = go.GetComponent<Button>();
+            button.transition = Selectable.Transition.None;
+            button.onClick.AddListener(() => ShowMenuScreen(MenuScreen.Root));
+
+            var arrow = UiKit.CreateText(go.transform, "←", 54, TextAnchor.MiddleCenter,
+                UiKit.AccentColor);
+            arrow.fontStyle = TMPro.FontStyles.Bold;
+            // Midline centers the glyph's actual bounds; line-metric centering hangs a lone
+            // arrow noticeably off-center in the square.
+            arrow.alignment = TMPro.TextAlignmentOptions.Midline;
+            UiKit.Anchor((RectTransform)arrow.transform, Vector2.zero, Vector2.one);
+
+            UiKit.AddHover(go,
+                () =>
+                {
+                    background.color = UiKit.AccentColor;
+                    arrow.color = UiKit.AccentTextColor;
+                },
+                () =>
+                {
+                    background.color = Color.clear;
+                    arrow.color = UiKit.AccentColor;
+                });
         }
 
-        private static void CreateHeading(RectTransform screen, string title, string note)
+        private static void CreateHeading(RectTransform screen, string titleText, string subtitleText = "")
         {
-            var heading = UiKit.CreateText(screen, title, 44, TextAnchor.MiddleCenter,
+            var heading = UiKit.CreateText(screen, titleText, 44, TextAnchor.MiddleCenter,
                 UiKit.AccentColor);
+            heading.font = UiKit.MenuFont;
             UiKit.Anchor((RectTransform)heading.transform,
                 new Vector2(0, 0.87f), new Vector2(1, 0.96f));
-            var subtitle = UiKit.CreateText(screen, note, 15, TextAnchor.MiddleCenter,
+            var subtitle = UiKit.CreateText(screen, subtitleText, 15, TextAnchor.MiddleCenter,
                 UiKit.MutedColor);
             UiKit.Anchor((RectTransform)subtitle.transform,
                 new Vector2(0, 0.82f), new Vector2(1, 0.87f));
+        }
+
+        /// <summary>A root-menu button: full-width 64px row in the menu display font.</summary>
+        private static void MenuButton(RectTransform column, string label,
+            UnityEngine.Events.UnityAction onClick)
+        {
+            UiKit.CreateButton(column, label, 24, onClick, labelFont: UiKit.MenuFont)
+                .GetComponent<LayoutElement>().minHeight = 64;
         }
 
         // ---------------------------------------------------------- navigation
@@ -194,14 +248,11 @@ namespace StiflingDark.Unity
             _rootScreen.gameObject.SetActive(screen == MenuScreen.Root);
             _onlineScreen.gameObject.SetActive(screen == MenuScreen.Online);
             _soloScreen.gameObject.SetActive(screen == MenuScreen.Solo);
+            _settingsScreen.gameObject.SetActive(screen == MenuScreen.Settings);
 
-            if (screen == MenuScreen.Online)
+            if (screen == MenuScreen.Settings)
             {
-                _nameInput.text = RememberedPlayerName();
-            }
-            else if (screen == MenuScreen.Solo)
-            {
-                _soloNameInput.text = RememberedPlayerName();
+                _settingsNameInput.text = RememberedPlayerName();
             }
             _confirmEndCode = "";
             // The body that is now on screen belongs to the screen we just left.
@@ -226,13 +277,17 @@ namespace StiflingDark.Unity
             PlayerPrefs.GetString(PrefName, DefaultPlayerName);
 
         /// <summary>
-        /// Online and offline each carry their own name field, so the one being left hands its
-        /// value to the other through PlayerPrefs rather than letting the two drift apart.
+        /// The Settings screen owns the only name field; leaving it (Back or Save, both of
+        /// which route through <see cref="ShowMenuScreen"/>) hands whatever was typed to
+        /// PlayerPrefs so every other screen can read it back.
         /// </summary>
         private void RememberPlayerName()
         {
-            var field = _menuScreen == MenuScreen.Solo ? _soloNameInput : _nameInput;
-            string typed = (field?.text ?? "").Trim();
+            if (_menuScreen != MenuScreen.Settings)
+            {
+                return;
+            }
+            string typed = (_settingsNameInput?.text ?? "").Trim();
             if (typed.Length == 0)
             {
                 return;
@@ -241,10 +296,9 @@ namespace StiflingDark.Unity
             PlayerPrefs.Save();
         }
 
-        private string NameOrDefault()
+        private static string NameOrDefault()
         {
-            var field = _menuScreen == MenuScreen.Solo ? _soloNameInput : _nameInput;
-            string name = (field?.text ?? "").Trim();
+            string name = RememberedPlayerName().Trim();
             return name.Length == 0 ? "Player" : name;
         }
 
@@ -410,81 +464,10 @@ namespace StiflingDark.Unity
                 PlayerPrefs.GetString("sd_token_" + code, ""), role);
         }
 
-        // ----------------------------------------------------------- solo setup
-
-        private void RenderSoloScreen()
-        {
-            UiKit.Clear(_soloBody);
-            if (_describe == null)
-            {
-                return;
-            }
-
-            Head(_soloBody, "SCENARIO");
-            foreach (string scenario in new[] { "sawmill", "amusement-park" })
-            {
-                string captured = scenario;
-                Choice(Describe.Scenario(captured), _soloScenario == captured,
-                    () => _soloScenario = captured);
-            }
-
-            Head(_soloBody, "ADVERSARY");
-            foreach (string adversary in new[] { "butcher", "cult-of-hunlow", "insatiable-horror" })
-            {
-                string captured = adversary;
-                Choice(Describe.Adversary(captured), _soloAdversary == captured,
-                    () => _soloAdversary = captured);
-            }
-
-            Head(_soloBody, "YOU PLAY");
-            Choice("An Investigator", _soloRole == SeatRole.Investigator,
-                () => _soloRole = SeatRole.Investigator);
-            Choice("The Adversary", _soloRole == SeatRole.Adversary,
-                () => _soloRole = SeatRole.Adversary);
-
-            if (_soloRole == SeatRole.Investigator)
-            {
-                Head(_soloBody, "YOUR INVESTIGATOR");
-                foreach (var def in _describe.BaseInvestigators)
-                {
-                    var captured = def;
-                    Choice(captured.Name + "   ·   MP " + captured.Mp + "   ·   " +
-                        captured.MinorAbility.Name + " / " + captured.MajorAbility.Name,
-                        _soloInvestigator == captured.Id, () => _soloInvestigator = captured.Id);
-                }
-            }
-
-            Head(_soloBody, "INVESTIGATORS AT THE TABLE");
-            var sizes = UiKit.CreateRow(_soloBody, "PartySize", 6f, 34f);
-            foreach (int size in new[] { 2, 3, 4 })
-            {
-                int captured = size;
-                UiKit.CreateButton(sizes,
-                    (_soloInvestigatorCount == captured ? "●  " : "○  ") + captured, 16,
-                    () =>
-                    {
-                        _soloInvestigatorCount = captured;
-                        RenderMenu();
-                    });
-            }
-
-            UiKit.CreateButton(_soloBody, "START", 20, StartSoloGame)
-                .GetComponent<LayoutElement>().minHeight = 48;
-        }
-
-        /// <summary>One radio row of the solo setup; picking re-renders so the dot moves.</summary>
-        private void Choice(string label, bool current, Action pick)
-        {
-            UiKit.CreateButton(_soloBody, (current ? "●  " : "○  ") + label, 16, () =>
-            {
-                pick();
-                RenderMenu();
-            });
-        }
-
         private static void Head(RectTransform body, string title)
         {
-            var text = UiKit.CreateText(body, title, 13, TextAnchor.MiddleLeft, UiKit.AccentColor);
+            var text = UiKit.CreateText(body, title, 16, TextAnchor.MiddleLeft, UiKit.AccentColor);
+            text.font = UiKit.MenuFont;
             text.gameObject.AddComponent<LayoutElement>().minHeight = 28;
         }
     }

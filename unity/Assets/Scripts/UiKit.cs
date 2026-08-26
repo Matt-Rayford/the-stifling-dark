@@ -23,6 +23,7 @@ namespace StiflingDark.Unity
 
         private static TMP_FontAsset _font;
         private static TMP_FontAsset _titleFont;
+        private static TMP_FontAsset _menuFont;
 
         /// <summary>
         /// The body font: TMP's bundled Liberation Sans SDF (Assets/TextMesh Pro, committed) —
@@ -40,32 +41,49 @@ namespace StiflingDark.Unity
             }
         }
 
-        /// <summary>
-        /// Display font for big headings: "The Macabre" from game-assets/fonts, which
-        /// tools/sync_unity.sh copies into Assets/Resources/Fonts so Unity imports it. Built
-        /// as a dynamic TMP asset at runtime (glyphs rasterize on demand), with the body font
-        /// as glyph fallback; when the file was never synced this IS the body font.
-        /// </summary>
+        /// <summary>The game-title display font ("The Macabre").</summary>
         public static TMP_FontAsset TitleFont
         {
             get
             {
                 if (_titleFont == null)
                 {
-                    var source = Resources.Load<Font>("Fonts/The Macabre");
-                    if (source == null)
-                    {
-                        _titleFont = Font;
-                    }
-                    else
-                    {
-                        _titleFont = TMP_FontAsset.CreateFontAsset(source);
-                        _titleFont.fallbackFontAssetTable =
-                            new System.Collections.Generic.List<TMP_FontAsset> { Font };
-                    }
+                    _titleFont = LoadDisplayFont("Fonts/The Macabre");
                 }
                 return _titleFont;
             }
+        }
+
+        /// <summary>Menu buttons and screen headings ("Cenotaph Titling").</summary>
+        public static TMP_FontAsset MenuFont
+        {
+            get
+            {
+                if (_menuFont == null)
+                {
+                    _menuFont = LoadDisplayFont("Fonts/Cenotaph-Titling");
+                }
+                return _menuFont;
+            }
+        }
+
+        /// <summary>
+        /// Display fonts come from game-assets/fonts, which tools/sync_unity.sh copies into
+        /// Assets/Resources/Fonts so Unity imports them. Built as dynamic TMP assets at runtime
+        /// (glyphs rasterize on demand), with the body font as glyph fallback; when the file
+        /// was never synced this IS the body font.
+        /// </summary>
+        private static TMP_FontAsset LoadDisplayFont(string resourcePath)
+        {
+            var source = Resources.Load<Font>(resourcePath);
+            if (source == null)
+            {
+                return Font;
+            }
+            var asset = TMP_FontAsset.CreateFontAsset(source);
+            asset.fallbackFontAssetTable =
+                new System.Collections.Generic.List<TMP_FontAsset> { Font };
+            return asset;
         }
 
         private static TextAlignmentOptions Align(TextAnchor anchor)
@@ -160,7 +178,7 @@ namespace StiflingDark.Unity
         /// </summary>
         public static Button CreateButton(Transform parent, string label, int fontSize,
             UnityEngine.Events.UnityAction onClick, bool enabled = true, string tooltip = null,
-            bool danger = false, float fixedWidth = 0f)
+            bool danger = false, float fixedWidth = 0f, TMP_FontAsset labelFont = null)
         {
             var go = new GameObject("Button", typeof(RectTransform), typeof(Image), typeof(Button),
                 typeof(LayoutElement));
@@ -195,6 +213,10 @@ namespace StiflingDark.Unity
 
             var text = CreateText(go.transform, label, fontSize,
                 fixedWidth > 0f ? TextAnchor.MiddleCenter : TextAnchor.MiddleLeft, idleText);
+            if (labelFont != null)
+            {
+                text.font = labelFont;
+            }
             Anchor((RectTransform)text.transform, Vector2.zero, Vector2.one,
                 fixedWidth > 0f ? new Vector2(2, 2) : new Vector2(10, 2),
                 fixedWidth > 0f ? new Vector2(-2, -2) : new Vector2(-8, -2));

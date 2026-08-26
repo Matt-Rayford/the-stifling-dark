@@ -47,6 +47,11 @@ namespace UnityEngine
         public Vector4(float x, float y, float z, float w) { }
     }
 
+    public struct Vector2Int
+    {
+        public Vector2Int(int x, int y) { }
+    }
+
     public struct Quaternion
     {
         public static Quaternion Euler(float x, float y, float z) => default;
@@ -60,6 +65,7 @@ namespace UnityEngine
         public Color(float r, float g, float b, float a) { this.r = r; this.g = g; this.b = b; this.a = a; }
         public static Color white => new Color(1, 1, 1);
         public static Color black => new Color(0, 0, 0);
+        public static Color clear => new Color(0, 0, 0, 0);
     }
 
     public struct Color32
@@ -75,6 +81,8 @@ namespace UnityEngine
         public float xMax => 0f;
         public float yMin => 0f;
         public float yMax => 0f;
+        public float width => 0f;
+        public float height => 0f;
     }
 
     public struct Bounds
@@ -101,6 +109,7 @@ namespace UnityEngine
         public static float Clamp(float a, float min, float max) => a;
         public static int Clamp(int a, int min, int max) => a;
         public static float Lerp(float a, float b, float t) => a;
+        public static float InverseLerp(float a, float b, float value) => a;
         public static float Pow(float a, float b) => a;
         public static float Sqrt(float a) => a;
         public static float SmoothStep(float a, float b, float t) => a;
@@ -116,7 +125,7 @@ namespace UnityEngine
 
     public enum TextureFormat { RGBA32 }
     public enum TextureWrapMode { Clamp }
-    public enum FilterMode { Bilinear }
+    public enum FilterMode { Bilinear, Trilinear }
     public enum SpriteMeshType { FullRect }
     public enum SpriteDrawMode { Simple, Sliced }
     public enum CameraClearFlags { SolidColor }
@@ -132,6 +141,7 @@ namespace UnityEngine
         Escape,
         W, A, S, D,
         UpArrow, DownArrow, LeftArrow, RightArrow,
+        LeftAlt, RightAlt, LeftCommand, RightCommand,
     }
     public enum RuntimeInitializeLoadType { AfterSceneLoad }
 
@@ -164,8 +174,11 @@ namespace UnityEngine
         public int height => 0;
         public TextureWrapMode wrapMode { get; set; }
         public FilterMode filterMode { get; set; }
+        public int anisoLevel { get; set; }
         public void SetPixels32(Color32[] colors) { }
         public Color32[] GetPixels32() => new Color32[width * height];
+        public void SetPixels(Color[] colors, int miplevel) { }
+        public Color[] GetPixels(int x, int y, int blockWidth, int blockHeight) => new Color[0];
         public void Apply() { }
         public void Apply(bool updateMipmaps) { }
         public bool LoadImage(byte[] data) => true;
@@ -199,6 +212,7 @@ namespace UnityEngine
         public Transform transform => null;
         public string tag { get; set; }
         public bool activeSelf => true;
+        public bool activeInHierarchy => true;
         public void SetActive(bool value) { }
         public T AddComponent<T>() where T : Component, new() => new T();
         public T GetComponent<T>() where T : Component, new() => new T();
@@ -239,6 +253,8 @@ namespace UnityEngine
 
     public static class RectTransformUtility
     {
+        public static bool RectangleContainsScreenPoint(RectTransform rect, Vector2 screenPoint) => true;
+
         public static bool ScreenPointToLocalPointInRectangle(RectTransform rect, Vector2 screenPoint,
             Camera camera, out Vector2 localPoint)
         {
@@ -383,6 +399,7 @@ namespace UnityEngine.UI
         public Sprite sprite { get; set; }
         public Type type { get; set; }
         public float pixelsPerUnitMultiplier { get; set; }
+        public bool preserveAspect { get; set; }
     }
 
     public sealed class RawImage : MaskableGraphic
@@ -462,6 +479,7 @@ namespace UnityEngine.UI
         public float scrollSensitivity { get; set; }
         public RectTransform viewport { get; set; }
         public RectTransform content { get; set; }
+        public float horizontalNormalizedPosition { get; set; }
     }
 
     public sealed class Mask : UnityEngine.EventSystems.UIBehaviour
@@ -469,7 +487,10 @@ namespace UnityEngine.UI
         public bool showMaskGraphic { get; set; }
     }
 
-    public sealed class RectMask2D : UnityEngine.EventSystems.UIBehaviour { }
+    public sealed class RectMask2D : UnityEngine.EventSystems.UIBehaviour
+    {
+        public UnityEngine.Vector2Int softness { get; set; }
+    }
 }
 
 namespace TMPro
@@ -481,7 +502,11 @@ namespace TMPro
         TopLeft, Top, TopRight,
         Left, Center, Right,
         BottomLeft, Bottom, BottomRight,
+        Midline,
     }
+
+    [Flags]
+    public enum FontStyles { Normal = 0, Bold = 1 }
 
     public enum TextWrappingModes { NoWrap, Normal, PreserveWhitespace }
     public enum TextOverflowModes { Overflow, Truncate, Ellipsis }
@@ -500,6 +525,7 @@ namespace TMPro
     public abstract class TMP_Text : UnityEngine.UI.MaskableGraphic
     {
         public TMP_FontAsset font { get; set; }
+        public FontStyles fontStyle { get; set; }
         public float fontSize { get; set; }
         public TextAlignmentOptions alignment { get; set; }
         public string text { get; set; }
