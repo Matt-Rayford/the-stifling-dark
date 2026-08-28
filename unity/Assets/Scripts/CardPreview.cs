@@ -42,6 +42,7 @@ namespace StiflingDark.Unity
             _image = go.GetComponent<Image>();
             _image.raycastTarget = false;
             _image.preserveAspect = true;
+            _image.material = UiKit.RoundedImageMaterial(Width, Height);
             _root.gameObject.SetActive(false);
         }
 

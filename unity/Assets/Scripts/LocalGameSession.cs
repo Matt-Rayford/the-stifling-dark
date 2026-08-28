@@ -76,6 +76,9 @@ namespace StiflingDark.Unity
                 MedicalItemSpaces = medicalPool
                     .Take(db.Config.ByInvestigatorCount[roster.Count].MedicalItemsOnBoard)
                     .ToList(),
+                // Short-handed starting Items all go to the human's Investigator; on an
+                // Adversary run the all-bot team defaults to its first seat.
+                StartingItemsInvestigatorId = yourRole == SeatRole.Adversary ? null : roster[0],
             });
 
             _teamIsAllBots = yourRole == SeatRole.Adversary;

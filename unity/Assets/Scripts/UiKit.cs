@@ -304,6 +304,36 @@ namespace StiflingDark.Unity
             return (RectTransform)go.transform;
         }
 
+        private static Shader _roundedImageShader;
+
+        /// <summary>
+        /// Corner radius for a card of the given width (Lemonade Wars' curve): proportional
+        /// at hand size and up, tapering faster below it — small cards' printed borders are
+        /// thin, and a proportional radius bites into them too aggressively.
+        /// </summary>
+        public static float CardCornerRadius(float width)
+        {
+            const float handWidth = 170f;
+            const float handRadius = handWidth * (14f / 150f);
+            return width >= handWidth
+                ? width * (14f / 150f)
+                : Mathf.Max(4f, handRadius * Mathf.Pow(width / handWidth, 1.8f));
+        }
+
+        /// <summary>Material that clips its texture to an anti-aliased rounded rect
+        /// (Resources/shaders/RoundedImage, the Lemonade Wars card shader).</summary>
+        public static Material RoundedImageMaterial(float width, float height)
+        {
+            if (_roundedImageShader == null)
+            {
+                _roundedImageShader = Resources.Load<Shader>("shaders/RoundedImage");
+            }
+            var material = new Material(_roundedImageShader);
+            material.SetVector("_Size", new Vector4(width, height, 0, 0));
+            material.SetFloat("_Radius", CardCornerRadius(width));
+            return material;
+        }
+
         /// <summary>Stepped slider, Lemonade Wars style: dark track, accent fill, round
         /// handle. Whole numbers 0..steps; wire onValueChanged for the rest.</summary>
         public static Slider CreateSlider(Transform parent, int steps, int initialStep)

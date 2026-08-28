@@ -102,6 +102,7 @@ namespace StiflingDark.Unity
             if (sprite != null)
             {
                 image.sprite = sprite;
+                image.material = UiKit.RoundedImageMaterial(CardWidth, CardHeight);
             }
             else
             {

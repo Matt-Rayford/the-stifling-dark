@@ -39,7 +39,6 @@ namespace StiflingDark.Unity
         private readonly RectTransform _actionsBody;
         private readonly RectTransform _logBody;
         private readonly RectTransform _actionBar;
-        private readonly TMP_Text _hint;
         private readonly TokenActionMenu _tokenMenu;
         private readonly HandView _hand;
         private readonly TurnBanner _turnBanner;
@@ -122,13 +121,10 @@ namespace StiflingDark.Unity
 
             // ---- bottom: no band any more — the map runs to the screen's bottom edge. The
             // Adversary's action bar floats over it between the side columns (Investigators
-            // act through the figure menu instead), with the hint line just above.
+            // act through the figure menu instead).
             _actionBar = UiKit.CreateGroup(_root, "Actions");
             UiKit.Anchor(_actionBar, Vector2.zero, new Vector2(1, 0),
                 new Vector2(368, 8), new Vector2(-438, 62));
-            _hint = UiKit.CreateText(_root, "", 16, TextAnchor.MiddleCenter, UiKit.AccentColor);
-            UiKit.Anchor((RectTransform)_hint.transform, Vector2.zero, new Vector2(1, 0),
-                new Vector2(368, 66), new Vector2(-438, 92));
 
             _hand = new HandView(_root, art, describe);
             _tokenMenu = new TokenActionMenu(_root, boardView);
@@ -335,16 +331,6 @@ namespace StiflingDark.Unity
                     "   Evidence turned in " + view.Objective.EvidenceTurnedIn + "/" +
                     view.Objective.EvidenceRequired;
             }
-
-            _hint.text = _pickCount > 0
-                ? _pickPrompt
-                : _boardView.Aiming
-                    ? "Move the mouse around your figure to aim — the lit spaces are the real " +
-                      "Bright set, computed here with the engine's own beam solver."
-                    : MyTurnActive
-                        ? "Click your Investigator for actions, a highlighted space to Move.  " +
-                          "Scroll to zoom, right-drag to pan."
-                        : "Scroll to zoom, right-drag to pan, hover a space to inspect it.";
 
             if (view.Phase == GamePhase.GameOver)
             {

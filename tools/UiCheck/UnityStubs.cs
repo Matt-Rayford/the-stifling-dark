@@ -227,6 +227,15 @@ namespace UnityEngine
         public static T Load<T>(string path) where T : Object => null;
     }
 
+    public sealed class Shader : Object { }
+
+    public sealed class Material : Object
+    {
+        public Material(Shader shader) { }
+        public void SetFloat(string name, float value) { }
+        public void SetVector(string name, Vector4 value) { }
+    }
+
     public class GameObject : Object
     {
         public GameObject() { }
@@ -425,6 +434,7 @@ namespace UnityEngine.UI
     {
         public Color color { get; set; }
         public bool raycastTarget { get; set; }
+        public Material material { get; set; }
     }
 
     public class MaskableGraphic : Graphic { }

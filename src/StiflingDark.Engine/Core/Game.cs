@@ -15,6 +15,11 @@ namespace StiflingDark.Engine.Core
         /// <summary>Where the Medical Item tokens begin (count validated against config).</summary>
         public List<string> MedicalItemSpaces { get; set; } = new List<string>();
         public bool UseMiniExpansionCards { get; set; }
+        /// <summary>
+        /// Who holds the short-handed team's starting Items (see GrantStartingItems).
+        /// Null: the first Investigator in setup order.
+        /// </summary>
+        public string? StartingItemsInvestigatorId { get; set; }
     }
 
     /// <summary>
@@ -125,7 +130,32 @@ namespace StiflingDark.Engine.Core
             var game = new Game(db, state);
             game.BuildDecks(setup.UseMiniExpansionCards);
             game.Log("setup", $"{count} investigators vs {setup.AdversaryId} at {setup.ScenarioId}");
+            game.GrantStartingItems(setup);
             return game;
+        }
+
+        /// <summary>
+        /// Short-handed compensation (designer ruling 2026-08): a 3-Investigator team starts
+        /// with 2 General Items, a 2-Investigator team with 4, a full team with none. All of
+        /// them go to ONE Investigator — with bots at the table that is the human's seat,
+        /// wired through <see cref="GameSetup.StartingItemsInvestigatorId"/>. Distribution
+        /// may become a team choice later.
+        /// </summary>
+        private void GrantStartingItems(GameSetup setup)
+        {
+            int count = State.Investigators.Count switch { 2 => 4, 3 => 2, _ => 0 };
+            if (count == 0)
+            {
+                return;
+            }
+            var holder = setup.StartingItemsInvestigatorId != null
+                ? Investigator(setup.StartingItemsInvestigatorId)
+                : State.Investigators[0];
+            for (int i = 0; i < count; i++)
+            {
+                holder.Items.Add(Draw(State.GeneralItemDeck, "general item"));
+            }
+            Log("setup", $"{holder.DefId} starts with {count} Items (short-handed team)");
         }
 
         private void BuildDecks(bool useMiniExpansion)
