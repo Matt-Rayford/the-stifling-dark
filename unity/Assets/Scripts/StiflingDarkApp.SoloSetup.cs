@@ -22,13 +22,15 @@ namespace StiflingDark.Unity
         /// <summary>A bot seat left on Random: the session draws its Investigator at START.</summary>
         private const string RandomPick = "";
 
-        /// <summary>The board backs render 1100x734, so a card this wide is 140 tall.</summary>
+        /// <summary>The board backs render 1100x734; the height keeps that exact ratio so
+        /// the art fills the card edge-to-edge and the selection glow hugs it evenly —
+        /// a taller card letterboxes the art and fattens the glow gap above and below.</summary>
         private const float BoardCardWidth = 252f;
-        private const float BoardCardHeight = 175f;
+        private const float BoardCardHeight = 168f;
         /// <summary>Width of the soft rim on a strip that overflows. Zero when it fits.</summary>
         private const int StripFadePixels = 70;
         /// <summary>Selected-card glow: full brightness this far past the card edge...</summary>
-        private const float GlowRimPx = 0.5f;
+        private const float GlowRimPx = 2f;
         /// <summary>...then a fade to true black across this much more. On-screen pixels
         /// (canvas reference), drawn 1:1 — tune these two and nothing else.</summary>
         private const float GlowFadePx = 12f;
@@ -78,7 +80,7 @@ namespace StiflingDark.Unity
             boardGo.transform.SetParent(_zoomLayer, false);
             var boardRect = (RectTransform)boardGo.transform;
             boardRect.anchorMin = boardRect.anchorMax = new Vector2(0.5f, 0.5f);
-            boardRect.sizeDelta = new Vector2(1120f, 760f);
+            boardRect.sizeDelta = new Vector2(1120f, 747f);
             _zoomBoard = boardGo.GetComponent<Image>();
             _zoomBoard.preserveAspect = true;
             _zoomBoard.raycastTarget = false;
@@ -238,8 +240,7 @@ namespace StiflingDark.Unity
             {
                 var boardGo = new GameObject("Art", typeof(RectTransform), typeof(Image));
                 boardGo.transform.SetParent(card, false);
-                UiKit.Anchor((RectTransform)boardGo.transform, Vector2.zero, Vector2.one,
-                    new Vector2(3, 3), new Vector2(-3, -3));
+                UiKit.Anchor((RectTransform)boardGo.transform, Vector2.zero, Vector2.one);
                 var image = boardGo.GetComponent<Image>();
                 image.sprite = art;
                 image.preserveAspect = true;
