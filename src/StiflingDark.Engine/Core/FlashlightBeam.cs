@@ -23,10 +23,11 @@ namespace StiflingDark.Engine.Core
     /// <summary>
     /// The Small Flashlight beam: computes which spaces become Bright for a placement at
     /// any continuous angle around the Investigator's figure. A space is Bright when its
-    /// circle is entirely covered by the beam shape AND an unobstructed sight line
-    /// connects it to the Investigator. The physical template's printed sight lines are
-    /// modeled as a straight ray to the space (the digital interpretation agreed with the
-    /// designer: the visual template is not shown; only the resulting Bright set matters).
+    /// circle is entirely covered by the beam shape AND one of the template's 7 PRINTED
+    /// sight lines connects it to the Investigator without crossing an Obstacle — exactly
+    /// the physical rule (designer ruling 2026-08-27; the earlier straight-ray stand-in
+    /// missed spaces a printed line reaches through a door gap). When the def carries no
+    /// sight-line data, the straight ray to the space's centre is the fallback.
     /// </summary>
     public sealed class FlashlightBeam
     {
@@ -36,6 +37,7 @@ namespace StiflingDark.Engine.Core
         private readonly double _originY;
         private readonly double _templateLengthPx;
         private readonly double _lengthInPitches;
+        private readonly List<double[]> _sightLines;
 
         public FlashlightBeam(FlashlightDef def)
         {
@@ -50,6 +52,7 @@ namespace StiflingDark.Engine.Core
             _originY = def.OriginY;
             _templateLengthPx = def.ImageHeight;
             _lengthInPitches = def.LengthInSpacePitches;
+            _sightLines = def.SightLineSegments;
         }
 
         /// <summary>
@@ -83,12 +86,72 @@ namespace StiflingDark.Engine.Core
                     continue;
                 }
                 if (CircleFullyInBeam(space.X, space.Y, radius, origin.X, origin.Y, fx, fy, rx, ry, scale) &&
-                    !blocker.Blocks(origin.X, origin.Y, space.X, space.Y))
+                    HasSight(space.X, space.Y, radius, origin.X, origin.Y, fx, fy, rx, ry, scale, blocker))
                 {
                     bright.Add(space.Id);
                 }
             }
             return bright;
+        }
+
+        /// <summary>
+        /// Does the Investigator see this space? With sight-line data: any of the 7 printed
+        /// lines passes through the space's circle, and the stretch of that line from its
+        /// base (at the figure) to the space is unobstructed. Without data: the straight
+        /// ray to the space's centre.
+        /// </summary>
+        private bool HasSight(
+            double cx, double cy, double radius,
+            double ox, double oy, double fx, double fy, double rx, double ry, double scale,
+            ILineOfSightBlocker blocker)
+        {
+            if (_sightLines.Count == 0)
+            {
+                return !blocker.Blocks(ox, oy, cx, cy);
+            }
+
+            // The space's centre in template pixels, and its radius there.
+            double dx = cx - ox, dy = cy - oy;
+            double tx = _originX + (dx * rx + dy * ry) / scale;
+            double ty = _originY - (dx * fx + dy * fy) / scale;
+            double radiusT = radius / scale;
+
+            foreach (var line in _sightLines)
+            {
+                double x1 = line[0], y1 = line[1], x2 = line[2], y2 = line[3];
+                double sx = x2 - x1, sy = y2 - y1;
+                double lengthSq = sx * sx + sy * sy;
+                if (lengthSq <= 0)
+                {
+                    continue;
+                }
+                double t = ((tx - x1) * sx + (ty - y1) * sy) / lengthSq;
+                double clamped = Math.Max(0, Math.Min(1, t));
+                double nx = x1 + sx * clamped, ny = y1 + sy * clamped;
+                double distSq = (nx - tx) * (nx - tx) + (ny - ty) * (ny - ty);
+                if (distSq > radiusT * radiusT)
+                {
+                    continue; // this printed line misses the space entirely
+                }
+                // The line must make it THROUGH the space, not merely graze its near rim: a
+                // wall cutting across the circle blocks it (designer: "if one of those lines
+                // hits a grey-bordered wall, it should not see the space"). So walk from the
+                // line's base end to where it EXITS the space's circle.
+                double halfChord = Math.Sqrt(Math.Max(0, radiusT * radiusT - distSq));
+                double tExit = Math.Max(0, Math.Min(1, t + halfChord / Math.Sqrt(lengthSq)));
+                double ex = x1 + sx * tExit, ey = y1 + sy * tExit;
+                // Template -> board, for the base end and the exit point. The base ends all
+                // sit within the figure's own space around the notch.
+                double baseBoardX = ox + (fx * (_originY - y1) + rx * (x1 - _originX)) * scale;
+                double baseBoardY = oy + (fy * (_originY - y1) + ry * (x1 - _originX)) * scale;
+                double exitBoardX = ox + (fx * (_originY - ey) + rx * (ex - _originX)) * scale;
+                double exitBoardY = oy + (fy * (_originY - ey) + ry * (ex - _originX)) * scale;
+                if (!blocker.Blocks(baseBoardX, baseBoardY, exitBoardX, exitBoardY))
+                {
+                    return true;
+                }
+            }
+            return false;
         }
 
         private bool CircleFullyInBeam(

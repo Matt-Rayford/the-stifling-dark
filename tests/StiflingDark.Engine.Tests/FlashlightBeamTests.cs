@@ -76,5 +76,26 @@ namespace StiflingDark.Engine.Tests
         {
             public bool Blocks(double x1, double y1, double x2, double y2) => true;
         }
+
+        /// <summary>
+        /// Designer ruling (2026-08-27, physical-board comparison): the 7 PRINTED sight
+        /// lines dictate line of sight. From 171 aimed into the Office, the straight ray to
+        /// O-10's centre clips the wall by door O-11 — but a printed line threads the open
+        /// door, so O-10 is Bright, exactly as the physical template shows.
+        /// </summary>
+        [Fact]
+        public void Printed_sight_lines_reach_through_a_door_gap()
+        {
+            var graph = Sawmill;
+            var mask = TestData.Db.LosMask("sawmill");
+            Assert.NotNull(mask);
+            double cx(string id) => graph.Space(id).X;
+            double cy(string id) => graph.Space(id).Y;
+            Assert.True(mask!.Blocks(cx("171"), cy("171"), cx("O-10"), cy("O-10")),
+                "premise: the straight centre ray is wall-blocked");
+
+            var bright = Beam.ComputeBright(graph, "171", 3.39, mask);
+            Assert.Contains("O-10", bright);
+        }
     }
 }

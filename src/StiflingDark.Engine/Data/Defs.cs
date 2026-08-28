@@ -132,6 +132,9 @@ namespace StiflingDark.Engine.Data
         public double ImageHeight { get; set; }
         /// <summary>Designer-confirmed: the template's full length spans this many space pitches.</summary>
         public double LengthInSpacePitches { get; set; }
+        /// <summary>The 7 printed sight lines, [x1, y1, x2, y2] template-pixel segments.
+        /// These, not a straight ray, dictate a space's line of sight (designer ruling).</summary>
+        public List<double[]> SightLineSegments { get; set; } = new List<double[]>();
     }
 
     public sealed class InvestigatorCountRules

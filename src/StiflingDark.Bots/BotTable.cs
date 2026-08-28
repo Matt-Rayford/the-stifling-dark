@@ -28,6 +28,14 @@ public sealed class BotTable : IAnomalySink
     /// memory only: a room is not the place to fail a game over a bot's confusion.</summary>
     public List<string> Anomalies { get; } = new();
 
+    /// <summary>Fires after every engine-accepted bot action (see <see cref="Actor.AfterAction"/>):
+    /// the offline client snapshots each one so bot turns replay visibly, step by step.</summary>
+    public Action? AfterAction
+    {
+        get => _actor.AfterAction;
+        set => _actor.AfterAction = value;
+    }
+
     public BotTable(Game game, ulong seed, IEnumerable<string> botInvestigatorIds,
         bool botAdversary, IEnumerable<string> startSpaces)
     {

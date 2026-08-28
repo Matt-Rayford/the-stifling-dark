@@ -88,6 +88,17 @@ namespace StiflingDark.Engine.Data
             {
                 def.OutlinePolygon.Add(new[] { p[0]!.Value<double>(), p[1]!.Value<double>() });
             }
+            if (j["sightLineSegments"]?["segments"] is JArray segments)
+            {
+                foreach (var s in segments)
+                {
+                    def.SightLineSegments.Add(new[]
+                    {
+                        s[0]!.Value<double>(), s[1]!.Value<double>(),
+                        s[2]!.Value<double>(), s[3]!.Value<double>(),
+                    });
+                }
+            }
             return def;
         }
 

@@ -721,15 +721,17 @@ namespace StiflingDark.Engine.Tests
         public void Mitchell_sweep_replaces_the_1st_flashlight_cone_but_keeps_its_reveals()
         {
             var game = NewAbilityGame(new[] { "mitchell", "aira" });
-            // "274" is only in the 1st cone (angle 0.0) of Mitchell's default Sawmill start
+            // "288" is only in the 1st cone (angle 0.0) of Mitchell's default Sawmill start
             // space; not in the 2nd (angle pi). Confirmed by direct inspection of both cones.
-            game.State.Adversary.Space = "274";
+            // (It was "274" until the LoS mask learned the blue pickup — see
+            // tools/patch_los_mask.py — which now correctly blocks 305 -> 274.)
+            game.State.Adversary.Space = "288";
 
             game.BeginInvestigatorTurn("mitchell");
             game.PlaceFlashlight(0.0);
             var placement = game.State.Flashlights.Single(f => f.InvestigatorId == "mitchell");
             var firstCone = placement.BrightSpaces.ToList();
-            Assert.Contains("274", firstCone);
+            Assert.Contains("288", firstCone);
             Assert.True(game.State.Adversary.Revealed); // caught by the 1st cone
 
             game.UseMinorAbility("mitchell", new List<string> { "3.14159265" }); // ~pi: the opposite direction
@@ -743,8 +745,8 @@ namespace StiflingDark.Engine.Tests
             {
                 Assert.DoesNotContain(space, game.State.Overlay.BrightSpaces);
             }
-            Assert.DoesNotContain("274", secondCone);
-            Assert.DoesNotContain("274", game.State.Overlay.BrightSpaces);
+            Assert.DoesNotContain("288", secondCone);
+            Assert.DoesNotContain("288", game.State.Overlay.BrightSpaces);
 
             // Reveals are permanent: the Adversary caught by the 1st cone stays Revealed even
             // though the space that caught them has gone dark again.

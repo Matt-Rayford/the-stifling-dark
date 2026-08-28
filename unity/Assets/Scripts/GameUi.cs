@@ -54,6 +54,27 @@ namespace StiflingDark.Unity
         /// still fires SpaceClicked, which must not reopen it.</summary>
         private bool _menuClosedByThisClick;
 
+        /// <summary>Dwell over the own figure opens the menu (see MaybeOpenMenuByHover).</summary>
+        private const float FigureHoverOpenSeconds = 0.5f;
+        private float _figureHoverTime;
+        /// <summary>False from the moment the menu is open until the pointer leaves the
+        /// figure, so closing it under the cursor doesn't pop it right back open.</summary>
+        private bool _figureHoverArmed = true;
+
+        // Hovered-move path preview + the auto-walk a click on it starts (see
+        // UpdatePathPreview / ContinueWalk).
+        private string _pathSignature;
+        private List<string> _previewPath = new List<string>();
+        private readonly List<string> _walkQueue = new List<string>();
+        /// <summary>Where the figure stood when the pending step was sent; anywhere else
+        /// than there or the step's target means something derailed the walk.</summary>
+        private string _walkFrom;
+        /// <summary>A step was sent and its confirming update hasn't landed yet.</summary>
+        private bool _walkInFlight;
+        /// <summary>Pace between steps, so a long walk reads as walking, not teleporting.</summary>
+        private const float WalkStepSeconds = 0.25f;
+        private float _walkNextStepTime;
+
         // A command that needs spaces picked off the board.
         private int _pickCount;
         private string _pickPrompt = "";
@@ -132,12 +153,17 @@ namespace StiflingDark.Unity
             _turnBanner = new TurnBanner(_root);
 
             _boardView.SpaceClicked += OnSpaceClicked;
+            // A refused step (surcharge, blocker, stale path) must stop an auto-walk cold.
+            _session.ErrorReceived += OnSessionError;
         }
+
+        private void OnSessionError(string message) => StopWalk();
 
         /// <summary>Tear the HUD down — used when a reconnect replaces the session.</summary>
         public void Destroy()
         {
             _boardView.SpaceClicked -= OnSpaceClicked;
+            _session.ErrorReceived -= OnSessionError;
             UnityEngine.Object.Destroy(_root.gameObject);
         }
 
@@ -170,6 +196,9 @@ namespace StiflingDark.Unity
             }
             _boardView.Tick();
             _tokenMenu.Tick();
+            MaybeOpenMenuByHover();
+            ContinueWalk();
+            UpdatePathPreview();
             if (_session.Revision != _renderedRevision || _session.Log.Count != _renderedLogCount)
             {
                 _renderedRevision = _session.Revision;
@@ -185,6 +214,10 @@ namespace StiflingDark.Unity
                 else if (_tokenMenu.IsOpen)
                 {
                     _tokenMenu.Close();
+                }
+                else if (_walkQueue.Count > 0)
+                {
+                    StopWalk();
                 }
             }
             if (Input.GetMouseButtonUp(0))
@@ -236,6 +269,7 @@ namespace StiflingDark.Unity
             RenderActions(view);
             RenderMoveTargets(view);
             _boardView.Render(view, MyInvestigatorId);
+            FollowBotAction(view);
             // The hand covers the map's bottom edge, so it stands down whenever the map
             // underneath belongs to the mouse (aiming a beam, picking spaces).
             _hand.Render(AmAdversary ? null : Me, _boardView.Aiming || _pickCount > 0);
@@ -1200,24 +1234,218 @@ namespace StiflingDark.Unity
                     costs[step.Key] = step.Value.Cost;
                 }
             }
-            else if (MyTurnActive)
+            // Investigator turns get no adjacent-space rings any more: the hovered-path
+            // preview (UpdatePathPreview) shows where a click will take you instead. The
+            // human Adversary keeps them — no path preview on that side yet.
+            _boardView.SetMoveTargets(costs);
+        }
+
+        // ------------------------------------------------------- hovered-move path
+
+        /// <summary>
+        /// Hovering a space while movement is available highlights the shortest walk there
+        /// in blue — or, past the MP budget, the affordable prefix toward the mouse.
+        /// Clicking then walks the highlighted path (see OnSpaceClicked/ContinueWalk).
+        /// Recomputed only when the hover, position, MP or game state actually changed.
+        /// </summary>
+        private void UpdatePathPreview()
+        {
+            var me = AmAdversary ? null : Me;
+            string hovered = _boardView.HoveredSpace;
+            bool eligible = me != null && MyTurnActive && !me.MovementLocked &&
+                me.MpRemaining > 0 && !_boardView.Aiming && _pickCount == 0 &&
+                _walkQueue.Count == 0 && hovered != null && hovered != me.Space;
+            string signature = eligible
+                ? hovered + "|" + me.Space + "|" + me.MpRemaining + "|" + _session.Revision
+                : "";
+            if (signature == _pathSignature)
             {
-                var me = Me;
-                if (me != null && !me.MovementLocked && me.MpRemaining > 0)
+                return;
+            }
+            _pathSignature = signature;
+            _previewPath = eligible ? PathToward(hovered, me) : new List<string>();
+            _boardView.SetPathPreview(_previewPath);
+        }
+
+        /// <summary>
+        /// Dijkstra over legal steps (light-based costs included) from the figure to
+        /// <paramref name="target"/>, cut down to what the remaining MP affords. Window
+        /// crossings are never auto-walked — the Wound-or-Stamina choice stays a manual,
+        /// deliberate step. Empty when no route exists or the first step is unaffordable.
+        /// </summary>
+        private List<string> PathToward(string target, PlayerView.InvestigatorPanel me)
+        {
+            var overlay = BoardModel.OverlayFrom(View);
+            var kind = me.Dead && me.SpiritId != null
+                ? FigureKind.Spirit
+                : FigureKind.Investigator;
+            var dist = new Dictionary<string, int> { [me.Space] = 0 };
+            var prev = new Dictionary<string, string>();
+            var open = new List<string> { me.Space };
+            var settled = new HashSet<string>();
+            while (open.Count > 0)
+            {
+                // Linear min extraction: the board is ~350 spaces and this runs only when
+                // the hover actually changes.
+                string current = open[0];
+                foreach (string candidate in open)
                 {
-                    var kind = me.Dead && me.SpiritId != null
-                        ? FigureKind.Spirit
-                        : FigureKind.Investigator;
-                    foreach (var step in _board.StepsFrom(me.Space, kind, overlay))
+                    if (dist[candidate] < dist[current])
                     {
-                        if (step.Value.Cost <= me.MpRemaining)
+                        current = candidate;
+                    }
+                }
+                open.Remove(current);
+                if (!settled.Add(current))
+                {
+                    continue;
+                }
+                if (current == target)
+                {
+                    break;
+                }
+                foreach (var step in _board.StepsFrom(current, kind, overlay))
+                {
+                    if (step.Value.CrossesWindow)
+                    {
+                        continue;
+                    }
+                    int cost = dist[current] + step.Value.Cost;
+                    if (!dist.TryGetValue(step.Key, out int known) || cost < known)
+                    {
+                        dist[step.Key] = cost;
+                        prev[step.Key] = current;
+                        if (!settled.Contains(step.Key))
                         {
-                            costs[step.Key] = step.Value.Cost;
+                            open.Add(step.Key);
                         }
                     }
                 }
             }
-            _boardView.SetMoveTargets(costs);
+            if (!prev.ContainsKey(target))
+            {
+                return new List<string>();
+            }
+            var full = new List<string>();
+            for (string space = target; space != me.Space; space = prev[space])
+            {
+                full.Add(space);
+            }
+            full.Reverse();
+            var affordable = full.Where(space => dist[space] <= me.MpRemaining).ToList();
+            return affordable;
+        }
+
+        /// <summary>
+        /// Keep the camera on whoever is acting when that someone is a bot, so their turn is
+        /// watched rather than discovered from the log. Manual camera input overrides the
+        /// glide (BoardView cancels it), and a hidden Adversary has no position to follow.
+        /// </summary>
+        private void FollowBotAction(PlayerView view)
+        {
+            string space = null;
+            if (view.Phase == GamePhase.InvestigatorTurns && view.ActiveInvestigator != null &&
+                view.ActiveInvestigator != MyInvestigatorId &&
+                _session.Room.Seats.Any(s => s.Fill == SeatFill.Bot &&
+                    s.InvestigatorId == view.ActiveInvestigator))
+            {
+                space = view.Investigators
+                    .FirstOrDefault(i => i.DefId == view.ActiveInvestigator)?.Space;
+            }
+            else if (view.Phase == GamePhase.AdversaryTurn && !AmAdversary &&
+                _session.Room.Seats.Any(s => s.Fill == SeatFill.Bot &&
+                    s.Role == SeatRole.Adversary))
+            {
+                space = view.Adversary?.Space;
+            }
+            if (!string.IsNullOrEmpty(space))
+            {
+                _boardView.GlideCameraTo(space);
+            }
+        }
+
+        /// <summary>Clicking a previewed path queues its steps; each confirmed arrival
+        /// schedules the next one a beat later (<see cref="WalkStepSeconds"/>), so the walk
+        /// reads as movement. Anything unexpected — a refusal, a window choice, a water
+        /// float, the turn ending — abandons the rest.</summary>
+        private void ContinueWalk()
+        {
+            if (_walkQueue.Count == 0)
+            {
+                return;
+            }
+            var me = AmAdversary ? null : Me;
+            if (me == null || !MyTurnActive || View == null || View.PendingWindowChoice)
+            {
+                StopWalk();
+                return;
+            }
+            if (_walkInFlight)
+            {
+                if (me.Space == _walkQueue[0])
+                {
+                    // Arrived: take a beat before the next step.
+                    _walkQueue.RemoveAt(0);
+                    _walkFrom = me.Space;
+                    _walkInFlight = false;
+                    _walkNextStepTime = Time.time + WalkStepSeconds;
+                }
+                else if (me.Space != _walkFrom)
+                {
+                    StopWalk(); // derailed (a float, a forced move)
+                }
+                return;
+            }
+            if (me.Space != _walkFrom)
+            {
+                StopWalk();
+                return;
+            }
+            if (Time.time >= _walkNextStepTime)
+            {
+                _walkInFlight = true;
+                Send(new MoveStepCommand { To = _walkQueue[0] });
+            }
+        }
+
+        private void StopWalk()
+        {
+            _walkQueue.Clear();
+            _walkInFlight = false;
+        }
+
+        /// <summary>
+        /// Resting the pointer on your own figure for half a second opens the action menu,
+        /// clicking not required. Re-arms only after the pointer leaves the figure, so
+        /// closing the menu under the cursor doesn't pop it straight back open.
+        /// </summary>
+        private void MaybeOpenMenuByHover()
+        {
+            var me = AmAdversary ? null : Me;
+            bool overFigure = me != null && !_boardView.Aiming && _pickCount == 0 &&
+                _boardView.HoveredSpace == me.Space;
+            if (!overFigure)
+            {
+                _figureHoverArmed = true;
+                _figureHoverTime = 0f;
+                return;
+            }
+            if (_tokenMenu.IsOpen)
+            {
+                _figureHoverArmed = false;
+                _figureHoverTime = 0f;
+                return;
+            }
+            if (!_figureHoverArmed)
+            {
+                return;
+            }
+            _figureHoverTime += Time.deltaTime;
+            if (_figureHoverTime >= FigureHoverOpenSeconds)
+            {
+                _tokenMenu.OpenAt(me.Space);
+                RenderTokenActions(View);
+            }
         }
 
         private void OnSpaceClicked(string spaceId)
@@ -1260,10 +1488,24 @@ namespace StiflingDark.Unity
                 return;
             }
             _tokenMenu.Close();
-            if (MyTurnActive)
+            if (!MyTurnActive)
             {
-                Send(new MoveStepCommand { To = spaceId });
+                return;
             }
+            if (_previewPath.Count > 0)
+            {
+                // Walk the highlighted path — as far as the MP budget's prefix reaches.
+                // ContinueWalk sends the first step on the next tick and paces the rest.
+                StopWalk();
+                _walkQueue.AddRange(_previewPath);
+                _previewPath = new List<string>();
+                _pathSignature = null;
+                _boardView.SetPathPreview(null);
+                _walkFrom = me.Space;
+                _walkNextStepTime = 0f;
+                return;
+            }
+            Send(new MoveStepCommand { To = spaceId });
         }
 
         /// <summary>Collect n board clicks, then hand them to <paramref name="done"/>.</summary>

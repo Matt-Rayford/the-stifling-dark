@@ -211,6 +211,53 @@
    ]
   }
  },
+ "sightLineSegments": {
+  "_note": "The 7 printed sight lines as straight segments [x1, y1, x2, y2] in template pixels (y-down), derived from sightLines: the 3 verticals directly, the 4 angled lines fit through their sampledRows points (collinear to ~1px) and extended to the base (y=1500, all within the figure space around the notch) and toward the dome (y=100). Engine LOS: a space connects when any segment passes through its circle with the stretch from base to space unobstructed (designer ruling 2026-08-27: the printed lines dictate line of sight, as in the physical game).",
+  "segments": [
+   [
+    343.0,
+    1500.0,
+    343.0,
+    100.0
+   ],
+   [
+    440.0,
+    1500.0,
+    440.0,
+    100.0
+   ],
+   [
+    536.0,
+    1500.0,
+    536.0,
+    100.0
+   ],
+   [
+    416.3,
+    1500.0,
+    12.7,
+    100.0
+   ],
+   [
+    423.5,
+    1500.0,
+    164.5,
+    100.0
+   ],
+   [
+    457.5,
+    1500.0,
+    716.5,
+    100.0
+   ],
+   [
+    463.0,
+    1500.0,
+    869.0,
+    100.0
+   ]
+  ]
+ },
  "losRules": [
   "A space has line of sight only if (1) it is ENTIRELY covered by the template outline and (2) at least one printed sight line connects from the Investigator to the space without crossing an Obstacle.",
   "The Investigator's own space always has line of sight when the Flashlight is placed.",

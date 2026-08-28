@@ -72,6 +72,63 @@ namespace StiflingDark.Unity
         public Action<string> SpaceClicked;
         /// <summary>True while the flashlight is being aimed — the turn UI locks down.</summary>
         public bool Aiming => _aiming;
+        /// <summary>The space under the mouse right now, null off the graph or over UI.</summary>
+        public string HoveredSpace => _hovered;
+
+        private Transform _pathLayer;
+
+        /// <summary>Last drawn space per figure key, for the step-slide animation.</summary>
+        private readonly Dictionary<string, string> _figureSpaces =
+            new Dictionary<string, string>();
+
+        /// <summary>
+        /// One-step moves glide instead of teleporting: when this figure was last drawn on
+        /// a neighbouring space, its elements start back there and ease to the new spot.
+        /// Longer jumps (Spirit adoption, forced relocation) still snap — sliding those
+        /// would read as a walk that never happened.
+        /// </summary>
+        private void SlideFromLastSpace(string key, string spaceId, params GameObject[] elements)
+        {
+            _figureSpaces.TryGetValue(key, out string last);
+            _figureSpaces[key] = spaceId;
+            if (last == null || last == spaceId)
+            {
+                return;
+            }
+            var delta = WorldOf(last) - WorldOf(spaceId);
+            float reach = (float)_board.Map.SpacePitch * 1.6f;
+            if (delta.sqrMagnitude > reach * reach)
+            {
+                return;
+            }
+            foreach (var element in elements)
+            {
+                if (element != null)
+                {
+                    element.AddComponent<FigureSlide>().Delta = delta;
+                }
+            }
+        }
+
+        /// <summary>
+        /// Highlight the walk the hovered space would trigger: a blue dot per step, a ring
+        /// on the last one (where the click will land). Null or empty clears it.
+        /// </summary>
+        public void SetPathPreview(IReadOnlyList<string> spaces)
+        {
+            UiKit.Clear(_pathLayer);
+            if (spaces == null)
+            {
+                return;
+            }
+            var blue = new Color(0.45f, 0.82f, 1f, 0.95f);
+            foreach (string space in spaces)
+            {
+                var ring = NewSprite(_pathLayer, "PathRing", UiSprites.Ring, blue, 25);
+                ring.transform.position = WorldOf(space);
+                Scale(ring, (float)_board.Map.SpaceRadius * 2.2f);
+            }
+        }
 
         public BoardView(BoardModel board, TokenArt art, Describe describe)
         {
@@ -90,6 +147,12 @@ namespace StiflingDark.Unity
             var cuesGo = new GameObject("Cues");
             cuesGo.transform.SetParent(_root, false);
             _chargeCues = new ChargeCues(cuesGo.transform, art, board.Map.SpaceRadius);
+
+            // The hovered-move path highlight also survives Render: it follows the MOUSE,
+            // not the game state, and is re-set by its own hover tick.
+            var pathGo = new GameObject("PathPreview");
+            pathGo.transform.SetParent(_root, false);
+            _pathLayer = pathGo.transform;
 
             _playerBoards = new WorldPlayerBoards(_root, art, describe);
 
@@ -179,6 +242,38 @@ namespace StiflingDark.Unity
             var world = WorldOf(spaceId) +
                 new Vector3((float)_board.Map.SpaceRadius * radiiAcross, 0f, 0f);
             return _camera.WorldToScreenPoint(world);
+        }
+
+        private Vector3? _cameraGlide;
+
+        /// <summary>
+        /// Ease the camera toward a space without changing the zoom — following a bot as it
+        /// acts. Any manual camera input (pan, zoom, key pan) cancels the glide: the human
+        /// looking somewhere on purpose always wins.
+        /// </summary>
+        public void GlideCameraTo(string spaceId)
+        {
+            var space = _board.SpaceOrNull(spaceId);
+            if (space != null)
+            {
+                _cameraGlide = new Vector3((float)space.X, -(float)space.Y, -10f);
+            }
+        }
+
+        private void TickCameraGlide()
+        {
+            if (!(_cameraGlide is Vector3 target))
+            {
+                return;
+            }
+            var pos = _camera.transform.position;
+            var next = Vector3.Lerp(pos, target, 1f - Mathf.Exp(-5f * Time.deltaTime));
+            _camera.transform.position = next;
+            ClampCameraToBoard();
+            if ((next - target).sqrMagnitude < 25f)
+            {
+                _cameraGlide = null; // close enough — stop steering
+            }
         }
 
         /// <summary>Center the view on a space without changing the zoom.</summary>
@@ -446,12 +541,9 @@ namespace StiflingDark.Unity
             foreach (var flashlight in view.Flashlights)
             {
                 var world = WorldOf(flashlight.Space);
-                // UNDER the light overlay (order 10): the cone is the full template, but walls
-                // and event trims cut the real Bright set — the overlay's truthful shading must
-                // mute the cone wherever the beam did not actually reach, or a space can look
-                // lit while the engine (correctly) treats it as dark. Playtest bug: The Butcher
-                // Stalked, apparently from inside a beam, from a wall-shadowed space the cone
-                // art painted over.
+                // The cone is flavor, not truth: it draws UNDER the light overlay (order 10)
+                // so the per-space shading — the real Bright set — always reads on top, and
+                // spaces the walls cut out of the beam stay visibly dark inside the cone.
                 var beam = NewSprite(_dynamic, "Beam", _beamSprite,
                     new Color(1f, 0.86f, 0.55f, 0.10f), 9);
                 beam.transform.position = world;
@@ -493,7 +585,8 @@ namespace StiflingDark.Unity
             {
                 AdversaryFigure(adversary.Space, TokenArt.AdversaryFace(adversary.DefId), color,
                     "AD", 31, Describe.Adversary(adversary.DefId) +
-                    (adversary.Revealed ? " — REVEALED" : " — position known"));
+                    (adversary.Revealed ? " — REVEALED" : " — position known"),
+                    "adversary");
             }
             foreach (var figure in adversary.Figures)
             {
@@ -502,7 +595,8 @@ namespace StiflingDark.Unity
                     continue;
                 }
                 AdversaryFigure(figure.Space, TokenArt.CultistFace(figure.Id), color,
-                    Short(figure.Id), 30, figure.Id + (figure.Revealed ? " — revealed" : ""));
+                    Short(figure.Id), 30, figure.Id + (figure.Revealed ? " — revealed" : ""),
+                    figure.Id);
             }
         }
 
@@ -512,7 +606,7 @@ namespace StiflingDark.Unity
         /// the adversary's color — instead of the smaller square face token they used to be.
         /// </summary>
         private void AdversaryFigure(string spaceId, string artPath, Color color, string initials,
-            int sortingOrder, string note)
+            int sortingOrder, string note, string slideKey)
         {
             var go = FigureSprite(spaceId, _art.CircularToken(artPath), color, initials,
                 sortingOrder, note, 2f);
@@ -524,6 +618,7 @@ namespace StiflingDark.Unity
                 new Color(color.r, color.g, color.b, 0.85f), sortingOrder);
             ring.transform.position = go.transform.position;
             Scale(ring, (float)_board.Map.SpaceRadius * 2.1f);
+            SlideFromLastSpace(slideKey, spaceId, go, ring);
         }
 
         private void DrawInvestigators(PlayerView view)
@@ -580,6 +675,7 @@ namespace StiflingDark.Unity
                     isMe ? 34 : 31);
                 ring.transform.position = go.transform.position;
                 Scale(ring, (float)_board.Map.SpaceRadius * (isMe ? 2.22f : 2.1f));
+                SlideFromLastSpace(panel.DefId, panel.Space, go, ring);
 
                 foreach (var carrier in view.Objective.TokenCarriers.Where(c => c.Value == panel.DefId))
                 {
@@ -970,9 +1066,15 @@ namespace StiflingDark.Unity
             bool overUi = EventSystem.current != null &&
                           EventSystem.current.IsPointerOverGameObject();
 
+            var cameraBefore = _camera.transform.position;
             HandleZoom(overUi);
             HandlePan(overUi);
             HandleKeyPan(overUi);
+            if ((_camera.transform.position - cameraBefore).sqrMagnitude > 0.01f)
+            {
+                _cameraGlide = null; // the human moved the camera on purpose
+            }
+            TickCameraGlide();
             if (_aiming)
             {
                 UpdateAim(force: false);
@@ -986,8 +1088,10 @@ namespace StiflingDark.Unity
                         confirm(angle);
                     }
                 }
-                else if (Input.GetKeyDown(KeyCode.Escape))
+                else if (Input.GetKeyDown(KeyCode.Escape) ||
+                         (Input.GetMouseButtonUp(1) && !_dragMoved))
                 {
+                    // Esc or a plain right-click cancels; a right-DRAG is still a pan.
                     var cancel = _aimCancel;
                     EndAim();
                     cancel?.Invoke();

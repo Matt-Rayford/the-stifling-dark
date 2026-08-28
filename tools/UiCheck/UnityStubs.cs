@@ -34,7 +34,9 @@ namespace UnityEngine
         public static Vector3 zero => new Vector3(0, 0, 0);
         public static Vector3 one => new Vector3(1, 1, 1);
         public float magnitude => 0f;
+        public float sqrMagnitude => 0f;
         public static float Distance(Vector3 a, Vector3 b) => 0f;
+        public static Vector3 Lerp(Vector3 a, Vector3 b, float t) => a;
         public static Vector3 operator +(Vector3 a, Vector3 b) => a;
         public static Vector3 operator -(Vector3 a, Vector3 b) => a;
         public static Vector3 operator *(Vector3 a, float b) => a;
