@@ -304,6 +304,58 @@ namespace StiflingDark.Unity
             return (RectTransform)go.transform;
         }
 
+        /// <summary>Stepped slider, Lemonade Wars style: dark track, accent fill, round
+        /// handle. Whole numbers 0..steps; wire onValueChanged for the rest.</summary>
+        public static Slider CreateSlider(Transform parent, int steps, int initialStep)
+        {
+            var go = new GameObject("Slider", typeof(RectTransform), typeof(Slider),
+                typeof(LayoutElement));
+            go.transform.SetParent(parent, false);
+            go.GetComponent<LayoutElement>().minHeight = 40;
+            var slider = go.GetComponent<Slider>();
+            slider.transition = Selectable.Transition.None;
+
+            // Flat rectangular bar in the game's green — no rounded skin, thin track,
+            // small round handle.
+            const float handleWidth = 16f;
+            var track = CreatePanel(go.transform, "Track", new Color(0.09f, 0.11f, 0.15f, 0.95f));
+            Anchor(track, new Vector2(0, 0.42f), new Vector2(1, 0.58f),
+                new Vector2(handleWidth / 2f, 0), new Vector2(-handleWidth / 2f, 0));
+
+            // Fill area is inset by the handle radius so the fill lines up with it.
+            var fillArea = CreatePanel(go.transform, "FillArea", new Color(0, 0, 0, 0));
+            fillArea.GetComponent<Image>().raycastTarget = false;
+            Anchor(fillArea, new Vector2(0, 0.42f), new Vector2(1, 0.58f),
+                new Vector2(handleWidth / 2f, 0), new Vector2(-handleWidth / 2f, 0));
+            var fill = CreatePanel(fillArea, "Fill", TitleColor);
+            fill.GetComponent<Image>().raycastTarget = false;
+            fill.anchorMin = new Vector2(0, 0);
+            fill.anchorMax = new Vector2(0, 1);
+            fill.offsetMin = fill.offsetMax = Vector2.zero;
+
+            var handleArea = CreatePanel(go.transform, "HandleArea", new Color(0, 0, 0, 0));
+            handleArea.GetComponent<Image>().raycastTarget = false;
+            Anchor(handleArea, Vector2.zero, Vector2.one,
+                new Vector2(handleWidth / 2f, 0), new Vector2(-handleWidth / 2f, 0));
+            var handle = CreatePanel(handleArea, "Handle", TextColor);
+            handle.GetComponent<Image>().sprite = UiSprites.Circle;
+            handle.GetComponent<Image>().preserveAspect = true;
+            handle.anchorMin = new Vector2(0, 0.5f);
+            handle.anchorMax = new Vector2(0, 0.5f);
+            handle.pivot = new Vector2(0.5f, 0.5f);
+            handle.sizeDelta = new Vector2(handleWidth, handleWidth);
+
+            slider.fillRect = fill;
+            slider.handleRect = handle;
+            slider.targetGraphic = handle.GetComponent<Image>();
+            slider.direction = Slider.Direction.LeftToRight;
+            slider.wholeNumbers = true;
+            slider.minValue = 0;
+            slider.maxValue = steps;
+            slider.value = Mathf.Clamp(initialStep, 0, steps);
+            return slider;
+        }
+
         public static void Clear(Transform container)
         {
             for (int i = container.childCount - 1; i >= 0; i--)

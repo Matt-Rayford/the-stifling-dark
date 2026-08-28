@@ -118,6 +118,7 @@ namespace UnityEngine
         public static float Atan2(float y, float x) => 0f;
         public static int CeilToInt(float a) => 0;
         public static int FloorToInt(float a) => 0;
+        public static int RoundToInt(float a) => 0;
     }
 
     [Flags]
@@ -157,6 +158,7 @@ namespace UnityEngine
         public string name { get; set; }
         public HideFlags hideFlags { get; set; }
         public static void Destroy(Object target) { }
+        public static void DontDestroyOnLoad(Object target) { }
         public static T FindFirstObjectByType<T>() where T : Object => null;
         public static bool operator ==(Object a, Object b) => ReferenceEquals(a, b);
         public static bool operator !=(Object a, Object b) => !ReferenceEquals(a, b);
@@ -198,6 +200,23 @@ namespace UnityEngine
     }
 
     public sealed class Font : Object { }
+
+    public sealed class AudioClip : Object { }
+
+    public sealed class AudioSource : Behaviour
+    {
+        public AudioClip clip { get; set; }
+        public bool loop { get; set; }
+        public bool playOnAwake { get; set; }
+        public bool isPlaying => false;
+        public void Play() { }
+        public void Stop() { }
+    }
+
+    public sealed class AudioListener : Behaviour
+    {
+        public static float volume { get; set; }
+    }
 
     public static class Resources
     {
@@ -298,8 +317,6 @@ namespace UnityEngine
         public Vector3 ScreenToWorldPoint(Vector3 position) => position;
     }
 
-    public sealed class AudioListener : Behaviour { }
-
     public static class Input
     {
         public static Vector3 mousePosition => Vector3.zero;
@@ -340,6 +357,8 @@ namespace UnityEngine
 
     public static class PlayerPrefs
     {
+        public static int GetInt(string key, int defaultValue = 0) => defaultValue;
+        public static void SetInt(string key, int value) { }
         public static string GetString(string key, string defaultValue = "") => defaultValue;
         public static void SetString(string key, string value) { }
         public static void Save() { }
@@ -349,8 +368,16 @@ namespace UnityEngine
 namespace UnityEngine.Events
 {
     public delegate void UnityAction();
+    public delegate void UnityAction<T0>(T0 arg0);
 
     public class UnityEventBase { }
+
+    public class UnityEvent<T0> : UnityEventBase
+    {
+        public void AddListener(UnityAction<T0> call) { }
+        public void RemoveListener(UnityAction<T0> call) { }
+        public void Invoke(T0 arg0) { }
+    }
 
     public class UnityEvent : UnityEventBase
     {
@@ -412,6 +439,21 @@ namespace UnityEngine.UI
         public enum Transition { None, ColorTint, SpriteSwap, Animation }
         public Transition transition { get; set; }
         public bool interactable { get; set; }
+    }
+
+    public class Slider : Selectable
+    {
+        public enum Direction { LeftToRight, RightToLeft, BottomToTop, TopToBottom }
+        public sealed class SliderEvent : UnityEngine.Events.UnityEvent<float> { }
+        public SliderEvent onValueChanged { get; } = new SliderEvent();
+        public RectTransform fillRect { get; set; }
+        public RectTransform handleRect { get; set; }
+        public Graphic targetGraphic { get; set; }
+        public Direction direction { get; set; }
+        public bool wholeNumbers { get; set; }
+        public float minValue { get; set; }
+        public float maxValue { get; set; }
+        public float value { get; set; }
     }
 
     public class Button : Selectable

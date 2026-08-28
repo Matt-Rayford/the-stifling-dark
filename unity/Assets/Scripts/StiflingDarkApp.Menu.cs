@@ -145,14 +145,18 @@ namespace StiflingDark.Unity
             UiKit.Anchor(_settingsScreen, Vector2.zero, Vector2.one);
             var columnMin = new Vector2(0.34f, 0.50f);
             CreateBackButton(_settingsScreen, columnMin.x);
-            CreateHeading(_settingsScreen, "SETTINGS", "More settings will land here later");
+            CreateHeading(_settingsScreen, "SETTINGS", "");
 
             var column = MenuColumn(_settingsScreen, "SettingsColumn",
                 columnMin, new Vector2(0.66f, 0.81f), 8);
 
-            UiKit.CreateText(column, "Your name", 14, TextAnchor.MiddleLeft, UiKit.MutedColor)
-                .gameObject.AddComponent<LayoutElement>().minHeight = 20;
+            Head(column, "YOUR NAME");
             _settingsNameInput = UiKit.CreateInput(column, "name", RememberedPlayerName());
+            Head(column, "MASTER VOLUME");
+            var volume = UiKit.CreateSlider(column,
+                100 / Music.VolumeStep, Music.Volume / Music.VolumeStep);
+            volume.onValueChanged.AddListener(step => Music.Volume = (int)step * Music.VolumeStep);
+
             UiKit.CreateButton(column, "Save", 18, () => ShowMenuScreen(MenuScreen.Root))
                 .GetComponent<LayoutElement>().minHeight = 44;
 

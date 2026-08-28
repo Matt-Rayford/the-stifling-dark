@@ -84,6 +84,7 @@ namespace StiflingDark.Unity
             }
             _art = new TokenArt(Application.streamingAssetsPath, Application.dataPath);
 
+            Music.ApplySavedVolume();
             var canvas = UiKit.CreateCanvas("SdCanvas", 0);
             _prompt = new Prompt(UiKit.CreateCanvas("SdModalCanvas", 200).transform);
             BuildMenu(canvas.transform);
@@ -261,6 +262,15 @@ namespace StiflingDark.Unity
             _menu.gameObject.SetActive(stage == Stage.Menu);
             _lobby?.SetActive(stage == Stage.Lobby);
             _game?.SetActive(stage == Stage.Game);
+            // The menu track plays everywhere outside an actual game.
+            if (stage == Stage.Game)
+            {
+                Music.StopMenuTrack();
+            }
+            else
+            {
+                Music.PlayMenuTrack();
+            }
             if (stage != Stage.Game)
             {
                 Tooltip.Hide();

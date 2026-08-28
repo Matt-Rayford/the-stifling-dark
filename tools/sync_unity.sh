@@ -101,6 +101,14 @@ for png in "$TEXTURES"/board-*.png; do
   cp -c "$png" "$STREAMING/textures/" 2>/dev/null || cp "$png" "$STREAMING/textures/"
 done
 
+echo "== syncing music =="
+# Music goes under Assets/Resources so Unity imports it as AudioClips the code-built UI
+# can Resources.Load at runtime (StreamingAssets files never become AudioClips).
+if [ -d game-assets/music ]; then
+  mkdir -p "$UNITY_DIR/Assets/Resources/Music"
+  cp game-assets/music/*.mp3 "$UNITY_DIR/Assets/Resources/Music/" 2>/dev/null || true
+fi
+
 echo "== player boards =="
 # Investigator player-board BACKS (the character-sheet side) for the solo-setup selector:
 # one PNG per base Investigator, page-mapped from the print PDF (pages 1-10 are the base
