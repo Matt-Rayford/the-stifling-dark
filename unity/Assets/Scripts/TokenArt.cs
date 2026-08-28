@@ -87,6 +87,14 @@ namespace StiflingDark.Unity
             BoardBack("adversary-boards", adversaryId);
 
         /// <summary>
+        /// An Investigator's player-board FRONT — the landscape sheet with the printed Stamina
+        /// and Charge tracks, the Wound slots and their abilities. <see cref="PlayerBoardPanel"/>
+        /// measures its markers against this art, so the geometry there assumes this file.
+        /// </summary>
+        public Sprite PlayerBoardFront(string investigatorId) =>
+            BoardBack("player-board-fronts", investigatorId);
+
+        /// <summary>
         /// A landscape board sheet from one of the StreamingAssets board folders. No circle
         /// mask: unlike a face token this is a card, and it keeps its corners.
         /// </summary>

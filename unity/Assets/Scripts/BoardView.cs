@@ -164,6 +164,18 @@ namespace StiflingDark.Unity
                 : new Vector3((float)space.X, -(float)space.Y, 0f);
         }
 
+        /// <summary>
+        /// Screen point beside a space's figure: its centre shifted by
+        /// <paramref name="radiiAcross"/> space radii along x (positive = right). Where a
+        /// popup pinned next to the figure belongs, in whatever the current pan/zoom is.
+        /// </summary>
+        public Vector2 ScreenPointBeside(string spaceId, float radiiAcross)
+        {
+            var world = WorldOf(spaceId) +
+                new Vector3((float)_board.Map.SpaceRadius * radiiAcross, 0f, 0f);
+            return _camera.WorldToScreenPoint(world);
+        }
+
         /// <summary>Center the view on a space without changing the zoom.</summary>
         public void FocusOn(string spaceId)
         {

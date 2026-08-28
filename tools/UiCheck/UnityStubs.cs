@@ -190,6 +190,7 @@ namespace UnityEngine
     {
         public Texture2D texture => null;
         public Bounds bounds => default;
+        public Rect rect => default;
         public static Sprite Create(Texture2D texture, Rect rect, Vector2 pivot) => null;
         public static Sprite Create(Texture2D texture, Rect rect, Vector2 pivot,
             float pixelsPerUnit) => null;
@@ -316,6 +317,7 @@ namespace UnityEngine
         public float nearClipPlane { get; set; }
         public float farClipPlane { get; set; }
         public Vector3 ScreenToWorldPoint(Vector3 position) => position;
+        public Vector3 WorldToScreenPoint(Vector3 position) => position;
     }
 
     public static class Input

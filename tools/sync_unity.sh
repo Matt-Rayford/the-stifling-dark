@@ -128,6 +128,23 @@ if [ -f game-assets/player-boards/investigator-backs.pdf ] && command -v pdftopp
   # Sharp minification: pre-baked Lanczos mip pyramids (see tools/make_mips.py).
   python3 tools/make_mips.py "$BOARDS" || echo "  !! mip packing failed (pip install pillow?)"
 fi
+# Investigator player-board FRONTS (the in-play side: stamina/charge tracks, ability
+# summaries, wound slots) for the in-game player board panel. Same alphabetical page
+# order as the backs; 11-12 are the excluded promos.
+FRONT_BOARDS="$STREAMING/player-board-fronts"
+if [ -f game-assets/player-boards/investigator-fronts.pdf ] && command -v pdftoppm >/dev/null; then
+  mkdir -p "$FRONT_BOARDS"
+  page=1
+  for id in aira asher brielle dylan ibraheem lucy-belle mada marci mitchell vincent; do
+    out="$FRONT_BOARDS/$id.png"
+    if [ ! -f "$out" ] || [ "${FORCE_TEXTURES:-0}" = "1" ]; then
+      pdftoppm -png -f $page -l $page -scale-to 1400 -singlefile \
+        game-assets/player-boards/investigator-fronts.pdf "${out%.png}"
+    fi
+    page=$((page+1))
+  done
+  python3 tools/make_mips.py "$FRONT_BOARDS" || echo "  !! mip packing failed (pip install pillow?)"
+fi
 # Adversary board FRONTS (the rules side) for the solo-setup picker. Page 3 is Mor'gonnod's
 # corporeal flip, not a pickable adversary. (The PDF's filename typo is in game-assets.)
 ADV_BOARDS="$STREAMING/adversary-boards"

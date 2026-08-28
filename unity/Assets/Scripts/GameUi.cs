@@ -40,6 +40,9 @@ namespace StiflingDark.Unity
         private readonly RectTransform _logBody;
         private readonly RectTransform _actionBar;
         private readonly TMP_Text _hint;
+        private readonly PlayerBoardPanel _playerBoard;
+        private readonly TokenActionMenu _tokenMenu;
+        private readonly TurnBanner _turnBanner;
 
         private int _renderedRevision = -1;
         private int _renderedLogCount = -1;
@@ -47,6 +50,10 @@ namespace StiflingDark.Unity
         /// <summary>Mitchell just confirmed his own placement: open the Sweep aim as soon as
         /// the update carrying the new Flashlight arrives.</summary>
         private bool _offerSweepWhenPlaced;
+
+        /// <summary>An outside click just closed the figure menu; the same click's release
+        /// still fires SpaceClicked, which must not reopen it.</summary>
+        private bool _menuClosedByThisClick;
 
         // A command that needs spaces picked off the board.
         private int _pickCount;
@@ -58,7 +65,7 @@ namespace StiflingDark.Unity
         public Action LeaveRequested;
 
         public GameUi(Transform canvas, IGameSession session, BoardModel board,
-            BoardView boardView, Describe describe, Prompt prompt)
+            BoardView boardView, TokenArt art, Describe describe, Prompt prompt)
         {
             _session = session;
             _board = board;
@@ -103,23 +110,32 @@ namespace StiflingDark.Unity
                 new Vector2(4, 4), new Vector2(-4, -4));
             _actionsBody = UiKit.CreateScrollList(actionsHost, 3f);
 
-            var logLabel = UiKit.CreateText(right, "EVENT LOG", 13, TextAnchor.MiddleLeft, UiKit.MutedColor);
+            var logLabel = UiKit.CreateText(right, "EVENT LOG", 16, TextAnchor.MiddleLeft,
+                UiKit.TitleColor);
+            logLabel.font = UiKit.MenuFont;
             UiKit.Anchor((RectTransform)logLabel.transform, new Vector2(0, 0.42f), new Vector2(1, 0.42f),
-                new Vector2(10, -22), new Vector2(-10, 0));
+                new Vector2(10, -24), new Vector2(-10, 0));
             var logHost = UiKit.CreateGroup(right, "LogHost");
             UiKit.Anchor(logHost, Vector2.zero, new Vector2(1, 0.42f),
                 new Vector2(4, 4), new Vector2(-4, -24));
             _logBody = UiKit.CreateScrollList(logHost, 1f);
 
-            // ---- bottom action bar
+            // ---- bottom band: a backdrop panel, with the action bar riding its top edge as a
+            // centred strip between the side columns, and the hint floating just above.
             var bottom = UiKit.CreatePanel(_root, "Bottom", UiKit.PanelColor);
             UiKit.Anchor(bottom, Vector2.zero, new Vector2(1, 0), Vector2.zero, new Vector2(0, 150));
-            _hint = UiKit.CreateText(bottom, "", 16, TextAnchor.MiddleLeft, UiKit.AccentColor);
-            UiKit.Anchor((RectTransform)_hint.transform, new Vector2(0, 1), new Vector2(1, 1),
-                new Vector2(16, -30), new Vector2(-16, -4));
-            _actionBar = UiKit.CreateGroup(bottom, "Actions");
-            UiKit.Anchor(_actionBar, Vector2.zero, new Vector2(1, 1),
-                new Vector2(10, 8), new Vector2(-10, -32));
+            _actionBar = UiKit.CreateGroup(_root, "Actions");
+            UiKit.Anchor(_actionBar, Vector2.zero, new Vector2(1, 0),
+                new Vector2(368, 92), new Vector2(-438, 146));
+            _hint = UiKit.CreateText(_root, "", 16, TextAnchor.MiddleCenter, UiKit.AccentColor);
+            UiKit.Anchor((RectTransform)_hint.transform, Vector2.zero, new Vector2(1, 0),
+                new Vector2(368, 152), new Vector2(-438, 180));
+
+            // Built last so it draws over the action bar it deliberately overlaps.
+            _playerBoard = new PlayerBoardPanel(_root, art, describe);
+            _tokenMenu = new TokenActionMenu(_root, boardView);
+            // Above everything of the HUD's — only the Prompt canvas (order 200) outranks it.
+            _turnBanner = new TurnBanner(_root);
 
             _boardView.SpaceClicked += OnSpaceClicked;
         }
@@ -138,6 +154,8 @@ namespace StiflingDark.Unity
             if (!active)
             {
                 _prompt.Hide();
+                _turnBanner.Hide();
+                _tokenMenu.Close();
             }
         }
 
@@ -149,16 +167,36 @@ namespace StiflingDark.Unity
             {
                 return;
             }
+            // Any press outside the menu's buttons closes it — before the board sees the
+            // click, so the release cannot both close and act on the space underneath.
+            if (_tokenMenu.IsOpen && Input.GetMouseButtonDown(0) && !_tokenMenu.ContainsPointer())
+            {
+                _tokenMenu.Close();
+                _menuClosedByThisClick = true;
+            }
             _boardView.Tick();
+            _tokenMenu.Tick();
             if (_session.Revision != _renderedRevision || _session.Log.Count != _renderedLogCount)
             {
                 _renderedRevision = _session.Revision;
                 _renderedLogCount = _session.Log.Count;
                 Render();
             }
-            if (_pickCount > 0 && Input.GetKeyDown(KeyCode.Escape))
+            if (Input.GetKeyDown(KeyCode.Escape))
             {
-                CancelPick();
+                if (_pickCount > 0)
+                {
+                    CancelPick();
+                }
+                else if (_tokenMenu.IsOpen)
+                {
+                    _tokenMenu.Close();
+                }
+            }
+            if (Input.GetMouseButtonUp(0))
+            {
+                // Runs after the board's Tick fired SpaceClicked for this release.
+                _menuClosedByThisClick = false;
             }
         }
 
@@ -204,8 +242,40 @@ namespace StiflingDark.Unity
             RenderActions(view);
             RenderMoveTargets(view);
             _boardView.Render(view, MyInvestigatorId);
+            // The board panel covers the middle-bottom of the map, so it stands down whenever
+            // the map underneath belongs to the mouse (aiming a beam, picking spaces).
+            _playerBoard.Render(AmAdversary ? null : Me, _boardView.Aiming || _pickCount > 0);
+            RefreshTokenMenu(view);
             MaybeShowModal(view);
+            MaybeShowTurnBanner(view);
             OfferSweepIfJustPlaced(view);
+        }
+
+        /// <summary>
+        /// Between Investigator turns the old BEGIN TURN bar button is a full-screen banner
+        /// instead. It appears only when pressing it would actually work: the phase is open,
+        /// nobody is mid-turn, this seat's Investigator still has a turn, and the server says
+        /// the table is waiting on this seat. Runs after <see cref="MaybeShowModal"/> so a
+        /// between-turns Prompt (Spirit adoption, Escape selection) gets the screen first.
+        /// </summary>
+        private void MaybeShowTurnBanner(PlayerView view)
+        {
+            var me = AmAdversary ? null : Me;
+            bool waiting = me != null
+                && view.Phase == GamePhase.InvestigatorTurns
+                && view.ActiveInvestigator == null
+                && !me.TurnTakenThisRound
+                && !me.Escaped
+                && _session.YourTurn
+                && !view.PendingWindowChoice;
+            if (!waiting || _prompt.Open)
+            {
+                _turnBanner.Hide();
+                return;
+            }
+            string investigatorId = me.DefId;
+            _turnBanner.Show("turn:" + view.Round + ":" + investigatorId,
+                () => Send(new BeginInvestigatorTurnCommand { InvestigatorId = investigatorId }));
         }
 
         /// <summary>
@@ -274,7 +344,8 @@ namespace StiflingDark.Unity
                     ? "Move the mouse around your figure to aim — the lit spaces are the real " +
                       "Bright set, computed here with the engine's own beam solver."
                     : MyTurnActive
-                        ? "Click a highlighted space to Move.  Scroll to zoom, right-drag to pan."
+                        ? "Click your Investigator for actions, a highlighted space to Move.  " +
+                          "Scroll to zoom, right-drag to pan."
                         : "Scroll to zoom, right-drag to pan, hover a space to inspect it.";
 
             if (view.Phase == GamePhase.GameOver)
@@ -455,7 +526,7 @@ namespace StiflingDark.Unity
             layout.childControlHeight = true;
             layout.childForceExpandHeight = false;
 
-            Line(card, "OBJECTIVE", 14, UiKit.MutedColor);
+            SectionHeader(card, "OBJECTIVE");
             Line(card, "Evidence turned in " + objective.EvidenceTurnedIn + "/" +
                 objective.EvidenceRequired +
                 (objective.SelectedEscapeCard != null
@@ -542,8 +613,6 @@ namespace StiflingDark.Unity
         {
             UiKit.Clear(_actionBar);
             UiKit.Clear(_actionsBody);
-            var bar = UiKit.CreateRow(_actionBar, "Bar", 8f, 40f);
-            UiKit.Anchor(bar, Vector2.zero, Vector2.one);
 
             if (view.Phase == GamePhase.GameOver)
             {
@@ -554,13 +623,20 @@ namespace StiflingDark.Unity
             }
             if (AmAdversary)
             {
+                var bar = UiKit.CreateRow(_actionBar, "Bar", 8f, 40f);
+                bar.GetComponent<HorizontalLayoutGroup>().childAlignment = TextAnchor.MiddleCenter;
+                UiKit.Anchor(bar, Vector2.zero, Vector2.one);
                 AdversaryUi.Render(this, bar, view);
                 return;
             }
-            RenderInvestigatorActions(view, bar);
+            RenderInvestigatorActions(view);
         }
 
-        private void RenderInvestigatorActions(PlayerView view, RectTransform bar)
+        /// <summary>
+        /// The side panel. The turn's own actions are NOT here any more — they live in the
+        /// menu that opens on the Investigator's figure (<see cref="RenderTokenActions"/>).
+        /// </summary>
+        private void RenderInvestigatorActions(PlayerView view)
         {
             var me = Me;
             if (me == null)
@@ -573,16 +649,10 @@ namespace StiflingDark.Unity
 
             bool between = view.Phase == GamePhase.InvestigatorTurns && view.ActiveInvestigator == null;
             bool active = MyTurnActive;
-            bool blockedByWindow = view.PendingWindowChoice;
 
             if (between)
             {
-                UiKit.CreateButton(bar, "BEGIN TURN — " + _describe.ShortInvestigator(me.DefId), 18,
-                    () => Send(new BeginInvestigatorTurnCommand { InvestigatorId = me.DefId }),
-                    !me.TurnTakenThisRound && _session.YourTurn,
-                    me.TurnTakenThisRound
-                        ? "This Investigator has already taken a turn this round."
-                        : "The game is not waiting on your seat.");
+                // Beginning your own turn is the YOUR TURN banner's job (MaybeShowTurnBanner).
                 // Turn order inside a round is the team's to choose, and the engine tracks the
                 // ACTIVE Investigator rather than which seat asked — so this genuinely drives
                 // another seat's Investigator, bots included. Handy when a bot wedges; label it
@@ -601,89 +671,142 @@ namespace StiflingDark.Unity
                 }
             }
 
-            // ---- core actions. Rest and Charge have no buttons: they happen on their own at
-            // end of turn (Rest unless you Sprinted, Charge unless you placed the Flashlight,
-            // neither after an Involved Action).
-            UiKit.CreateButton(bar, "SPRINT", 17,
-                () => Send(new SprintCommand()),
+            // ---- context panel
+            RenderInteracts(view, me, active);
+            RenderItemsAndAbilities(view, me, active);
+        }
+
+        /// <summary>Close the figure menu when its Investigator is gone or moved; otherwise
+        /// rebuild its rows so the enabled states track the view.</summary>
+        private void RefreshTokenMenu(PlayerView view)
+        {
+            if (!_tokenMenu.IsOpen)
+            {
+                return;
+            }
+            var me = AmAdversary ? null : Me;
+            if (me == null || me.Space != _tokenMenu.Space)
+            {
+                _tokenMenu.Close();
+                return;
+            }
+            RenderTokenActions(view);
+        }
+
+        /// <summary>
+        /// The figure menu's rows: the turn's direct actions plus the Involved-Action
+        /// interacts that apply where the Investigator stands. Involved is a TYPE of action
+        /// (turn in Evidence, flip a switch…), never a button of its own — so there is no
+        /// generic INVOLVED here. Rest and Charge stay buttonless too: they happen on their
+        /// own at end of turn.
+        /// </summary>
+        private void RenderTokenActions(PlayerView view)
+        {
+            var content = _tokenMenu.Content;
+            UiKit.Clear(content);
+            var me = Me;
+            if (me == null)
+            {
+                _tokenMenu.Close();
+                return;
+            }
+            bool active = MyTurnActive;
+            bool blockedByWindow = view.PendingWindowChoice;
+
+            void Row(string label, Action run, bool enabled, string tooltip = null)
+            {
+                UiKit.CreateButton(content, label, 16, () =>
+                {
+                    _tokenMenu.Close();
+                    run();
+                }, enabled, tooltip);
+            }
+
+            Row("Sprint", () => Send(new SprintCommand()),
                 active && !me.SprintedOrRested && !blockedByWindow,
                 me.SprintedOrRested ? "Already Sprinted this turn." : "Not your active turn.");
-
-            // ---- final actions
-            UiKit.CreateButton(bar, "PLACE FLASHLIGHT", 17,
-                BeginFlashlightAim,
+            Row("Place Flashlight", BeginFlashlightAim,
                 active && me.FinalAction == FinalActionKind.None && me.Charge > 0 && !blockedByWindow,
                 me.Charge <= 0
                     ? "No Charge left (a placement costs 1, more with a surcharge in force)."
                     : me.FinalAction != FinalActionKind.None
                         ? "Final Action already taken."
                         : "Not your active turn.");
-            // Mitchell's Sweep lives in the main bar, not the abilities fold: it is legal the
-            // whole round (his turn already ended when the 1st cone went down), and it should
-            // read as the natural 2nd half of placing.
+            // Mitchell's Sweep is legal the whole round (his turn already ended when the 1st
+            // cone went down), so it should read as the natural 2nd half of placing.
             if (me.DefId == "mitchell")
             {
                 var sweepPlacement = view.Flashlights.FirstOrDefault(f => f.InvestigatorId == "mitchell");
                 if (sweepPlacement != null)
                 {
                     bool alreadySwept = view.RoundModifiers.ContainsKey(Game.SweepUsedPrefix + "mitchell");
-                    UiKit.CreateButton(bar, "SWEEP", 17,
-                        () => BeginSweepAim(sweepPlacement.Space),
+                    Row("Sweep", () => BeginSweepAim(sweepPlacement.Space),
                         !alreadySwept && !blockedByWindow,
                         alreadySwept
                             ? "Sweep may only be used once per Flashlight."
                             : "Move the Flashlight to a 2nd position (replaces the 1st).");
                 }
             }
-            UiKit.CreateButton(bar, "INVOLVED", 17,
-                () => Send(new TakeInvolvedActionCommand()),
-                active && me.FinalAction == FinalActionKind.None && !blockedByWindow,
-                "Generic Involved Action — ends the turn with no Stamina gain and no Charge.");
-            UiKit.CreateButton(bar, "END TURN", 17,
-                () => Send(new EndTurnCommand()), active && !blockedByWindow,
+
+            // ---- Involved-Action interacts, shown only where they apply (the engine rules)
+            var mySpace = _board.SpaceOrNull(me.Space);
+            if (mySpace != null && mySpace.Kind == SpaceKind.LightSwitch)
+            {
+                Row("Turn on light", () => Send(new ActivateLightSwitchCommand()), active);
+            }
+            if (view.Evidence.Any(e => e.Space == me.Space))
+            {
+                Row("Pickup evidence", () => Send(new PickUpEvidenceCommand()), active);
+            }
+            if (view.MedicalItemSpaces.Contains(me.Space))
+            {
+                Row("Pickup medical item", () => Send(new PickUpMedicalItemCommand()), active);
+            }
+            // A discovered POI token is an item stash: 2 General Items, or the Cursed Item on
+            // the purple front.
+            foreach (var poi in view.PoiTokens.Where(p => p.TokenSpace == me.Space && !p.Collected))
+            {
+                string label = poi.CursedFront == true
+                    ? "Pickup Cursed Item"
+                    : poi.CursedFront == false ? "Pickup 2 items" : "Pickup item stash";
+                Row(label, () => Send(new PickUpPoiTokenCommand()), active);
+            }
+            var overlay = BoardModel.OverlayFrom(view);
+            foreach (string doorSpace in _board.InteractRange(me.Space, overlay)
+                .Where(s => _board.SpaceOrNull(s)?.Kind == SpaceKind.Door))
+            {
+                var state = view.Overlay.DoorStates.TryGetValue(doorSpace, out var known)
+                    ? known : DoorState.Open;
+                string door = doorSpace;
+                if (state == DoorState.Open)
+                {
+                    Row("Close door " + door, () => Send(new LockDoorCommand { DoorSpace = door }),
+                        active);
+                }
+                else if (state == DoorState.Locked)
+                {
+                    Row("Open door " + door, () => Send(new OpenDoorCommand { DoorSpace = door }),
+                        active);
+                }
+            }
+            if (me.EvidenceCarried.Count > 0)
+            {
+                Row("Turn " + me.EvidenceCarried.Count + " in evidence",
+                    () => ShowEvidenceTurnIn(me), active);
+            }
+
+            Row("End Turn", () => Send(new EndTurnCommand()), active && !blockedByWindow,
                 "Ends the turn. Rest (+1 Stamina if you did not Sprint) and Charge (+1 if you " +
                 "did not place the Flashlight) happen on their own.");
-
-            // ---- context panel
-            RenderInteracts(view, me, active);
-            RenderItemsAndAbilities(view, me, active);
         }
 
         private void RenderInteracts(PlayerView view, PlayerView.InvestigatorPanel me, bool active)
         {
+            // Pickups, doors, the light switch and Evidence turn-in moved to the figure menu
+            // (RenderTokenActions); what remains here is trading and the placeable rewards.
             var overlay = BoardModel.OverlayFrom(view);
             var range = _board.InteractRange(me.Space, overlay);
             Header("INTERACT  ·  " + me.Space + " and adjacent");
-
-            var space = _board.SpaceOrNull(me.Space);
-            if (space != null && space.Kind == SpaceKind.LightSwitch)
-            {
-                CommandButton("Flip the Light Switch here", new ActivateLightSwitchCommand(), active);
-            }
-            foreach (var evidence in view.Evidence.Where(e => e.Space == me.Space))
-            {
-                CommandButton("Pick up " + _board.ZoneName(evidence.Zone) + " Evidence",
-                    new PickUpEvidenceCommand(), active);
-            }
-            if (view.MedicalItemSpaces.Contains(me.Space))
-            {
-                CommandButton("Pick up the Medical Item", new PickUpMedicalItemCommand(), active);
-            }
-            foreach (var poi in view.PoiTokens.Where(p => p.TokenSpace == me.Space && !p.Collected))
-            {
-                CommandButton("Pick up the Point of Interest token", new PickUpPoiTokenCommand(), active);
-            }
-            foreach (string doorSpace in range.Where(s =>
-                _board.SpaceOrNull(s)?.Kind == SpaceKind.Door))
-            {
-                var state = view.Overlay.DoorStates.TryGetValue(doorSpace, out var s)
-                    ? s : DoorState.Open;
-                string label = " (" + Describe.Door(state) + ")";
-                CommandButton("Lock door " + doorSpace + label,
-                    new LockDoorCommand { DoorSpace = doorSpace }, active);
-                CommandButton("Open door " + doorSpace + label,
-                    new OpenDoorCommand { DoorSpace = doorSpace }, active);
-            }
 
             // Trading, with whoever is in range.
             foreach (var other in view.Investigators.Where(i =>
@@ -746,12 +869,6 @@ namespace StiflingDark.Unity
                             A = picked[0],
                             B = picked[1],
                         })), active);
-            }
-
-            // Evidence turn-in is an Involved Action, so it lives here but ends the turn.
-            if (me.EvidenceCarried.Count > 0)
-            {
-                ActionButton("TURN IN EVIDENCE…", () => ShowEvidenceTurnIn(me), active);
             }
 
             RenderObjectiveActions(view, me, active);
@@ -1143,6 +1260,22 @@ namespace StiflingDark.Unity
                 Send(new AdversaryMoveStepCommand { To = spaceId });
                 return;
             }
+            var me = Me;
+            if (!AmAdversary && me != null && spaceId == me.Space)
+            {
+                // Your own token: no move to make here — this click is the action menu's.
+                if (_tokenMenu.IsOpen)
+                {
+                    _tokenMenu.Close();
+                }
+                else if (!_menuClosedByThisClick)
+                {
+                    _tokenMenu.OpenAt(spaceId);
+                    RenderTokenActions(View);
+                }
+                return;
+            }
+            _tokenMenu.Close();
             if (MyTurnActive)
             {
                 Send(new MoveStepCommand { To = spaceId });
@@ -1153,6 +1286,7 @@ namespace StiflingDark.Unity
         public void PickSpaces(int count, string prompt, Action<List<string>> done)
         {
             _prompt.Hide();
+            _tokenMenu.Close();
             _picked.Clear();
             _pickCount = count;
             _pickPrompt = prompt + " (Esc cancels)";
@@ -1240,10 +1374,18 @@ namespace StiflingDark.Unity
                 tooltip ?? "Only available on your own active turn.");
         }
 
-        public void Header(string title)
+        public void Header(string title) => SectionHeader(_actionsBody, title);
+
+        /// <summary>
+        /// A section heading, in the main menu's own heading style (StiflingDarkApp.Menu's
+        /// Head): sage green, the Cenotaph display font, one size up from body text. The amber
+        /// accent stays with the things that demand attention — the banner, the hint line —
+        /// rather than every label above a list.
+        /// </summary>
+        private static void SectionHeader(Transform parent, string title)
         {
-            var text = UiKit.CreateText(_actionsBody, title, 13, TextAnchor.MiddleLeft,
-                UiKit.AccentColor);
+            var text = UiKit.CreateText(parent, title, 16, TextAnchor.MiddleLeft, UiKit.TitleColor);
+            text.font = UiKit.MenuFont;
             var element = text.gameObject.AddComponent<LayoutElement>();
             element.minHeight = 26;
             element.flexibleHeight = 0;

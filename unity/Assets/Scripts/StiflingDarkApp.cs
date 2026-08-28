@@ -386,7 +386,7 @@ namespace StiflingDark.Unity
                         " — the flashlight preview will light through walls.");
                 }
                 _boardView = new BoardView(_boardModel, _art, _describe);
-                _game = new GameUi(_menu.parent, session, _boardModel, _boardView, _describe,
+                _game = new GameUi(_menu.parent, session, _boardModel, _boardView, _art, _describe,
                     _prompt);
                 _game.LeaveRequested = session == _solo
                     ? (Action)LeaveSoloGame
