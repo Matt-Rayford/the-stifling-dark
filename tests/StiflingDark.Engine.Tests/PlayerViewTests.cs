@@ -61,16 +61,20 @@ namespace StiflingDark.Engine.Tests
                 .OrderBy(id => id, StringComparer.Ordinal).ToList();
 
         /// <summary>
-        /// A single connected clump of General spaces starting next to Mor'gonnod — the shape
-        /// <see cref="Game.SetupCultists"/> demands.
+        /// A single connected clump of General spaces starting next to Mor'gonnod and staying
+        /// inside his Zone — the shape <see cref="Game.SetupCultists"/> demands.
         /// </summary>
         private static List<string> CultistGroup(Game game, string adversarySpace, int wanted)
         {
-            var group = new List<string> { Reachable(game, adversarySpace).First() };
+            string? zone = game.Graph.Space(adversarySpace).Zone;
+            List<string> InZone(string from) =>
+                Reachable(game, from).Where(id => game.Graph.Space(id).Zone == zone).ToList();
+
+            var group = new List<string> { InZone(adversarySpace).First() };
             while (group.Count < wanted)
             {
                 group.Add(group
-                    .SelectMany(space => Reachable(game, space))
+                    .SelectMany(InZone)
                     .Distinct()
                     .Where(id => id != adversarySpace && !group.Contains(id))
                     .OrderBy(id => id, StringComparer.Ordinal)

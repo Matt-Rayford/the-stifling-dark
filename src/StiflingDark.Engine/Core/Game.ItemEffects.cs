@@ -412,6 +412,7 @@ namespace StiflingDark.Engine.Core
                         if (!figure.Revealed && IsBright(next))
                         {
                             figure.Revealed = true;
+                            DropShadowToken(figure.Id);
                             Log("reveal", $"{figure.Id} at {next} (caught in the light)");
                         }
                         // Same reasoning as the main figure above: only public once Revealed.

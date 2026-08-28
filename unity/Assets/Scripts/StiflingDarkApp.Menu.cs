@@ -50,7 +50,7 @@ namespace StiflingDark.Unity
             BuildOnlineScreen();
             BuildSoloScreen();
             BuildSettingsScreen();
-            BuildSoloOverlays();
+            BuildSoloSetup();
 
             // Last child, so the toast draws over whichever screen is up.
             _toast = UiKit.CreateText(_menu, "", 18, TextAnchor.MiddleCenter, UiKit.AccentColor);

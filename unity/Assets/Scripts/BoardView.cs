@@ -42,6 +42,10 @@ namespace StiflingDark.Unity
         private readonly Dictionary<string, int> _moveTargets = new Dictionary<string, int>();
         private readonly Dictionary<string, List<string>> _notes =
             new Dictionary<string, List<string>>();
+        private readonly ChargeCues _chargeCues;
+        /// <summary>Charge per Investigator in the last view rendered, for the loss diff.</summary>
+        private readonly Dictionary<string, int> _lastCharge = new Dictionary<string, int>();
+        private int _lastRound = -1;
         private PlayerView _view;
         private string _myInvestigatorId = "";
         private string _hovered;
@@ -77,6 +81,12 @@ namespace StiflingDark.Unity
             var dynamicGo = new GameObject("Dynamic");
             _dynamic = dynamicGo.transform;
             _dynamic.SetParent(_root, false);
+
+            // Cues outlive the render that spawned them, so they hang off their own parent
+            // rather than _dynamic (which Render clears).
+            var cuesGo = new GameObject("Cues");
+            cuesGo.transform.SetParent(_root, false);
+            _chargeCues = new ChargeCues(cuesGo.transform, art, board.Map.SpaceRadius);
 
             var boardSprite = art.Board(board.Map.Id);
             var boardGo = new GameObject("BoardTexture", typeof(SpriteRenderer));
@@ -123,6 +133,12 @@ namespace StiflingDark.Unity
         public void SetActive(bool active)
         {
             _root.gameObject.SetActive(active);
+            if (!active)
+            {
+                // Nothing ticks while the board is hidden; a cue left mid-flight would come
+                // back frozen when it does.
+                _chargeCues.Clear();
+            }
         }
 
         /// <summary>Tear the board down — used when a reconnect replaces the session.</summary>
@@ -185,6 +201,7 @@ namespace StiflingDark.Unity
             DrawAdversary(view);
             DrawInvestigators(view);
             DrawHighlights();
+            SpawnChargeLossCues(view);
             if (_aiming)
             {
                 BuildBeamIndicator();
@@ -423,7 +440,9 @@ namespace StiflingDark.Unity
             foreach (var pair in adversary.ShadowTokens)
             {
                 // key is the token's own id ("main", "frayed", or a space), value is its space.
-                BoardMini(pair.Value, TokenArt.ShadowToken(adversary.DefId, faceUp: false),
+                // The key also picks the art: the Cult's "main" is Mor'gonnod, whose token is
+                // visibly not a Cultist's.
+                BoardMini(pair.Value, TokenArt.ShadowToken(adversary.DefId, false, pair.Key),
                     new Color(0.22f, 0.22f, 0.28f), "S", 24,
                     "Shadow token (" + pair.Key + ")");
             }
@@ -543,6 +562,31 @@ namespace StiflingDark.Unity
                         Short(carrier.Key), 0.5f, 35);
                     Note(panel.Space, "Carrying " + carrier.Key);
                 }
+            }
+        }
+
+        /// <summary>
+        /// A floating "-N" over anyone whose Charge fell since the last view — Events, a Dying
+        /// Battery, the cost of a placement, whatever spent it. Only a drop between two
+        /// consecutive views of the SAME game counts: an unknown Investigator (a resync that
+        /// replaced the view wholesale, or a fresh game on this board) seeds the baseline
+        /// silently, and a round number going backwards means a different game entirely.
+        /// </summary>
+        private void SpawnChargeLossCues(PlayerView view)
+        {
+            if (view.Round < _lastRound)
+            {
+                _lastCharge.Clear();
+            }
+            _lastRound = view.Round;
+            foreach (var panel in view.Investigators)
+            {
+                if (_lastCharge.TryGetValue(panel.DefId, out int before) &&
+                    panel.Charge < before && !panel.Escaped)
+                {
+                    _chargeCues.Spawn(WorldOf(panel.Space), before - panel.Charge);
+                }
+                _lastCharge[panel.DefId] = panel.Charge;
             }
         }
 
@@ -925,6 +969,7 @@ namespace StiflingDark.Unity
             {
                 HandleHoverAndClick(overUi);
             }
+            _chargeCues.Tick(Time.deltaTime);
             _light.Tick();
         }
 

@@ -1015,7 +1015,10 @@ namespace StiflingDark.Unity
                 return;
             }
 
-            if (view.PendingEventChoices.Count > 0 && !AmAdversary)
+            // These are the ADVERSARY's choices (Fallen Tree, Flare-Up, Roll Vortex, Fire
+            // Tornado): only a human holding that seat is ever asked. A bot Adversary answers
+            // them itself, and an Investigator seat must never see this modal.
+            if (view.PendingEventChoices.Count > 0 && AmAdversary)
             {
                 var options = view.PendingEventChoices
                     .Select(id => new PromptOption("Answer " + _describe.Card(id),

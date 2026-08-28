@@ -44,6 +44,14 @@ public abstract class AdversaryBot
 
     public abstract void TakeTurn();
 
+    /// <summary>
+    /// Answer any Event card waiting on the Adversary (see <see cref="AdversaryEventChoices"/>).
+    /// Those choices are armed at the start of the round and expire at the end of it, so the
+    /// caller pumps this during the Investigators' phase rather than at the Adversary turn.
+    /// True when at least one was resolved.
+    /// </summary>
+    public virtual bool AnswerEventChoices() => AdversaryEventChoices.AnswerPending(G, Act);
+
     /// <summary>Adversary-side setup an Escape card demands the moment it is chosen.</summary>
     public virtual void OnEscapeCardSelected(string cardId)
     {
@@ -808,6 +816,9 @@ public sealed class PassiveBot : AdversaryBot
     }
 
     public override void OnEscapeCardSelected(string cardId) => _placer.OnEscapeCardSelected(cardId);
+
+    /// <summary>Passive means passive: the Event's offer is declined by letting it expire.</summary>
+    public override bool AnswerEventChoices() => false;
 
     public override void TakeTurn()
     {

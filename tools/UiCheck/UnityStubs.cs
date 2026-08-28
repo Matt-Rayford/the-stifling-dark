@@ -242,6 +242,7 @@ namespace UnityEngine
         public Transform transform => null;
         public GameObject gameObject => null;
         public T GetComponent<T>() where T : Component, new() => new T();
+        public T GetComponentInParent<T>() where T : Component, new() => new T();
         public T AddComponent<T>() where T : Component, new() => new T();
     }
 
@@ -516,6 +517,9 @@ namespace UnityEngine.UI
 
     public sealed class ScrollRect : UnityEngine.EventSystems.UIBehaviour
     {
+        public enum MovementType { Unrestricted, Elastic, Clamped }
+        public MovementType movementType { get; set; }
+        public bool inertia { get; set; }
         public bool horizontal { get; set; }
         public bool vertical { get; set; }
         public float scrollSensitivity { get; set; }

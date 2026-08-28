@@ -67,12 +67,23 @@ public static class AdversarySetup
         var far = general.Where(id => !investigatorSpaces.Contains(id) && investigatorSpaces.All(
             inv => !game.Graph.DistancesFrom(id, 4, game.State.Overlay).ContainsKey(inv))).ToList();
         var advPool = far.Count > 0 ? far : general;
+        if (adversary == "cult-of-hunlow")
+        {
+            // The whole Cult starts inside one building Zone (Game.SetupCultists), so
+            // Mor'gonnod himself may not stand on an outdoor, un-lettered space. Drawing his
+            // space uniformly from the zoned ones also favours the roomier buildings, which
+            // are the ones with space for the group.
+            var zoned = advPool.Where(id => game.Graph.Space(id).Zone != null).ToList();
+            advPool = zoned.Count > 0
+                ? zoned
+                : general.Where(id => game.Graph.Space(id).Zone != null).ToList();
+        }
         string advSpace = advPool[rng.Next(advPool.Count)];
         List<string>? cultists = null;
         if (adversary == "cult-of-hunlow")
         {
-            // Some General spaces sit in pockets too small to hold a connected Cultist group:
-            // re-roll the standee's space until one works.
+            // Some spaces sit in pockets of their Zone too small to hold a connected Cultist
+            // group: re-roll the standee's space until one works.
             for (int attempt = 0; attempt < 40 && cultists == null; attempt++)
             {
                 cultists = TryGrowCultistGroup(game, advSpace, count, investigatorSpaces, rng);
@@ -129,12 +140,20 @@ public static class AdversarySetup
 
     /// <summary>
     /// A connected clump of Cultist spaces starting from a neighbour of Mor'gonnod, so
-    /// SetupCultists' "single group, Mor'gonnod adjacent to one of them" check passes.
+    /// SetupCultists' "single group, Mor'gonnod adjacent to one of them" check passes. The
+    /// clump never leaves Mor'gonnod's own Zone: the Cult starts completely inside one
+    /// building. Null when this space's Zone has no room for the whole group.
     /// </summary>
     private static List<string>? TryGrowCultistGroup(
         Game game, string advSpace, int needed, HashSet<string> avoid, DeterministicRng rng)
     {
-        bool Free(string id) => id != advSpace && !avoid.Contains(id);
+        string? zone = game.Graph.Space(advSpace).Zone;
+        if (zone == null)
+        {
+            return null;
+        }
+        bool Free(string id) =>
+            id != advSpace && !avoid.Contains(id) && game.Graph.Space(id).Zone == zone;
 
         var seeds = Nav.Neighbors(game, advSpace).Where(Free).ToList();
         if (seeds.Count == 0)

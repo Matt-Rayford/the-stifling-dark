@@ -125,6 +125,74 @@ namespace StiflingDark.Engine.Tests
         }
 
         [Fact]
+        public void Cult_setup_needs_the_whole_group_inside_one_building_zone()
+        {
+            var game = NewCultGame(complete: false);
+
+            // Outdoors: the numbered spaces carry no Zone letter. The group is connected and
+            // Mor'gonnod is adjacent to it, so only the Zone rule can refuse this.
+            game.PlaceAdversary("117");
+            Assert.Contains("building Zone", Assert.Throws<InvalidOperationException>(() =>
+                game.SetupCultists(new List<string> { "109", "116", "126", "127" }, AltarSpace)).Message);
+
+            // Mor'gonnod in the Sawmill with one Cultist over in the Office. No two Zones touch
+            // on either map, so it takes a Secret Passage to make that one connected group —
+            // and it is still refused, because the Cult starts inside ONE building.
+            game.PlaceAdversary(MorgonnodSpace);
+            game.State.Overlay.SecretPassages.Add(BoardOverlay.EdgeKey("S-27", "O-2"));
+            Assert.Contains("ONE building Zone", Assert.Throws<InvalidOperationException>(() =>
+                game.SetupCultists(new List<string> { "S-21", "S-24", "S-27", "O-2" }, AltarSpace)).Message);
+            game.State.Overlay.SecretPassages.Clear();
+            Assert.Empty(game.State.Adversary.Figures);
+
+            game.PlaceAdversary(MorgonnodSpace);
+            game.SetupCultists(CultistSpaces(4), AltarSpace);
+            Assert.All(game.State.Adversary.Figures,
+                figure => Assert.Equal("S", game.Graph.Space(figure.Space).Zone));
+        }
+
+        /// <summary>
+        /// One Shadow token per hidden figure and no more: 3 Investigators means 3 Cultists,
+        /// so the board carries 4 face-down tokens (Mor'gonnod + c1..c3), never a fifth.
+        /// </summary>
+        [Fact]
+        public void Three_investigators_put_four_cult_shadow_tokens_on_the_board()
+        {
+            var game = NewCultGame(investigators: 3);
+            var adv = game.State.Adversary;
+            Assert.Equal(3, adv.Figures.Count);
+
+            FinishInvestigatorTurns(game);
+            game.AdversaryEndTurn();
+            Assert.Equal(new[] { "c1", "c2", "c3", "main" },
+                adv.ShadowTokens.Keys.OrderBy(k => k, StringComparer.Ordinal));
+        }
+
+        /// <summary>A figure standing Revealed is on the board as its standee, so its Shadow
+        /// token comes off rather than doubling it.</summary>
+        [Fact]
+        public void A_revealed_cultist_keeps_no_shadow_token()
+        {
+            var game = NewCultGame(investigators: 3);
+            var adv = game.State.Adversary;
+            FinishInvestigatorTurns(game);
+
+            var cultist = Cultist(game, "c1");
+            var taken = adv.Figures.Select(f => f.Space).Append(adv.Space).ToHashSet();
+            string lit = game.Graph.DistancesFrom(cultist.Space, 1, game.State.Overlay).Keys
+                .First(id => !taken.Contains(id));
+            game.State.Overlay.BrightSpaces.Add(lit);
+            game.CultistMoveStep("c1", lit);
+            Assert.True(cultist.Revealed);
+            Assert.DoesNotContain("c1", adv.ShadowTokens.Keys);
+
+            // ...and the next turn start does not hand it back while the standee is still out.
+            FinishInvestigatorTurns(game);
+            game.AdversaryEndTurn();
+            Assert.DoesNotContain("c1", adv.ShadowTokens.Keys);
+        }
+
+        [Fact]
         public void Cult_setup_starts_with_one_face_up_ability_at_four_investigators()
         {
             var game = NewCultGame();

@@ -54,30 +54,34 @@ public sealed class BotTable : IAnomalySink
     public bool TryStep()
     {
         NotifyEscapeSelection();
+        // Event choices belong to the Adversary and are armed during the INVESTIGATORS' phase,
+        // so they are answered here rather than on the Adversary's turn — by then the round's
+        // damage would be done, and at the end of it the offer expires unused.
+        bool answeredEventChoice = _botAdversary && _adversary.AnswerEventChoices();
         var state = _game.State;
         switch (state.Phase)
         {
             case GamePhase.AdversarySetup:
                 if (!_botAdversary)
                 {
-                    return false;
+                    return answeredEventChoice;
                 }
                 AdversarySetup.Run(_game, _rng, _startSpaces);
                 return true;
 
             case GamePhase.InvestigatorTurns:
-                return TryInvestigatorStep(state);
+                return TryInvestigatorStep(state) || answeredEventChoice;
 
             case GamePhase.AdversaryTurn:
                 if (!_botAdversary)
                 {
-                    return false;
+                    return answeredEventChoice;
                 }
                 _adversary.TakeTurn();
                 return true;
 
             default:
-                return false;
+                return answeredEventChoice;
         }
     }
 

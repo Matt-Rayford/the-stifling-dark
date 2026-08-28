@@ -333,7 +333,13 @@ namespace StiflingDark.Unity
             return "investigator/faces/Cultist-1.png";
         }
 
-        public static string ShadowToken(string adversaryId, bool faceUp)
+        /// <summary>
+        /// Shadow-token art. <paramref name="tokenKey"/> is the key the engine filed the token
+        /// under in AdversaryState.ShadowTokens — "main" is the Adversary's own figure, which
+        /// for the Cult is Mor'gonnod and carries his own distinct token (physically he is
+        /// visibly not a Cultist even face-down); the Cultists are filed under their figure ids.
+        /// </summary>
+        public static string ShadowToken(string adversaryId, bool faceUp, string tokenKey = null)
         {
             switch (adversaryId)
             {
@@ -346,6 +352,12 @@ namespace StiflingDark.Unity
                         ? "adversary/horror/Horror-Face-Up-Shadow.png"
                         : "adversary/horror/Horror-Face-Down-Shadow.png";
                 case "cult-of-hunlow":
+                    if (tokenKey == "main")
+                    {
+                        return faceUp
+                            ? "adversary/cultists/Morgonnod-Face-Up-Shadow.png"
+                            : "adversary/cultists/Morgonnod-Face-Down-Shadow.png";
+                    }
                     return faceUp
                         ? "adversary/cultists/Cult-Face-Up-Shadow-X.png"
                         : "adversary/cultists/Cult-Face-Down-Shadow.png";
@@ -384,6 +396,8 @@ namespace StiflingDark.Unity
         public const string ItemFront = "general-items/Generic-Item-Front.png";
         public const string CursedFront = "cursed-items/Generic-Cursed-Item-Front.png";
         public const string MedicalBack = "general-items/Medical-Item-Back.png";
+        /// <summary>The Charge track's flashlight glyph, used by the floating Charge-loss cues.</summary>
+        public const string ChargeGlyph = "other/small-flashlight-transparent.png";
         public const string BrightMarker = "other/Bright.png";
         public const string DimMarker = "other/Dim.png";
         public const string FalteringMarker = "other/Faltering-Lights.png";

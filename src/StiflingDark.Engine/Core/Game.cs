@@ -1201,6 +1201,7 @@ namespace StiflingDark.Engine.Core
                 if (figure.Alive && !figure.Revealed && brightSet.Contains(figure.Space))
                 {
                     figure.Revealed = true;
+                    DropShadowToken(figure.Id);
                     Log("reveal", $"{figure.Id} at {figure.Space} (caught in the light)");
                     OnAdversaryRevealed(figure.Id);
                 }
@@ -1223,11 +1224,35 @@ namespace StiflingDark.Engine.Core
             }
         }
 
+        /// <summary>
+        /// A figure standing in plain sight has no Shadow token — on the table the standee
+        /// replaces it — so every reveal path drops the revealed figure's token. Without this
+        /// the board shows one marker per figure PLUS a stale face-down Shadow token for the
+        /// same figure. ("frayed", the Butcher's Frayed Ropes decoy, belongs to no figure and
+        /// is deliberately left alone.)
+        /// </summary>
+        private void DropShadowToken(string figureKey) => State.Adversary.ShadowTokens.Remove(figureKey);
+
+        /// <summary>Turn-start Shadow token: on the figure's space while it is Hidden, gone once
+        /// its standee is on the board.</summary>
+        private void RefreshShadowToken(string figureKey, string space, bool hidden)
+        {
+            if (hidden)
+            {
+                State.Adversary.ShadowTokens[figureKey] = space;
+            }
+            else
+            {
+                DropShadowToken(figureKey);
+            }
+        }
+
         private void RevealAdversary(string reason)
         {
             if (!State.Adversary.Revealed)
             {
                 State.Adversary.Revealed = true;
+                DropShadowToken("main");
                 // Designer-confirmed: being Revealed during their own turn locks the Attack
                 // for the rest of the round, same as beginning the turn Revealed. This is
                 // the tactical point of flashlights: a beam across an approach lane both
