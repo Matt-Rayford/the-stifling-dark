@@ -403,7 +403,7 @@ namespace StiflingDark.Unity
         public const string PoiBack = "general-items/Point-of-Interest-Back.png";
         public const string ItemFront = "general-items/Generic-Item-Front.png";
         public const string CursedFront = "cursed-items/Generic-Cursed-Item-Front.png";
-        public const string MedicalBack = "general-items/Medical-Item-Back.png";
+        public const string MedicalBack = "other/Medical-Item-Back.png";
         /// <summary>The Charge track's flashlight glyph, used by the floating Charge-loss cues.</summary>
         public const string ChargeGlyph = "other/small-flashlight-transparent.png";
         public const string BrightMarker = "other/Bright.png";

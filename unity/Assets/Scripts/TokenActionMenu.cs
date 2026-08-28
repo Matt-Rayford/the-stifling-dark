@@ -16,7 +16,7 @@ namespace StiflingDark.Unity
 
         // The HUD chrome the menu must not sit under — mirrors GameUi's layout constants.
         private const float TopBarHeight = 78f;
-        private const float BottomBandHeight = 150f;
+        private const float BottomMargin = 12f;
         private const float RightColumnWidth = 430f;
 
         private readonly BoardView _boardView;
@@ -98,7 +98,7 @@ namespace StiflingDark.Unity
             if (height > 0f)
             {
                 local.y = Mathf.Clamp(local.y,
-                    parent.rect.yMin + BottomBandHeight + height / 2f,
+                    parent.rect.yMin + BottomMargin + height / 2f,
                     parent.rect.yMax - TopBarHeight - height / 2f);
             }
             _root.anchoredPosition = local;

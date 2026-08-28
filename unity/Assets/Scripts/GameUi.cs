@@ -40,7 +40,6 @@ namespace StiflingDark.Unity
         private readonly RectTransform _logBody;
         private readonly RectTransform _actionBar;
         private readonly TMP_Text _hint;
-        private readonly PlayerBoardPanel _playerBoard;
         private readonly TokenActionMenu _tokenMenu;
         private readonly TurnBanner _turnBanner;
 
@@ -98,13 +97,13 @@ namespace StiflingDark.Unity
             // ---- left: roster + adversary
             var left = UiKit.CreatePanel(_root, "Left", UiKit.PanelColor);
             UiKit.Anchor(left, new Vector2(0, 0), new Vector2(0, 1),
-                new Vector2(0, 150), new Vector2(360, -78));
+                new Vector2(0, 0), new Vector2(360, -78));
             _rosterBody = UiKit.CreateScrollList(left, 6f);
 
             // ---- right: actions above, log below
             var right = UiKit.CreatePanel(_root, "Right", UiKit.PanelColor);
             UiKit.Anchor(right, new Vector2(1, 0), new Vector2(1, 1),
-                new Vector2(-430, 150), new Vector2(0, -78));
+                new Vector2(-430, 0), new Vector2(0, -78));
             var actionsHost = UiKit.CreateGroup(right, "ActionsHost");
             UiKit.Anchor(actionsHost, new Vector2(0, 0.42f), new Vector2(1, 1),
                 new Vector2(4, 4), new Vector2(-4, -4));
@@ -120,19 +119,16 @@ namespace StiflingDark.Unity
                 new Vector2(4, 4), new Vector2(-4, -24));
             _logBody = UiKit.CreateScrollList(logHost, 1f);
 
-            // ---- bottom band: a backdrop panel, with the action bar riding its top edge as a
-            // centred strip between the side columns, and the hint floating just above.
-            var bottom = UiKit.CreatePanel(_root, "Bottom", UiKit.PanelColor);
-            UiKit.Anchor(bottom, Vector2.zero, new Vector2(1, 0), Vector2.zero, new Vector2(0, 150));
+            // ---- bottom: no band any more — the map runs to the screen's bottom edge. The
+            // Adversary's action bar floats over it between the side columns (Investigators
+            // act through the figure menu instead), with the hint line just above.
             _actionBar = UiKit.CreateGroup(_root, "Actions");
             UiKit.Anchor(_actionBar, Vector2.zero, new Vector2(1, 0),
-                new Vector2(368, 92), new Vector2(-438, 146));
+                new Vector2(368, 8), new Vector2(-438, 62));
             _hint = UiKit.CreateText(_root, "", 16, TextAnchor.MiddleCenter, UiKit.AccentColor);
             UiKit.Anchor((RectTransform)_hint.transform, Vector2.zero, new Vector2(1, 0),
-                new Vector2(368, 152), new Vector2(-438, 180));
+                new Vector2(368, 66), new Vector2(-438, 92));
 
-            // Built last so it draws over the action bar it deliberately overlaps.
-            _playerBoard = new PlayerBoardPanel(_root, art, describe);
             _tokenMenu = new TokenActionMenu(_root, boardView);
             // Above everything of the HUD's — only the Prompt canvas (order 200) outranks it.
             _turnBanner = new TurnBanner(_root);
@@ -242,9 +238,6 @@ namespace StiflingDark.Unity
             RenderActions(view);
             RenderMoveTargets(view);
             _boardView.Render(view, MyInvestigatorId);
-            // The board panel covers the middle-bottom of the map, so it stands down whenever
-            // the map underneath belongs to the mouse (aiming a beam, picking spaces).
-            _playerBoard.Render(AmAdversary ? null : Me, _boardView.Aiming || _pickCount > 0);
             RefreshTokenMenu(view);
             MaybeShowModal(view);
             MaybeShowTurnBanner(view);

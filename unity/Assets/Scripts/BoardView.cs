@@ -43,6 +43,9 @@ namespace StiflingDark.Unity
         private readonly Dictionary<string, List<string>> _notes =
             new Dictionary<string, List<string>>();
         private readonly ChargeCues _chargeCues;
+        private readonly WorldPlayerBoards _playerBoards;
+        /// <summary>The wound-chip note the mouse is over, so it Shows once and Follows after.</summary>
+        private string _boardNote;
         /// <summary>Charge per Investigator in the last view rendered, for the loss diff.</summary>
         private readonly Dictionary<string, int> _lastCharge = new Dictionary<string, int>();
         private int _lastRound = -1;
@@ -87,6 +90,8 @@ namespace StiflingDark.Unity
             var cuesGo = new GameObject("Cues");
             cuesGo.transform.SetParent(_root, false);
             _chargeCues = new ChargeCues(cuesGo.transform, art, board.Map.SpaceRadius);
+
+            _playerBoards = new WorldPlayerBoards(_root, art, describe);
 
             var boardSprite = art.Board(board.Map.Id);
             var boardGo = new GameObject("BoardTexture", typeof(SpriteRenderer));
@@ -213,6 +218,8 @@ namespace StiflingDark.Unity
             DrawAdversary(view);
             DrawInvestigators(view);
             DrawHighlights();
+            _playerBoards.Render(view, _myInvestigatorId,
+                (float)_board.SourceWidth, (float)_board.SourceHeight);
             SpawnChargeLossCues(view);
             if (_aiming)
             {
@@ -404,7 +411,9 @@ namespace StiflingDark.Unity
         {
             foreach (string space in view.MedicalItemSpaces)
             {
-                Token(space, TokenArt.MedicalBack, new Color(0.86f, 0.42f, 0.44f), "+", 0.68f, 22,
+                // Fills the space like Evidence does: the physical token sits ON the space
+                // until someone picks it up.
+                BoardMini(space, TokenArt.MedicalBack, new Color(0.86f, 0.42f, 0.44f), "+", 22,
                     "Medical Item");
             }
         }
@@ -437,8 +446,14 @@ namespace StiflingDark.Unity
             foreach (var flashlight in view.Flashlights)
             {
                 var world = WorldOf(flashlight.Space);
+                // UNDER the light overlay (order 10): the cone is the full template, but walls
+                // and event trims cut the real Bright set — the overlay's truthful shading must
+                // mute the cone wherever the beam did not actually reach, or a space can look
+                // lit while the engine (correctly) treats it as dark. Playtest bug: The Butcher
+                // Stalked, apparently from inside a beam, from a wall-shadowed space the cone
+                // art painted over.
                 var beam = NewSprite(_dynamic, "Beam", _beamSprite,
-                    new Color(1f, 0.86f, 0.55f, 0.10f), 12);
+                    new Color(1f, 0.86f, 0.55f, 0.10f), 9);
                 beam.transform.position = world;
                 beam.transform.rotation = Quaternion.Euler(0, 0, BeamDegrees(flashlight.AngleRadians));
             }
@@ -664,7 +679,8 @@ namespace StiflingDark.Unity
         }
 
         /// <summary>
-        /// A board "mini" — Shadow, Noise, Evidence, POI, Objective, and Door tokens — rendered
+        /// A board "mini" — Shadow, Noise, Evidence, POI, Medical Item, Objective, and Door
+        /// tokens — rendered
         /// exactly like an Investigator portrait (<see cref="FigureSprite"/>): a full circle
         /// filling the space's own diameter (2 * spaceRadius) and centered on it, circularly
         /// masked via TokenArt's shared MaskToCircle path (<see cref="TokenArt.CircularToken"/>)
@@ -673,7 +689,7 @@ namespace StiflingDark.Unity
         /// a token still missing synced art keeps showing its colored disc + initials.
         ///
         /// Unlike <see cref="Token"/> this is only for tokens meant to occupy a space's whole
-        /// visual footprint by themselves. SpineChill, Faltering, Barricade, Medical Items, the
+        /// visual footprint by themselves. SpineChill, Faltering, Barricade, the
         /// printed-POI-space "?" landmark, and the edge markers (Window/Passage) stay on the
         /// small offset <see cref="Token"/>/<see cref="PlaceToken"/> path: they are secondary
         /// badges layered over a figure, an edge, or a permanent map landmark rather than a
@@ -1081,9 +1097,13 @@ namespace StiflingDark.Unity
         private void ClampCameraToBoard()
         {
             float margin = _camera.orthographicSize;
+            // The player boards live past the map's right and bottom edges; panning must
+            // reach them.
+            float right = Mathf.Max((float)_board.SourceWidth, _playerBoards.RightExtent);
+            float bottom = Mathf.Min(-(float)_board.SourceHeight, _playerBoards.BottomExtent);
             var pos = _camera.transform.position;
-            pos.x = Mathf.Clamp(pos.x, -margin, (float)_board.SourceWidth + margin);
-            pos.y = Mathf.Clamp(pos.y, -(float)_board.SourceHeight - margin, margin);
+            pos.x = Mathf.Clamp(pos.x, -margin, right + margin);
+            pos.y = Mathf.Clamp(pos.y, bottom - margin, margin);
             _camera.transform.position = pos;
         }
 
@@ -1100,19 +1120,26 @@ namespace StiflingDark.Unity
             }
             var world = _camera.ScreenToWorldPoint(Input.mousePosition);
             string nearest = NearestSpace(world);
-            if (nearest != _hovered)
+            // Off the space graph, the player boards get their turn: wound chips carry notes.
+            string boardNote = nearest == null ? _playerBoards.NoteAt(world) : null;
+            if (nearest != _hovered || boardNote != _boardNote)
             {
                 _hovered = nearest;
-                if (nearest == null)
-                {
-                    Tooltip.Hide();
-                }
-                else
+                _boardNote = boardNote;
+                if (nearest != null)
                 {
                     Tooltip.Show(SpaceTooltip(nearest));
                 }
+                else if (boardNote != null)
+                {
+                    Tooltip.Show(boardNote);
+                }
+                else
+                {
+                    Tooltip.Hide();
+                }
             }
-            else if (nearest != null)
+            else if (nearest != null || boardNote != null)
             {
                 Tooltip.Follow();
             }

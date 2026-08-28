@@ -83,6 +83,7 @@ namespace UnityEngine
         public float yMax => 0f;
         public float width => 0f;
         public float height => 0f;
+        public bool Contains(Vector2 point) => false;
     }
 
     public struct Bounds
