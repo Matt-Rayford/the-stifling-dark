@@ -12,6 +12,7 @@ namespace StiflingDark.Unity
         private static Sprite _circle;
         private static Sprite _ring;
         private static Sprite _rectGlow;
+        private static string _rectGlowKey = "";
 
         /// <summary>Anti-aliased rounded rectangle, 9-sliced so corners keep their radius.</summary>
         public static Sprite RoundedRect
@@ -53,48 +54,51 @@ namespace StiflingDark.Unity
         }
 
         /// <summary>
-        /// Rectangular halo: full alpha in the 9-slice core, fading smoothly to nothing at the
-        /// texture edge — a selection glow for card-shaped things, corners barely rounded by
-        /// the radial falloff alone.
+        /// A card-sized halo, generated UNSLICED at the exact pixel size it will be drawn:
+        /// no 9-slice border scaling anywhere in the chain, so the rim and fade widths on
+        /// screen are precisely the numbers passed in (canvas reference pixels). Full alpha
+        /// under the core and through the <paramref name="rimPx"/> ring, then a cubic
+        /// (gamma-encoded — alpha composites in linear color space, where mid alphas display
+        /// far brighter than their number) fade to true zero over <paramref name="fadePx"/>.
+        /// Cached for the one size in use; a new size regenerates.
         /// </summary>
-        public static Sprite RectGlow
+        public static Sprite CardGlow(int coreWidth, int coreHeight, float rimPx, float fadePx)
         {
-            get
+            string key = coreWidth + "x" + coreHeight + ":" + rimPx + ":" + fadePx;
+            if (_rectGlow != null && key == _rectGlowKey)
             {
-                if (_rectGlow == null)
-                {
-                    _rectGlow = Glow(96, falloff: 34f);
-                }
                 return _rectGlow;
             }
-        }
-
-        /// <summary>White texture whose alpha eases from 1 inside the slice core to 0 over the
-        /// outer <paramref name="falloff"/> pixels; distance goes radial at the corners so the
-        /// halo wraps them without a hard diagonal.</summary>
-        private static Sprite Glow(int size, float falloff)
-        {
-            var texture = NewTexture(size);
-            var pixels = new Color32[size * size];
-            float inner = falloff;
-            for (int y = 0; y < size; y++)
+            int margin = Mathf.CeilToInt(rimPx + fadePx);
+            int width = coreWidth + margin * 2;
+            int height = coreHeight + margin * 2;
+            var texture = new Texture2D(width, height, TextureFormat.RGBA32, false)
             {
-                for (int x = 0; x < size; x++)
+                hideFlags = HideFlags.DontSave,
+                wrapMode = TextureWrapMode.Clamp,
+                filterMode = FilterMode.Bilinear,
+            };
+            var pixels = new Color32[width * height];
+            for (int y = 0; y < height; y++)
+            {
+                for (int x = 0; x < width; x++)
                 {
-                    float dx = Mathf.Max(0f, Mathf.Max(inner - x, x - (size - 1 - inner)));
-                    float dy = Mathf.Max(0f, Mathf.Max(inner - y, y - (size - 1 - inner)));
+                    float dx = Mathf.Max(0f, Mathf.Max(margin - x, x - (width - 1 - margin)));
+                    float dy = Mathf.Max(0f, Mathf.Max(margin - y, y - (height - 1 - margin)));
                     float d = Mathf.Sqrt(dx * dx + dy * dy);
-                    float t = Mathf.Clamp01(1f - d / falloff);
-                    byte alpha = (byte)(255f * t * t);
-                    pixels[y * size + x] = new Color32(255, 255, 255, alpha);
+                    float eased = d <= rimPx
+                        ? 1f
+                        : Mathf.Pow(Mathf.Clamp01(1f - (d - rimPx) / fadePx), 3f);
+                    byte alpha = (byte)(255f * Mathf.Pow(eased, 2.2f));
+                    pixels[y * width + x] = new Color32(255, 255, 255, alpha);
                 }
             }
             texture.SetPixels32(pixels);
             texture.Apply();
-            float border = falloff + 4f;
-            return Sprite.Create(texture, new Rect(0, 0, size, size), new Vector2(0.5f, 0.5f),
-                100f, 0, SpriteMeshType.FullRect,
-                new Vector4(border, border, border, border));
+            _rectGlowKey = key;
+            _rectGlow = Sprite.Create(texture, new Rect(0, 0, width, height),
+                new Vector2(0.5f, 0.5f), 100f, 0, SpriteMeshType.FullRect);
+            return _rectGlow;
         }
 
         /// <summary>

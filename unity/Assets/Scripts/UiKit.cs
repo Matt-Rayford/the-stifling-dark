@@ -18,6 +18,8 @@ namespace StiflingDark.Unity
         public static readonly Color MutedColor = new Color(0.55f, 0.56f, 0.60f);
         public static readonly Color AccentColor = new Color(0.98f, 0.76f, 0.36f);
         public static readonly Color AccentTextColor = new Color(0.08f, 0.07f, 0.05f);
+        /// <summary>Sampled from the rulebook cover's title lettering — the game's sage green.</summary>
+        public static readonly Color TitleColor = new Color(0.44f, 0.69f, 0.53f);
         public static readonly Color DangerColor = new Color(0.86f, 0.28f, 0.26f);
         public static readonly Color GoodColor = new Color(0.45f, 0.80f, 0.52f);
 
@@ -223,7 +225,7 @@ namespace StiflingDark.Unity
 
             if (enabled)
             {
-                var hoverBackground = danger ? DangerColor : AccentColor;
+                var hoverBackground = danger ? DangerColor : TitleColor;
                 var hoverText = danger ? new Color(0.98f, 0.92f, 0.90f) : AccentTextColor;
                 AddHover(go,
                     () =>
@@ -306,7 +308,12 @@ namespace StiflingDark.Unity
         {
             for (int i = container.childCount - 1; i >= 0; i--)
             {
-                Object.Destroy(container.GetChild(i).gameObject);
+                var child = container.GetChild(i);
+                // Detach before the deferred Destroy: a dying child left in place still
+                // takes part in this frame's layout pass, so every rebuild flashed one
+                // frame of doubled content (old rows AND new stacked together).
+                child.SetParent(null, false);
+                Object.Destroy(child.gameObject);
             }
         }
 

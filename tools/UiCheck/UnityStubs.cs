@@ -480,6 +480,12 @@ namespace UnityEngine.UI
         public RectTransform viewport { get; set; }
         public RectTransform content { get; set; }
         public float horizontalNormalizedPosition { get; set; }
+        public UnityEngine.Vector2 velocity { get; set; }
+    }
+
+    public static class LayoutRebuilder
+    {
+        public static void ForceRebuildLayoutImmediate(UnityEngine.RectTransform layoutRoot) { }
     }
 
     public sealed class Mask : UnityEngine.EventSystems.UIBehaviour

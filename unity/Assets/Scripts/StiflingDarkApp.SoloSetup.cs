@@ -25,11 +25,13 @@ namespace StiflingDark.Unity
         /// <summary>The board backs render 1100x734, so a card this wide is 140 tall.</summary>
         private const float BoardCardWidth = 252f;
         private const float BoardCardHeight = 175f;
-        /// <summary>Hover this long and the board zooms on its own; the inspect key skips the
-        /// wait. Long enough that sweeping across the strip does not strobe.</summary>
-        private const float BoardZoomDwellSeconds = 0.5f;
         /// <summary>Width of the soft rim on a strip that overflows. Zero when it fits.</summary>
         private const int StripFadePixels = 70;
+        /// <summary>Selected-card glow: full brightness this far past the card edge...</summary>
+        private const float GlowRimPx = 0.5f;
+        /// <summary>...then a fade to true black across this much more. On-screen pixels
+        /// (canvas reference), drawn 1:1 — tune these two and nothing else.</summary>
+        private const float GlowFadePx = 12f;
 
         // ---- offline setup, as the solo screen has it dialled in
         private string _soloScenario = "sawmill";
@@ -49,9 +51,11 @@ namespace StiflingDark.Unity
         private int _openDropdownSeat = -1;
         /// <summary>The strips currently on screen, rebuilt with the body they live in.</summary>
         private readonly List<BoardStrip> _boardStrips = new List<BoardStrip>();
+        /// <summary>Scroll positions carried across body rebuilds, by strip key.</summary>
+        private readonly Dictionary<string, float> _stripScrollMemory =
+            new Dictionary<string, float>();
         private BoardStrip _hoveredStrip;
         private string _hoveredBoard = "";
-        private float _hoverStartTime;
         private bool _zoomShown;
 
         // --------------------------------------------------------------- build
@@ -95,6 +99,13 @@ namespace StiflingDark.Unity
             // and a destroyed card never sends its pointer-exit — so both close with the body.
             CloseBotDropdown();
             EndBoardHover();
+            foreach (var strip in _boardStrips)
+            {
+                if (strip.Scroll != null && strip.Fits == false)
+                {
+                    _stripScrollMemory[strip.Key] = strip.Scroll.content.anchoredPosition.x;
+                }
+            }
             _boardStrips.Clear();
             UiKit.Clear(_soloBody);
             if (_describe == null)
@@ -178,6 +189,17 @@ namespace StiflingDark.Unity
             {
                 CreateBoardCard(row, strip, id);
             }
+            if (_stripScrollMemory.TryGetValue(strip.Key, out float remembered))
+            {
+                // Size the content NOW: until a layout pass runs, the freshly built content
+                // is zero-sized, and the ScrollRect's elastic spring treats any restored
+                // position as out-of-bounds and quietly animates it back to the start —
+                // which is exactly the reset being fixed. With real bounds in place, the
+                // pixel-space restore below just sticks.
+                LayoutRebuilder.ForceRebuildLayoutImmediate(row);
+                row.anchoredPosition = new Vector2(remembered, 0f);
+                strip.Scroll.velocity = Vector2.zero;
+            }
             _boardStrips.Add(strip);
         }
 
@@ -208,7 +230,7 @@ namespace StiflingDark.Unity
 
             if (selected)
             {
-                CreateGlow(card, -16f, 0.95f);
+                CreateGlow(card);
             }
 
             var art = strip.Art(boardId);
@@ -252,18 +274,21 @@ namespace StiflingDark.Unity
             });
         }
 
-        /// <summary>A soft white halo behind the card: bright at the card's rectangular edge,
-        /// fading to nothing over the bleed.</summary>
-        private static void CreateGlow(RectTransform card, float bleed, float alpha)
+        /// <summary>A halo behind the selected card: bright right at the card's edge, black by
+        /// <see cref="GlowRimPx"/> + <see cref="GlowFadePx"/> out. Drawn 1:1 from an unsliced
+        /// card-sized texture, so those two constants ARE the on-screen widths.</summary>
+        private static void CreateGlow(RectTransform card)
         {
+            float bleed = GlowRimPx + GlowFadePx;
             var go = new GameObject("Glow", typeof(RectTransform), typeof(Image));
             go.transform.SetParent(card, false);
             UiKit.Anchor((RectTransform)go.transform, Vector2.zero, Vector2.one,
-                new Vector2(bleed, bleed), new Vector2(-bleed, -bleed));
+                new Vector2(-bleed, -bleed), new Vector2(bleed, bleed));
             var image = go.GetComponent<Image>();
-            image.sprite = UiSprites.RectGlow;
-            image.type = Image.Type.Sliced;
-            image.color = new Color(1f, 1f, 1f, alpha);
+            image.sprite = UiSprites.CardGlow(
+                (int)BoardCardWidth, (int)BoardCardHeight, GlowRimPx, GlowFadePx);
+            // The box art's flashlight halo: a bright pale green (sampled from the cover).
+            image.color = new Color(0.70f, 0.94f, 0.79f, 1f);
             image.raycastTarget = false;
         }
 
@@ -305,7 +330,7 @@ namespace StiflingDark.Unity
             content.sizeDelta = Vector2.zero;
             var layout = contentGo.GetComponent<HorizontalLayoutGroup>();
             layout.spacing = 10;
-            layout.padding = new RectOffset(10, 10, 8, 8);
+            layout.padding = new RectOffset(4, 4, 4, 4);
             layout.childAlignment = TextAnchor.MiddleLeft;
             layout.childForceExpandWidth = false;
             layout.childForceExpandHeight = false;
@@ -341,6 +366,10 @@ namespace StiflingDark.Unity
         private static void FitStrip(BoardStrip strip)
         {
             var content = strip.Scroll.content;
+            if (strip.Scroll.viewport.rect.width <= 0f)
+            {
+                return; // no layout pass yet — a zero-width viewport would misread as "fits"
+            }
             float slack = strip.Scroll.viewport.rect.width - content.rect.width;
             bool fits = slack >= 0f;
             if (strip.Fits != fits)
@@ -403,7 +432,6 @@ namespace StiflingDark.Unity
         {
             _hoveredStrip = strip;
             _hoveredBoard = boardId;
-            _hoverStartTime = Time.time;
         }
 
         private void EndBoardHover()
@@ -441,14 +469,17 @@ namespace StiflingDark.Unity
             {
                 CloseBotDropdown();
             }
-            if (_zoomShown || _hoveredStrip == null)
-            {
-                return;
-            }
+            // Zoom is shortcut-only (designer note — the dwell felt intrusive): the overlay
+            // lives exactly as long as the inspect key is down over a board.
             bool inspectHeld =
                 Input.GetKey(KeyCode.LeftAlt) || Input.GetKey(KeyCode.RightAlt) ||
                 Input.GetKey(KeyCode.LeftCommand) || Input.GetKey(KeyCode.RightCommand);
-            if (inspectHeld || Time.time - _hoverStartTime >= BoardZoomDwellSeconds)
+            if (_zoomShown && !inspectHeld)
+            {
+                HideBoardZoom();
+                return;
+            }
+            if (!_zoomShown && inspectHeld && _hoveredStrip != null)
             {
                 ShowBoardZoom(_hoveredStrip, _hoveredBoard);
             }
@@ -666,6 +697,7 @@ namespace StiflingDark.Unity
             public RectMask2D Mask;
             /// <summary>Null until a layout pass has given the viewport a width to measure.</summary>
             public bool? Fits;
+
         }
     }
 }

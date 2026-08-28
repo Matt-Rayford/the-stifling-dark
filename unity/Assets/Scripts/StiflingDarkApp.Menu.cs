@@ -66,7 +66,7 @@ namespace StiflingDark.Unity
             UiKit.Anchor(_rootScreen, Vector2.zero, Vector2.one);
 
             var title = UiKit.CreateText(_rootScreen, "THE STIFLING DARK", 84,
-                TextAnchor.MiddleCenter, UiKit.AccentColor);
+                TextAnchor.MiddleCenter, UiKit.TitleColor);
             title.font = UiKit.TitleFont;
             UiKit.Anchor((RectTransform)title.transform, new Vector2(0, 0.72f), new Vector2(1, 0.88f));
             var subtitle = UiKit.CreateText(_rootScreen,
@@ -96,7 +96,7 @@ namespace StiflingDark.Unity
                 "Start a table of your own, or join one with its room code");
 
             var column = MenuColumn(_onlineScreen, "OnlineColumn",
-                columnMin, new Vector2(0.70f, 0.79f), 8);
+                columnMin, new Vector2(0.70f, 0.81f), 8);
 
             UiKit.CreateText(column, "Server", 14, TextAnchor.MiddleLeft, UiKit.MutedColor)
                 .gameObject.AddComponent<LayoutElement>().minHeight = 20;
@@ -130,7 +130,7 @@ namespace StiflingDark.Unity
             CreateHeading(_soloScreen, "PLAY VS BOTS", "");
 
             var column = MenuColumn(_soloScreen, "SoloColumn",
-                columnMin, new Vector2(0.80f, 0.79f), 8);
+                columnMin, new Vector2(0.80f, 0.85f), 8);
 
             var setup = UiKit.CreatePanel(column, "Setup", UiKit.PanelColor);
             var setupElement = setup.gameObject.AddComponent<LayoutElement>();
@@ -148,7 +148,7 @@ namespace StiflingDark.Unity
             CreateHeading(_settingsScreen, "SETTINGS", "More settings will land here later");
 
             var column = MenuColumn(_settingsScreen, "SettingsColumn",
-                columnMin, new Vector2(0.66f, 0.79f), 8);
+                columnMin, new Vector2(0.66f, 0.81f), 8);
 
             UiKit.CreateText(column, "Your name", 14, TextAnchor.MiddleLeft, UiKit.MutedColor)
                 .gameObject.AddComponent<LayoutElement>().minHeight = 20;
@@ -198,7 +198,7 @@ namespace StiflingDark.Unity
             button.onClick.AddListener(() => ShowMenuScreen(MenuScreen.Root));
 
             var arrow = UiKit.CreateText(go.transform, "←", 54, TextAnchor.MiddleCenter,
-                UiKit.AccentColor);
+                UiKit.TitleColor);
             arrow.fontStyle = TMPro.FontStyles.Bold;
             // Midline centers the glyph's actual bounds; line-metric centering hangs a lone
             // arrow noticeably off-center in the square.
@@ -208,20 +208,20 @@ namespace StiflingDark.Unity
             UiKit.AddHover(go,
                 () =>
                 {
-                    background.color = UiKit.AccentColor;
+                    background.color = UiKit.TitleColor;
                     arrow.color = UiKit.AccentTextColor;
                 },
                 () =>
                 {
                     background.color = Color.clear;
-                    arrow.color = UiKit.AccentColor;
+                    arrow.color = UiKit.TitleColor;
                 });
         }
 
         private static void CreateHeading(RectTransform screen, string titleText, string subtitleText = "")
         {
             var heading = UiKit.CreateText(screen, titleText, 44, TextAnchor.MiddleCenter,
-                UiKit.AccentColor);
+                UiKit.TitleColor);
             heading.font = UiKit.MenuFont;
             UiKit.Anchor((RectTransform)heading.transform,
                 new Vector2(0, 0.87f), new Vector2(1, 0.96f));
@@ -466,7 +466,7 @@ namespace StiflingDark.Unity
 
         private static void Head(RectTransform body, string title)
         {
-            var text = UiKit.CreateText(body, title, 16, TextAnchor.MiddleLeft, UiKit.AccentColor);
+            var text = UiKit.CreateText(body, title, 16, TextAnchor.MiddleLeft, UiKit.TitleColor);
             text.font = UiKit.MenuFont;
             text.gameObject.AddComponent<LayoutElement>().minHeight = 28;
         }
