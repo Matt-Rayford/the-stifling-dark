@@ -88,11 +88,38 @@ namespace StiflingDark.Unity
 
         /// <summary>
         /// An Investigator's player-board FRONT — the landscape sheet with the printed Stamina
-        /// and Charge tracks, the Wound slots and their abilities. <see cref="PlayerBoardPanel"/>
+        /// and Charge tracks, the Wound slots and their abilities. <see cref="WorldPlayerBoards"/>
         /// measures its markers against this art, so the geometry there assumes this file.
         /// </summary>
         public Sprite PlayerBoardFront(string investigatorId) =>
             BoardBack("player-board-fronts", investigatorId);
+
+        /// <summary>
+        /// An Item card's face for the hand, searched across the decks a carried card id can
+        /// come from. "-mi" ids are alternate-icon duplicates of a same-named card, so they
+        /// fall back to the base card's face.
+        /// </summary>
+        public Sprite ItemCard(string cardId)
+        {
+            if (string.IsNullOrEmpty(cardId))
+            {
+                return null;
+            }
+            foreach (string deck in ItemCardDecks)
+            {
+                var sprite = BoardBack(deck, cardId);
+                if (sprite != null)
+                {
+                    return sprite;
+                }
+            }
+            return cardId.EndsWith("-mi")
+                ? ItemCard(cardId.Substring(0, cardId.Length - "-mi".Length))
+                : null;
+        }
+
+        private static readonly string[] ItemCardDecks =
+            { "cards/general-items", "cards/cursed-items", "cards/objective-items" };
 
         /// <summary>
         /// A landscape board sheet from one of the StreamingAssets board folders. No circle

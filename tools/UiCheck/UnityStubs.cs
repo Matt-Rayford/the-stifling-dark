@@ -83,6 +83,7 @@ namespace UnityEngine
         public float yMax => 0f;
         public float width => 0f;
         public float height => 0f;
+        public Vector2 size => Vector2.zero;
         public bool Contains(Vector2 point) => false;
     }
 
@@ -113,6 +114,7 @@ namespace UnityEngine
         public static float InverseLerp(float a, float b, float value) => a;
         public static float Pow(float a, float b) => a;
         public static float Sqrt(float a) => a;
+        public static float Exp(float power) => power;
         public static float SmoothStep(float a, float b, float t) => a;
         public static float Cos(float a) => a;
         public static float Sin(float a) => a;
@@ -259,6 +261,8 @@ namespace UnityEngine
         public int childCount => 0;
         public Transform GetChild(int index) => null;
         public void SetParent(Transform parent, bool worldPositionStays) { }
+        public void SetAsLastSibling() { }
+        public void SetSiblingIndex(int index) { }
     }
 
     public class RectTransform : Transform
@@ -342,6 +346,7 @@ namespace UnityEngine
     {
         public static float time => 0f;
         public static float deltaTime => 0f;
+        public static float unscaledDeltaTime => 0f;
     }
 
     public static class Debug

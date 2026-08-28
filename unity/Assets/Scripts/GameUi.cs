@@ -41,6 +41,7 @@ namespace StiflingDark.Unity
         private readonly RectTransform _actionBar;
         private readonly TMP_Text _hint;
         private readonly TokenActionMenu _tokenMenu;
+        private readonly HandView _hand;
         private readonly TurnBanner _turnBanner;
 
         private int _renderedRevision = -1;
@@ -129,6 +130,7 @@ namespace StiflingDark.Unity
             UiKit.Anchor((RectTransform)_hint.transform, Vector2.zero, new Vector2(1, 0),
                 new Vector2(368, 66), new Vector2(-438, 92));
 
+            _hand = new HandView(_root, art, describe);
             _tokenMenu = new TokenActionMenu(_root, boardView);
             // Above everything of the HUD's — only the Prompt canvas (order 200) outranks it.
             _turnBanner = new TurnBanner(_root);
@@ -238,6 +240,9 @@ namespace StiflingDark.Unity
             RenderActions(view);
             RenderMoveTargets(view);
             _boardView.Render(view, MyInvestigatorId);
+            // The hand covers the map's bottom edge, so it stands down whenever the map
+            // underneath belongs to the mouse (aiming a beam, picking spaces).
+            _hand.Render(AmAdversary ? null : Me, _boardView.Aiming || _pickCount > 0);
             RefreshTokenMenu(view);
             MaybeShowModal(view);
             MaybeShowTurnBanner(view);
