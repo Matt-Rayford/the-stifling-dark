@@ -34,9 +34,10 @@ namespace StiflingDark.Unity
         private SeatRole _soloRole = SeatRole.Investigator;
         private string _soloInvestigator = "";
         /// <summary>One entry per bot Investigator seat, in row order. The bot Adversary the
-        /// human plays against is implicit and never listed here.</summary>
+        /// human plays against is implicit and never listed here. Defaults to a FULL table
+        /// (3 bots beside the human Investigator = 4 total); remove rows to play short.</summary>
         private readonly List<string> _soloBotInvestigators =
-            new List<string> { RandomPick, RandomPick };
+            new List<string> { RandomPick, RandomPick, RandomPick };
 
         private RectTransform _scenarioSection;
         private RectTransform _adversarySection;
@@ -250,7 +251,9 @@ namespace StiflingDark.Unity
                 return;
             }
             _soloRole = role;
-            while (_soloBotInvestigators.Count < MinBotSeats)
+            // Re-seating defaults back to a full table for the new side; rows can still be
+            // removed afterwards to play short-handed.
+            while (_soloBotInvestigators.Count < MaxBotSeats)
             {
                 _soloBotInvestigators.Add(RandomPick);
             }

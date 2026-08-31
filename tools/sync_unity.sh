@@ -182,13 +182,13 @@ def slug(name):
     return re.sub(r'-+', '-', re.sub(r'[^a-z0-9]+', '-', name)).strip('-')
 
 known = set()
-for deck in ['general-items', 'cursed-items', 'objective-items', 'medical-items']:
+for deck in ['general-items', 'cursed-items', 'objective-items', 'medical-items', 'events']:
     path = os.path.join('game-data/cards', deck + '.json')
     if os.path.exists(path):
         known |= {c['id'] for c in json.load(open(path))['cards']}
 
 found = set()
-for deck in ['general-items', 'cursed-items', 'objective-items']:
+for deck in ['general-items', 'cursed-items', 'objective-items', 'events']:
     pdf = os.path.join('game-assets/cards', deck + '.pdf')
     if not os.path.exists(pdf):
         print('  !! %s missing (game-assets/ is gitignored)' % pdf)
@@ -221,7 +221,7 @@ missing = sorted(i for i in known
 if missing:
     print('  !! no card art matched for: ' + ', '.join(missing))
 CARDS_EOF
-  for deck in general-items cursed-items objective-items; do
+  for deck in general-items cursed-items objective-items events; do
     [ -d "$STREAMING/cards/$deck" ] && \
       python3 tools/make_mips.py "$STREAMING/cards/$deck" || true
   done

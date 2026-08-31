@@ -315,31 +315,16 @@ namespace StiflingDark.Engine.Core
         }
 
         /// <summary>
-        /// Keep only the Bright spaces covered by the flashlight template's central sight
-        /// lines. "Center line" is the digital reading of the printed template's middle sight
-        /// line: the ray from <paramref name="fromSpace"/> along <paramref name="angleRadians"/>,
-        /// keeping the spaces whose circle that ray passes through. <paramref name="lines"/>
-        /// widens the corridor to that many parallel sight lines (1 = the middle line only,
-        /// 3 = the middle line plus one to either side). The Investigator's own space always
-        /// stays lit. Returns how many spaces were dropped.
+        /// Keep only the Bright spaces the template's first <paramref name="lines"/> printed
+        /// sight lines reach (1 = the centre vertical, 3 = all three verticals) — the real
+        /// template geometry, not the old straight-ray corridor. The Investigator's own
+        /// space always stays lit. Returns how many spaces were dropped.
         /// </summary>
-        private int TrimBrightToCenterLines(string fromSpace, double angleRadians, HashSet<string> bright, int lines)
+        private int TrimBrightToSightLines(InvestigatorState inv, double angleRadians,
+            HashSet<string> bright, int lines)
         {
-            var origin = Graph.Space(fromSpace);
-            double fx = Math.Cos(angleRadians);
-            double fy = Math.Sin(angleRadians);
-            double halfWidth = Graph.Def.SpaceRadius * lines;
-            return bright.RemoveWhere(id =>
-            {
-                if (id == fromSpace)
-                {
-                    return false;
-                }
-                var space = Graph.Space(id);
-                double dx = space.X - origin.X;
-                double dy = space.Y - origin.Y;
-                return dx * fx + dy * fy < 0 || Math.Abs(dx * -fy + dy * fx) > halfWidth;
-            });
+            var allowed = PreviewFlashlight(inv.DefId, angleRadians, lines);
+            return bright.RemoveWhere(id => id != inv.Space && !allowed.Contains(id));
         }
 
         // ---------- Wound face-up plumbing ----------

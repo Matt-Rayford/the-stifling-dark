@@ -711,7 +711,9 @@ namespace StiflingDark.Engine.Core
             int dropped = TrimBrightToRange(inv.Space, bright, RoundModifier(FlashlightLosRangeKey));
             if (HasRoundModifier(FlashlightCenterLineOnlyKey))
             {
-                dropped += TrimBrightToCenterLines(inv.Space, angleRadians, bright, lines: 1);
+                // Designer ruling 2026-08-31: Hazy leaves the THREE centre verticals usable
+                // (the printed "single center line" reads as the centre section of the fan).
+                dropped += TrimBrightToSightLines(inv, angleRadians, bright, lines: 3);
             }
             if (dropped > 0)
             {

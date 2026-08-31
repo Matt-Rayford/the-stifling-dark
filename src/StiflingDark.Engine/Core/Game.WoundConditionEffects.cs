@@ -493,12 +493,12 @@ namespace StiflingDark.Engine.Core
         partial void WoundsTrimFlashlightBright(InvestigatorState inv, double angleRadians, HashSet<string> bright)
         {
             // "When you place your Flashlight, only the 3 center lines may be used for line of
-            // sight" — the middle sight line plus one to either side (see TrimBrightToCenterLines).
+            // sight" — the template's three verticals (see TrimBrightToSightLines).
             if (!FaceUpWound(inv, "tunnel-vision"))
             {
                 return;
             }
-            int dropped = TrimBrightToCenterLines(inv.Space, angleRadians, bright, lines: 3);
+            int dropped = TrimBrightToSightLines(inv, angleRadians, bright, lines: 3);
             if (dropped > 0)
             {
                 Log("wound", $"{inv.DefId}'s Tunnel Vision drops {dropped} space(s) outside the 3 center lines");
@@ -513,7 +513,7 @@ namespace StiflingDark.Engine.Core
             {
                 return;
             }
-            int dropped = TrimBrightToCenterLines(inv.Space, angleRadians, bright, lines: 1);
+            int dropped = TrimBrightToSightLines(inv, angleRadians, bright, lines: 1);
             if (dropped > 0)
             {
                 Log("condition", $"{inv.DefId}'s Bufotoxin drops {dropped} space(s) outside the center line");

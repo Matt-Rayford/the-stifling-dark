@@ -84,8 +84,9 @@ namespace StiflingDark.Unity
         /// (Misty, Hazy, Downpour, Tunnel Vision) are applied server-side afterwards, so a
         /// preview can be generous in those rounds.
         /// </summary>
-        public HashSet<string> PreviewBright(string atSpace, double angleRadians) =>
-            _beam.ComputeBright(Graph, atSpace, angleRadians, _blocker);
+        public HashSet<string> PreviewBright(string atSpace, double angleRadians,
+            int? sightLineLimit = null) =>
+            _beam.ComputeBright(Graph, atSpace, angleRadians, _blocker, sightLineLimit);
 
         /// <summary>
         /// Turns a mouse offset from the aiming Investigator's figure, in WORLD units (client

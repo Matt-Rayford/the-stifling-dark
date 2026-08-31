@@ -121,6 +121,9 @@ namespace StiflingDark.Unity
         private static readonly string[] ItemCardDecks =
             { "cards/general-items", "cards/cursed-items", "cards/objective-items" };
 
+        /// <summary>An Event card's face, for the board-side display and its reveal.</summary>
+        public Sprite EventCard(string cardId) => BoardBack("cards/events", cardId);
+
         /// <summary>
         /// A landscape board sheet from one of the StreamingAssets board folders. No circle
         /// mask: unlike a face token this is a card, and it keeps its corners.

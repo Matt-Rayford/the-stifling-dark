@@ -18,6 +18,7 @@ namespace UnityEngine
         public float x, y;
         public Vector2(float x, float y) { this.x = x; this.y = y; }
         public static Vector2 zero => new Vector2(0, 0);
+        public static Vector2 Lerp(Vector2 a, Vector2 b, float t) => a;
         public static Vector2 one => new Vector2(1, 1);
         public float magnitude => 0f;
         public static Vector2 operator +(Vector2 a, Vector2 b) => a;
@@ -79,6 +80,8 @@ namespace UnityEngine
     public struct Rect
     {
         public Rect(float x, float y, float width, float height) { }
+        public float x => 0f;
+        public float y => 0f;
         public float xMin => 0f;
         public float xMax => 0f;
         public float yMin => 0f;

@@ -68,6 +68,28 @@ namespace StiflingDark.Unity
         private Transform _beamIndicator;
         private Sprite _beamSprite;
         private Sprite _beamLinesSprite;
+        private Sprite _beamSpriteNarrow;
+        private Sprite _beamLinesSpriteNarrow;
+
+        /// <summary>Only the center lines carry light this round (Hazy).</summary>
+        private bool CenterLineOnly =>
+            _view != null && _view.RoundModifiers.ContainsKey(Game.FlashlightCenterLineOnlyKey);
+
+        /// <summary>The template-x band the three vertical sight lines span, plus the line
+        /// weight, for the physically-cut Hazy cone.</summary>
+        private static (float Min, float Max) CenterBand(FlashlightDef def)
+        {
+            float min = float.MaxValue, max = float.MinValue;
+            for (int i = 0; i < Mathf.Min(3, def.SightLinePaths.Count); i++)
+            {
+                foreach (var point in def.SightLinePaths[i])
+                {
+                    min = Mathf.Min(min, (float)point[0]);
+                    max = Mathf.Max(max, (float)point[0]);
+                }
+            }
+            return (min - 10f, max + 10f);
+        }
 
         /// <summary>A space was left-clicked (and the click was not a pan).</summary>
         public Action<string> SpaceClicked;
@@ -184,8 +206,15 @@ namespace StiflingDark.Unity
             }
 
             _light = new LightOverlay(_root, board, 10);
-            _beamSprite = BuildBeamSprite(board.Db.Flashlight, board.Map.SpacePitch);
-            _beamLinesSprite = BuildBeamLinesSprite(board.Db.Flashlight, board.Map.SpacePitch);
+            _beamSprite = BuildBeamSprite(board.Db.Flashlight, board.Map.SpacePitch, band: null);
+            _beamLinesSprite = BuildBeamLinesSprite(board.Db.Flashlight, board.Map.SpacePitch,
+                pathLimit: null);
+            // The Hazy/center-line variants: the cone physically cut to the band the three
+            // verticals span, and only those three lines drawn.
+            _beamSpriteNarrow = BuildBeamSprite(board.Db.Flashlight, board.Map.SpacePitch,
+                band: CenterBand(board.Db.Flashlight));
+            _beamLinesSpriteNarrow = BuildBeamLinesSprite(board.Db.Flashlight,
+                board.Map.SpacePitch, pathLimit: 3);
 
             _camera = Camera.main;
             if (_camera == null)
@@ -311,6 +340,7 @@ namespace StiflingDark.Unity
             DrawPoiTokens(view);
             DrawMedicalItems(view);
             DrawBoardTokens(view);
+            DrawEventCard(view);
             DrawFlashlights(view);
             DrawAdversary(view);
             DrawInvestigators(view);
@@ -538,6 +568,64 @@ namespace StiflingDark.Unity
             }
         }
 
+        private Rect _eventCardRect;
+        /// <summary>The current Event's face, while one is on display beside the map.</summary>
+        public Sprite EventCardSprite { get; private set; }
+
+        /// <summary>
+        /// The round's Event card, resting off the map's top-right corner in world space so
+        /// it pans and zooms with the board (designer request 2026-08-31 — the physical
+        /// table keeps the drawn Event beside the board).
+        /// </summary>
+        private void DrawEventCard(PlayerView view)
+        {
+            _eventCardRect = default;
+            EventCardSprite = null;
+            if (string.IsNullOrEmpty(view.CurrentEvent))
+            {
+                return;
+            }
+            var sprite = _art.EventCard(view.CurrentEvent);
+            EventCardSprite = sprite;
+            if (sprite == null)
+            {
+                return;
+            }
+            float mapW = (float)_board.SourceWidth;
+            float width = mapW * 0.15f;
+            float height = width * sprite.bounds.size.y / Mathf.Max(0.0001f, sprite.bounds.size.x);
+            float left = mapW * 1.025f;
+            float top = 0f; // flush with the map's top edge
+            var go = NewSprite(_dynamic, "EventCard", sprite, Color.white, 8);
+            go.transform.position = new Vector3(left + width / 2f, -(top + height / 2f), 0f);
+            float scale = width / Mathf.Max(0.0001f, sprite.bounds.size.x);
+            go.transform.localScale = new Vector3(scale, scale, 1f);
+            // World rect (y-up), for the hover-to-enlarge check and the reveal's slide target.
+            _eventCardRect = new Rect(left, -(top + height), width, height);
+        }
+
+        /// <summary>Is the mouse over the resting Event card right now?</summary>
+        public bool EventCardUnderMouse() =>
+            _eventCardRect.width > 0 &&
+            _eventCardRect.Contains((Vector2)_camera.ScreenToWorldPoint(Input.mousePosition));
+
+        /// <summary>The resting card's on-screen centre and height, or null while absent —
+        /// where the round-start reveal slides its full-size card to.</summary>
+        public (Vector2 Center, float Height)? EventCardScreenSpot()
+        {
+            if (_eventCardRect.width <= 0)
+            {
+                return null;
+            }
+            var center = _camera.WorldToScreenPoint(new Vector3(
+                _eventCardRect.x + _eventCardRect.width / 2f,
+                _eventCardRect.y + _eventCardRect.height / 2f, 0f));
+            var top = _camera.WorldToScreenPoint(new Vector3(
+                _eventCardRect.x, _eventCardRect.y + _eventCardRect.height, 0f));
+            var bottom = _camera.WorldToScreenPoint(new Vector3(_eventCardRect.x, _eventCardRect.y, 0f));
+            return ((Vector2)center, Mathf.Abs(top.y - bottom.y));
+        }
+
         private void DrawFlashlights(PlayerView view)
         {
             foreach (var flashlight in view.Flashlights)
@@ -546,13 +634,15 @@ namespace StiflingDark.Unity
                 // The cone is flavor, not truth: it draws UNDER the light overlay (order 10)
                 // so the per-space shading — the real Bright set — always reads on top, and
                 // spaces the walls cut out of the beam stay visibly dark inside the cone.
-                var beam = NewSprite(_dynamic, "Beam", _beamSprite,
+                var beam = NewSprite(_dynamic, "Beam",
+                    CenterLineOnly ? _beamSpriteNarrow : _beamSprite,
                     new Color(1f, 0.86f, 0.55f, 0.10f), 9);
                 beam.transform.position = world;
                 beam.transform.rotation = Quaternion.Euler(0, 0, BeamDegrees(flashlight.AngleRadians));
                 // The printed sight lines, at the same transparency as the wash beneath so
                 // the whole template reads as one see-through overlay.
-                NewSprite(beam.transform, "BeamLines", _beamLinesSprite,
+                NewSprite(beam.transform, "BeamLines",
+                    CenterLineOnly ? _beamLinesSpriteNarrow : _beamLinesSprite,
                     new Color(1f, 1f, 1f, 0.10f), 12);
             }
         }
@@ -939,9 +1029,11 @@ namespace StiflingDark.Unity
             {
                 return;
             }
-            var go = NewSprite(_dynamic, "AimBeam", _beamSprite,
+            var go = NewSprite(_dynamic, "AimBeam",
+                CenterLineOnly ? _beamSpriteNarrow : _beamSprite,
                 new Color(1f, 0.88f, 0.58f, 0.22f), 15);
-            NewSprite(go.transform, "AimBeamLines", _beamLinesSprite,
+            NewSprite(go.transform, "AimBeamLines",
+                CenterLineOnly ? _beamLinesSpriteNarrow : _beamLinesSprite,
                 new Color(1f, 1f, 1f, 0.22f), 16);
             _beamIndicator = go.transform;
         }
@@ -966,7 +1058,8 @@ namespace StiflingDark.Unity
                 return;
             }
             _aimAngle = angle;
-            _light.SetPreview(_board.PreviewBright(_aimFrom, angle));
+            _light.SetPreview(_board.PreviewBright(_aimFrom, angle,
+                CenterLineOnly ? 3 : (int?)null));
             if (_beamIndicator != null)
             {
                 _beamIndicator.rotation = Quaternion.Euler(0, 0, BeamDegrees(angle));
@@ -992,7 +1085,8 @@ namespace StiflingDark.Unity
         /// board pitches. Built once and reused (just rotated/positioned) for every aim preview
         /// and every placed flashlight — the shape never changes, only where it points.
         /// </summary>
-        private static Sprite BuildBeamSprite(FlashlightDef def, double spacePitch)
+        private static Sprite BuildBeamSprite(FlashlightDef def, double spacePitch,
+            (float Min, float Max)? band)
         {
             int w = Mathf.Max(1, Mathf.CeilToInt((float)def.ImageWidth));
             int h = Mathf.Max(1, Mathf.CeilToInt((float)def.ImageHeight));
@@ -1012,6 +1106,10 @@ namespace StiflingDark.Unity
                 int row = py * w;
                 for (int px = 0; px < w; px++)
                 {
+                    if (band.HasValue && (px + 0.5 < band.Value.Min || px + 0.5 > band.Value.Max))
+                    {
+                        continue; // the physically-cut Hazy cone: only the centre band
+                    }
                     if (PointInBeamOutline(def.OutlinePolygon, px + 0.5, templateY))
                     {
                         pixels[row + px] = fill;
@@ -1036,7 +1134,8 @@ namespace StiflingDark.Unity
         /// pixels in the cone texture so the cone's warm tint never dulls them — on the
         /// physical template the lines are printed solid white.
         /// </summary>
-        private static Sprite BuildBeamLinesSprite(FlashlightDef def, double spacePitch)
+        private static Sprite BuildBeamLinesSprite(FlashlightDef def, double spacePitch,
+            int? pathLimit)
         {
             const double halfWidth = 3.0;   // template px; ~the printed line weight
             const double softEdge = 1.5;
@@ -1057,17 +1156,16 @@ namespace StiflingDark.Unity
                 {
                     double templateX = px + 0.5;
                     double nearest = double.MaxValue;
-                    foreach (var path in def.SightLinePaths)
+                    int lineCount = Mathf.Min(def.SightLinePaths.Count,
+                        pathLimit ?? def.SightLinePaths.Count);
+                    for (int line = 0; line < lineCount && nearest > halfWidth; line++)
                     {
+                        var path = def.SightLinePaths[line];
                         for (int i = 1; i < path.Count && nearest > halfWidth; i++)
                         {
                             nearest = Math.Min(nearest, DistanceToSegment(
                                 templateX, templateY, path[i - 1][0], path[i - 1][1],
                                 path[i][0], path[i][1]));
-                        }
-                        if (nearest <= halfWidth)
-                        {
-                            break;
                         }
                     }
                     if (nearest > halfWidth + softEdge ||

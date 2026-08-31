@@ -60,8 +60,12 @@ namespace StiflingDark.Engine.Core
         /// at <paramref name="angleRadians"/> (board coordinates, y-down; 0 = +x). The
         /// Investigator's own space is always included.
         /// </summary>
+        /// <param name="sightLineLimit">Use only the first N printed lines — the data orders
+        /// them centre vertical, side verticals, then the angled fans, so 1 = the single
+        /// centre line and 3 = all three verticals. Null = the whole template.</param>
         public HashSet<string> ComputeBright(
-            MapGraph graph, string atSpace, double angleRadians, ILineOfSightBlocker blocker)
+            MapGraph graph, string atSpace, double angleRadians, ILineOfSightBlocker blocker,
+            int? sightLineLimit = null)
         {
             var origin = graph.Space(atSpace);
             double pitch = graph.Def.SpacePitch;
@@ -86,7 +90,8 @@ namespace StiflingDark.Engine.Core
                     continue;
                 }
                 if (CircleFullyInBeam(space.X, space.Y, radius, origin.X, origin.Y, fx, fy, rx, ry, scale) &&
-                    HasSight(space.X, space.Y, radius, origin.X, origin.Y, fx, fy, rx, ry, scale, blocker))
+                    HasSight(space.X, space.Y, radius, origin.X, origin.Y, fx, fy, rx, ry, scale,
+                        blocker, sightLineLimit))
                 {
                     bright.Add(space.Id);
                 }
@@ -106,12 +111,13 @@ namespace StiflingDark.Engine.Core
         private bool HasSight(
             double cx, double cy, double radius,
             double ox, double oy, double fx, double fy, double rx, double ry, double scale,
-            ILineOfSightBlocker blocker)
+            ILineOfSightBlocker blocker, int? sightLineLimit)
         {
             if (_sightLines.Count == 0)
             {
                 return !blocker.Blocks(ox, oy, cx, cy);
             }
+            int lineCount = Math.Min(_sightLines.Count, sightLineLimit ?? _sightLines.Count);
 
             // The space's centre in template pixels, and its radius there.
             double dx = cx - ox, dy = cy - oy;
@@ -123,8 +129,9 @@ namespace StiflingDark.Engine.Core
                 ox + (fx * (_originY - py) + rx * (px - _originX)) * scale,
                 oy + (fy * (_originY - py) + ry * (px - _originX)) * scale);
 
-            foreach (var path in _sightLines)
+            for (int line = 0; line < lineCount; line++)
             {
+                var path = _sightLines[line];
                 for (int i = 1; i < path.Count; i++)
                 {
                     double x1 = path[i - 1][0], y1 = path[i - 1][1];

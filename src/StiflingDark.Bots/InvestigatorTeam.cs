@@ -850,7 +850,10 @@ public sealed partial class InvestigatorTeam
         HashSet<string> bright;
         try
         {
-            bright = _g.PreviewFlashlight(inv.DefId, angle);
+            // Hazy: plan with the same three-verticals restriction the placement will get,
+            // or the bot overvalues wide angles that will be trimmed to nothing.
+            int? lineLimit = _g.RoundModifier(Game.FlashlightCenterLineOnlyKey) > 0 ? 3 : (int?)null;
+            bright = _g.PreviewFlashlight(inv.DefId, angle, lineLimit);
         }
         catch (InvalidOperationException)
         {

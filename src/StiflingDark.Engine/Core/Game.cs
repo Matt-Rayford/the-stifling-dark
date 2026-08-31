@@ -680,8 +680,13 @@ namespace StiflingDark.Engine.Core
         }
 
         /// <summary>The Bright set a flashlight would produce — call freely for the mouse preview.</summary>
-        public HashSet<string> PreviewFlashlight(string invId, double angleRadians) =>
-            _beam.ComputeBright(Graph, Investigator(invId).Space, angleRadians, _losBlocker);
+        /// <summary><paramref name="sightLineLimit"/> restricts LOS to the template's first
+        /// N printed lines (ordered centre vertical, side verticals, then the angled fans) —
+        /// how Hazy and the tunnel-vision Wounds narrow the beam.</summary>
+        public HashSet<string> PreviewFlashlight(string invId, double angleRadians,
+            int? sightLineLimit = null) =>
+            _beam.ComputeBright(Graph, Investigator(invId).Space, angleRadians, _losBlocker,
+                sightLineLimit);
 
         /// <summary>Generic Involved Action final: ends the turn with no Stamina gain. Specific
         /// Involved Actions (evidence turn-in, objectives) build on this as they are implemented.</summary>

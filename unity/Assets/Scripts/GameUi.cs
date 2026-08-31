@@ -41,6 +41,14 @@ namespace StiflingDark.Unity
         private readonly RectTransform _actionBar;
         private readonly TokenActionMenu _tokenMenu;
         private readonly HandView _hand;
+        private readonly TokenArt _art;
+        private readonly CardPreview _eventPreview = new CardPreview();
+
+        // The round-start Event reveal, and the resting card's hover-to-enlarge.
+        private string _eventShownKey;
+        private bool _eventBaselineSet;
+        private float _eventHoverTime;
+        private bool _eventPreviewShown;
         private readonly TurnBanner _turnBanner;
 
         private int _renderedRevision = -1;
@@ -92,6 +100,7 @@ namespace StiflingDark.Unity
             _boardView = boardView;
             _describe = describe;
             _prompt = prompt;
+            _art = art;
 
             _root = UiKit.CreateGroup(canvas, "GameUi");
             UiKit.Anchor(_root, Vector2.zero, Vector2.one);
@@ -197,6 +206,7 @@ namespace StiflingDark.Unity
             _boardView.Tick();
             _tokenMenu.Tick();
             MaybeOpenMenuByHover();
+            UpdateEventCardHover();
             ContinueWalk();
             UpdatePathPreview();
             if (_session.Revision != _renderedRevision || _session.Log.Count != _renderedLogCount)
@@ -269,6 +279,7 @@ namespace StiflingDark.Unity
             RenderActions(view);
             RenderMoveTargets(view);
             _boardView.Render(view, MyInvestigatorId);
+            MaybeRevealEvent(view);
             FollowBotAction(view);
             // The hand covers the map's bottom edge, so it stands down whenever the map
             // underneath belongs to the mouse (aiming a beam, picking spaces).
@@ -823,19 +834,157 @@ namespace StiflingDark.Unity
                 Row("Turn " + me.EvidenceCarried.Count + " in evidence",
                     () => ShowEvidenceTurnIn(me), active);
             }
+            RenderObjectiveRows(view, me, active, Row);
 
             Row("End Turn", () => Send(new EndTurnCommand()), active && !blockedByWindow,
                 "Ends the turn. Rest (+1 Stamina if you did not Sprint) and Charge (+1 if you " +
                 "did not place the Flashlight) happen on their own.");
         }
 
+        /// <summary>The Escape card's flow per card id — mirrors the 'objective' field in
+        /// game-data/cards/escape-cards.json, which the engine's CardDef does not carry.</summary>
+        private static readonly Dictionary<string, string> EscapeFlow = new Dictionary<string, string>
+        {
+            ["north-gate"] = "gate", ["south-gate"] = "gate",
+            ["garage"] = "truck", ["sawmill"] = "truck",
+            ["tunnel-of-love"] = "tunnel", ["mirror-maze"] = "tunnel",
+            ["the-zipper"] = "flare", ["ferris-wheel"] = "flare",
+        };
+
+        /// <summary>Landmark tokens that stay printed on the board; never offered as pickups.</summary>
+        private static readonly HashSet<string> LandmarkTokens = new HashSet<string>
+        {
+            "saw", "locked-escape", "truck", "escape", "grave-actual", "grave-decoy", "altar",
+        };
+
+        /// <summary>
+        /// Objective actions, shown only where their printed preconditions hold — the token
+        /// stood on, the token carried, the selected Escape card's flow. Replaces the old
+        /// always-visible OBJECTIVE ACTIONS wall; the engine still rules on legality.
+        /// </summary>
+        private void RenderObjectiveRows(PlayerView view, PlayerView.InvestigatorPanel me,
+            bool active, Action<string, Action, bool, string> row)
+        {
+            var objective = view.Objective;
+            bool OnToken(string name) =>
+                objective.Tokens.TryGetValue(name, out var space) && space == me.Space;
+            bool Carrying(string name) =>
+                objective.TokenCarriers.TryGetValue(name, out var who) && who == me.DefId;
+            void Add(string label, Action run) => row(label, run, active, null);
+
+            string card = objective.SelectedEscapeCard ?? "";
+            EscapeFlow.TryGetValue(card, out string flow);
+
+            if (OnToken("saw") && Carrying("lockbox"))
+            {
+                Add("Open the Lockbox",
+                    () => Send(new OpenLockboxCommand { PushYourLuck = false }));
+                Add("Open the Lockbox — push your luck",
+                    () => Send(new OpenLockboxCommand { PushYourLuck = true }));
+            }
+            if (OnToken("locked-escape"))
+            {
+                switch (flow)
+                {
+                    case "gate":
+                        Add("Power the Gate", () => Send(new PowerTheGateCommand()));
+                        Add("Escape through the Gate", () => Send(new EscapeThroughGateCommand()));
+                        break;
+                    case "tunnel":
+                        Add("Open the Service Tunnel", () => Send(new OpenServiceTunnelCommand()));
+                        Add("Escape through the Tunnel", () => Send(new EscapeThroughTunnelCommand()));
+                        break;
+                    case "flare":
+                        Add("Fire the Flare Gun", () => Send(new FireFlareGunCommand()));
+                        break;
+                }
+            }
+            if (flow == "truck")
+            {
+                if (OnToken("truck"))
+                {
+                    Add("Start the Truck…", () => PickSpaces(1, "Click the Truck's escape space",
+                        picked => Send(new StartTruckCommand { EscapeSpace = picked[0] })));
+                    foreach (var carried in objective.TokenCarriers
+                        .Where(c => c.Value == me.DefId && !LandmarkTokens.Contains(c.Key)))
+                    {
+                        string part = carried.Key;
+                        Add("Install " + part,
+                            () => Send(new InstallPartCommand { PartToken = part }));
+                    }
+                }
+                if (OnToken("escape"))
+                {
+                    Add("Escape at the Truck exit", () => Send(new EscapeAtTruckExitCommand()));
+                }
+            }
+            if (flow == "flare" && (objective.EscapeOpen || objective.EscapeReadyRound != null))
+            {
+                Add("Escape by Helicopter", () => Send(new EscapeByHelicopterCommand()));
+            }
+            switch (card)
+            {
+                case "the-grave":
+                    Add("Dig up the Grave", () => Send(new DigUpGraveCommand()));
+                    Add("Use the Hook…", () => PickSpaces(1, "Click the space the Hook targets",
+                        picked => Send(new UseTheHookCommand { ChosenSpace = picked[0] })));
+                    if (me.Items != null && me.Items.Contains("frayed-ropes"))
+                    {
+                        Add("Use the Frayed Ropes", () => Send(new UseFrayedRopesCommand()));
+                    }
+                    break;
+                case "the-altar":
+                    if (Carrying("ritual-knife"))
+                    {
+                        Add("Use the Ritual Knife",
+                            () => Send(new UseRitualKnifeCommand { FlipFaceDownWound = false }));
+                        Add("Use the Ritual Knife — flip a face-down Wound",
+                            () => Send(new UseRitualKnifeCommand { FlipFaceDownWound = true }));
+                    }
+                    Add("Cut the Rope Circle", () => Send(new CutRopeCircleCommand()));
+                    break;
+                case "the-eggs":
+                    Add("Destroy the Egg Sac", () => Send(new DestroyEggSacCommand()));
+                    Add("Banish the Horror", () => Send(new BanishTheHorrorCommand()));
+                    break;
+            }
+
+            // Carryable Objective tokens on this space, with the pickup verb their flow uses.
+            foreach (var token in objective.Tokens
+                .Where(t => t.Value == me.Space && !LandmarkTokens.Contains(t.Key)))
+            {
+                string name = token.Key;
+                Add("Pick up " + name, () =>
+                {
+                    if (name == "ritual-knife" || name == "rope-circle")
+                    {
+                        Send(new PickUpBanishTokenCommand { TokenName = name });
+                    }
+                    else if (name.Contains("part") || name.Contains("ride"))
+                    {
+                        Send(new PickUpRidePartsCommand { Token = name });
+                    }
+                    else
+                    {
+                        Send(new PickUpObjectiveTokenCommand { TokenName = name });
+                    }
+                });
+            }
+            foreach (var carried in objective.TokenCarriers.Where(c => c.Value == me.DefId))
+            {
+                string name = carried.Key;
+                Add("Drop " + name,
+                    () => Send(new DropObjectiveTokenCommand { TokenName = name }));
+            }
+        }
+
         private void RenderInteracts(PlayerView view, PlayerView.InvestigatorPanel me, bool active)
         {
             // Pickups, doors, the light switch and Evidence turn-in moved to the figure menu
-            // (RenderTokenActions); what remains here is trading and the placeable rewards.
+            // (RenderTokenActions); what remains here is trading and the placeable rewards,
+            // header-free — the buttons say what they are.
             var overlay = BoardModel.OverlayFrom(view);
             var range = _board.InteractRange(me.Space, overlay);
-            Header("INTERACT  ·  " + me.Space + " and adjacent");
 
             // Trading, with whoever is in range.
             foreach (var other in view.Investigators.Where(i =>
@@ -900,62 +1049,14 @@ namespace StiflingDark.Unity
                         })), active);
             }
 
-            RenderObjectiveActions(view, me, active);
-        }
-
-        /// <summary>
-        /// Every objective interact the protocol has, offered whenever the Investigator is
-        /// active. Which are legal depends on the scenario, the Escape card, tokens carried and
-        /// the space stood on — all of it engine-side — so these are deliberately unfiltered
-        /// and the engine's refusal is the answer.
-        /// </summary>
-        private void RenderObjectiveActions(PlayerView view, PlayerView.InvestigatorPanel me,
-            bool active)
-        {
-            Header("OBJECTIVE ACTIONS  (the engine rules on these)");
-            CommandButton("Open the Lockbox", new OpenLockboxCommand { PushYourLuck = false }, active);
-            CommandButton("Open the Lockbox — push your luck",
-                new OpenLockboxCommand { PushYourLuck = true }, active);
-            CommandButton("Power the Gate", new PowerTheGateCommand(), active);
-            CommandButton("Escape through the Gate", new EscapeThroughGateCommand(), active);
-            ActionButton("Start the Truck…", () => PickSpaces(1, "Click the Truck's escape space",
-                picked => Send(new StartTruckCommand { EscapeSpace = picked[0] })), active);
-            CommandButton("Escape at the Truck exit", new EscapeAtTruckExitCommand(), active);
-            CommandButton("Fire the Flare Gun", new FireFlareGunCommand(), active);
-            CommandButton("Escape by Helicopter", new EscapeByHelicopterCommand(), active);
-            CommandButton("Open the Service Tunnel", new OpenServiceTunnelCommand(), active);
-            CommandButton("Escape through the Tunnel", new EscapeThroughTunnelCommand(), active);
-            CommandButton("Dig up the Grave", new DigUpGraveCommand(), active);
-            ActionButton("Use the Hook…", () => PickSpaces(1, "Click the space the Hook targets",
-                picked => Send(new UseTheHookCommand { ChosenSpace = picked[0] })), active);
-            CommandButton("Use the Frayed Ropes", new UseFrayedRopesCommand(), active);
-            CommandButton("Destroy the Egg Sac", new DestroyEggSacCommand(), active);
-            CommandButton("Banish the Horror", new BanishTheHorrorCommand(), active);
-            CommandButton("Use the Ritual Knife", new UseRitualKnifeCommand { FlipFaceDownWound = false },
-                active);
-            CommandButton("Use the Ritual Knife — flip a face-down Wound",
-                new UseRitualKnifeCommand { FlipFaceDownWound = true }, active);
-            CommandButton("Cut the Rope Circle", new CutRopeCircleCommand(), active);
-
-            foreach (var token in view.Objective.Tokens)
+            // Persistent major Events keep a text line here — the board-side card only
+            // shows the round's own draw.
+            foreach (string persistent in view.PersistentMajorEvents
+                .Where(id => id != view.CurrentEvent))
             {
-                var captured = token;
-                CommandButton("Pick up " + captured.Key,
-                    new PickUpObjectiveTokenCommand { TokenName = captured.Key }, active);
-                CommandButton("Install " + captured.Key,
-                    new InstallPartCommand { PartToken = captured.Key }, active);
-                CommandButton("Pick up ride parts: " + captured.Key,
-                    new PickUpRidePartsCommand { Token = captured.Key }, active);
-                CommandButton("Pick up Banish token " + captured.Key,
-                    new PickUpBanishTokenCommand { TokenName = captured.Key }, active);
-            }
-            foreach (var carried in view.Objective.TokenCarriers.Where(c => c.Value == me.DefId))
-            {
-                var captured = carried;
-                CommandButton("Drop " + captured.Key,
-                    new DropObjectiveTokenCommand { TokenName = captured.Key }, active);
-                CommandButton("Install " + captured.Key,
-                    new InstallPartCommand { PartToken = captured.Key }, active);
+                Line(_actionsBody, _describe.Card(persistent) + "  (persists)", 15,
+                    UiKit.AccentColor);
+                Line(_actionsBody, _describe.CardText(persistent), 14, UiKit.MutedColor);
             }
         }
 
@@ -1345,6 +1446,57 @@ namespace StiflingDark.Unity
             full.Reverse();
             var affordable = full.Where(space => dist[space] <= me.MpRemaining).ToList();
             return affordable;
+        }
+
+        /// <summary>
+        /// A freshly drawn Event gets dealt to the table: full card over a darkened beat,
+        /// then slid to its resting spot beside the board (see <see cref="EventReveal"/>).
+        /// The first view after joining sets the baseline silently — replaying the reveal
+        /// of a round already in progress would be noise.
+        /// </summary>
+        private void MaybeRevealEvent(PlayerView view)
+        {
+            string key = view.Round + ":" + view.CurrentEvent;
+            if (!_eventBaselineSet)
+            {
+                _eventBaselineSet = true;
+                _eventShownKey = key;
+                return;
+            }
+            if (string.IsNullOrEmpty(view.CurrentEvent) || key == _eventShownKey)
+            {
+                return;
+            }
+            _eventShownKey = key;
+            EventReveal.Play(_art.EventCard(view.CurrentEvent), _boardView.EventCardScreenSpot);
+        }
+
+        /// <summary>Hovering the resting Event card enlarges it like a hand card: a short
+        /// dwell, or Alt/Cmd for instant.</summary>
+        private void UpdateEventCardHover()
+        {
+            bool overUi = UnityEngine.EventSystems.EventSystem.current != null &&
+                UnityEngine.EventSystems.EventSystem.current.IsPointerOverGameObject();
+            bool over = !overUi && !_boardView.Aiming && _pickCount == 0 &&
+                _boardView.EventCardUnderMouse();
+            if (!over)
+            {
+                _eventHoverTime = 0f;
+                if (_eventPreviewShown)
+                {
+                    _eventPreview.Hide();
+                    _eventPreviewShown = false;
+                }
+                return;
+            }
+            bool modifier = Input.GetKey(KeyCode.LeftAlt) || Input.GetKey(KeyCode.RightAlt) ||
+                Input.GetKey(KeyCode.LeftCommand) || Input.GetKey(KeyCode.RightCommand);
+            _eventHoverTime += Time.deltaTime;
+            if (!_eventPreviewShown && (modifier || _eventHoverTime >= 0.75f))
+            {
+                _eventPreview.Show(_boardView.EventCardSprite);
+                _eventPreviewShown = true;
+            }
         }
 
         /// <summary>
