@@ -132,9 +132,11 @@ namespace StiflingDark.Engine.Data
         public double ImageHeight { get; set; }
         /// <summary>Designer-confirmed: the template's full length spans this many space pitches.</summary>
         public double LengthInSpacePitches { get; set; }
-        /// <summary>The 7 printed sight lines, [x1, y1, x2, y2] template-pixel segments.
-        /// These, not a straight ray, dictate a space's line of sight (designer ruling).</summary>
-        public List<double[]> SightLineSegments { get; set; } = new List<double[]>();
+        /// <summary>The 7 printed sight lines as template-pixel polylines ([x, y] points,
+        /// base end first). These, not a straight ray, dictate a space's line of sight
+        /// (designer ruling); the angled ones branch off the verticals partway up, so their
+        /// paths run base -> branch -> edge exactly as the physical trace does.</summary>
+        public List<List<double[]>> SightLinePaths { get; set; } = new List<List<double[]>>();
     }
 
     public sealed class InvestigatorCountRules

@@ -67,6 +67,7 @@ namespace StiflingDark.Unity
         private bool _aiming;
         private Transform _beamIndicator;
         private Sprite _beamSprite;
+        private Sprite _beamLinesSprite;
 
         /// <summary>A space was left-clicked (and the click was not a pan).</summary>
         public Action<string> SpaceClicked;
@@ -184,6 +185,7 @@ namespace StiflingDark.Unity
 
             _light = new LightOverlay(_root, board, 10);
             _beamSprite = BuildBeamSprite(board.Db.Flashlight, board.Map.SpacePitch);
+            _beamLinesSprite = BuildBeamLinesSprite(board.Db.Flashlight, board.Map.SpacePitch);
 
             _camera = Camera.main;
             if (_camera == null)
@@ -548,6 +550,10 @@ namespace StiflingDark.Unity
                     new Color(1f, 0.86f, 0.55f, 0.10f), 9);
                 beam.transform.position = world;
                 beam.transform.rotation = Quaternion.Euler(0, 0, BeamDegrees(flashlight.AngleRadians));
+                // The printed sight lines, at the same transparency as the wash beneath so
+                // the whole template reads as one see-through overlay.
+                NewSprite(beam.transform, "BeamLines", _beamLinesSprite,
+                    new Color(1f, 1f, 1f, 0.10f), 12);
             }
         }
 
@@ -935,6 +941,8 @@ namespace StiflingDark.Unity
             }
             var go = NewSprite(_dynamic, "AimBeam", _beamSprite,
                 new Color(1f, 0.88f, 0.58f, 0.22f), 15);
+            NewSprite(go.transform, "AimBeamLines", _beamLinesSprite,
+                new Color(1f, 1f, 1f, 0.22f), 16);
             _beamIndicator = go.transform;
         }
 
@@ -1019,6 +1027,79 @@ namespace StiflingDark.Unity
             float pixelsPerUnit = (float)(1.0 / scale);
             return Sprite.Create(texture, new Rect(0, 0, w, h), new Vector2(pivotX, pivotY),
                 pixelsPerUnit, 0, SpriteMeshType.FullRect);
+        }
+
+        /// <summary>
+        /// The template's 7 printed sight lines as their own sprite (geometry from
+        /// flashlight.json, the same segments the engine's LOS rule walks), rendered white
+        /// with a soft edge and clipped to the beam outline. A separate sprite rather than
+        /// pixels in the cone texture so the cone's warm tint never dulls them — on the
+        /// physical template the lines are printed solid white.
+        /// </summary>
+        private static Sprite BuildBeamLinesSprite(FlashlightDef def, double spacePitch)
+        {
+            const double halfWidth = 3.0;   // template px; ~the printed line weight
+            const double softEdge = 1.5;
+            int w = Mathf.Max(1, Mathf.CeilToInt((float)def.ImageWidth));
+            int h = Mathf.Max(1, Mathf.CeilToInt((float)def.ImageHeight));
+            var texture = new Texture2D(w, h, TextureFormat.RGBA32, false)
+            {
+                hideFlags = HideFlags.DontSave,
+                wrapMode = TextureWrapMode.Clamp,
+                filterMode = FilterMode.Bilinear,
+            };
+            var pixels = new Color32[w * h];
+            for (int py = 0; py < h; py++)
+            {
+                double templateY = def.ImageHeight - py;
+                int row = py * w;
+                for (int px = 0; px < w; px++)
+                {
+                    double templateX = px + 0.5;
+                    double nearest = double.MaxValue;
+                    foreach (var path in def.SightLinePaths)
+                    {
+                        for (int i = 1; i < path.Count && nearest > halfWidth; i++)
+                        {
+                            nearest = Math.Min(nearest, DistanceToSegment(
+                                templateX, templateY, path[i - 1][0], path[i - 1][1],
+                                path[i][0], path[i][1]));
+                        }
+                        if (nearest <= halfWidth)
+                        {
+                            break;
+                        }
+                    }
+                    if (nearest > halfWidth + softEdge ||
+                        !PointInBeamOutline(def.OutlinePolygon, templateX, templateY))
+                    {
+                        continue;
+                    }
+                    byte alpha = nearest <= halfWidth
+                        ? (byte)255
+                        : (byte)(255 * (halfWidth + softEdge - nearest) / softEdge);
+                    pixels[row + px] = new Color32(255, 255, 255, alpha);
+                }
+            }
+            texture.SetPixels32(pixels);
+            texture.Apply(false);
+
+            float pivotX = (float)(def.OriginX / def.ImageWidth);
+            float pivotY = (float)(1.0 - def.OriginY / def.ImageHeight);
+            float pixelsPerUnit = (float)(def.ImageHeight / (def.LengthInSpacePitches * spacePitch));
+            return Sprite.Create(texture, new Rect(0, 0, w, h), new Vector2(pivotX, pivotY),
+                pixelsPerUnit, 0, SpriteMeshType.FullRect);
+        }
+
+        private static double DistanceToSegment(double px, double py,
+            double x1, double y1, double x2, double y2)
+        {
+            double sx = x2 - x1, sy = y2 - y1;
+            double lengthSq = sx * sx + sy * sy;
+            double t = lengthSq <= 0 ? 0 : ((px - x1) * sx + (py - y1) * sy) / lengthSq;
+            t = Math.Max(0, Math.Min(1, t));
+            double dx = px - (x1 + sx * t), dy = py - (y1 + sy * t);
+            return Math.Sqrt(dx * dx + dy * dy);
         }
 
         /// <summary>Point-in-polygon ray cast — the same algorithm as FlashlightBeam.PointInPolygon.</summary>

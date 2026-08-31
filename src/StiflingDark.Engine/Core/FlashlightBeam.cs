@@ -37,7 +37,7 @@ namespace StiflingDark.Engine.Core
         private readonly double _originY;
         private readonly double _templateLengthPx;
         private readonly double _lengthInPitches;
-        private readonly List<double[]> _sightLines;
+        private readonly List<List<double[]>> _sightLines;
 
         public FlashlightBeam(FlashlightDef def)
         {
@@ -52,7 +52,7 @@ namespace StiflingDark.Engine.Core
             _originY = def.OriginY;
             _templateLengthPx = def.ImageHeight;
             _lengthInPitches = def.LengthInSpacePitches;
-            _sightLines = def.SightLineSegments;
+            _sightLines = def.SightLinePaths;
         }
 
         /// <summary>
@@ -95,10 +95,13 @@ namespace StiflingDark.Engine.Core
         }
 
         /// <summary>
-        /// Does the Investigator see this space? With sight-line data: any of the 7 printed
-        /// lines passes through the space's circle, and the stretch of that line from its
-        /// base (at the figure) to the space is unobstructed. Without data: the straight
-        /// ray to the space's centre.
+        /// Does the Investigator see this space? With sight-line data: one of the 7 printed
+        /// lines passes through the space's circle, and the WHOLE walk from the line's base
+        /// at the notch — up a vertical, around its branch point for the angled ones — to
+        /// where it exits the circle is unobstructed. Grazing the near rim before a wall is
+        /// not enough: the line must make it through the space (designer: "if one of those
+        /// lines hits a grey-bordered wall, it should not see the space"). Without data:
+        /// the straight ray to the space's centre.
         /// </summary>
         private bool HasSight(
             double cx, double cy, double radius,
@@ -116,39 +119,52 @@ namespace StiflingDark.Engine.Core
             double ty = _originY - (dx * fx + dy * fy) / scale;
             double radiusT = radius / scale;
 
-            foreach (var line in _sightLines)
+            (double X, double Y) ToBoard(double px, double py) => (
+                ox + (fx * (_originY - py) + rx * (px - _originX)) * scale,
+                oy + (fy * (_originY - py) + ry * (px - _originX)) * scale);
+
+            foreach (var path in _sightLines)
             {
-                double x1 = line[0], y1 = line[1], x2 = line[2], y2 = line[3];
-                double sx = x2 - x1, sy = y2 - y1;
-                double lengthSq = sx * sx + sy * sy;
-                if (lengthSq <= 0)
+                for (int i = 1; i < path.Count; i++)
                 {
-                    continue;
-                }
-                double t = ((tx - x1) * sx + (ty - y1) * sy) / lengthSq;
-                double clamped = Math.Max(0, Math.Min(1, t));
-                double nx = x1 + sx * clamped, ny = y1 + sy * clamped;
-                double distSq = (nx - tx) * (nx - tx) + (ny - ty) * (ny - ty);
-                if (distSq > radiusT * radiusT)
-                {
-                    continue; // this printed line misses the space entirely
-                }
-                // The line must make it THROUGH the space, not merely graze its near rim: a
-                // wall cutting across the circle blocks it (designer: "if one of those lines
-                // hits a grey-bordered wall, it should not see the space"). So walk from the
-                // line's base end to where it EXITS the space's circle.
-                double halfChord = Math.Sqrt(Math.Max(0, radiusT * radiusT - distSq));
-                double tExit = Math.Max(0, Math.Min(1, t + halfChord / Math.Sqrt(lengthSq)));
-                double ex = x1 + sx * tExit, ey = y1 + sy * tExit;
-                // Template -> board, for the base end and the exit point. The base ends all
-                // sit within the figure's own space around the notch.
-                double baseBoardX = ox + (fx * (_originY - y1) + rx * (x1 - _originX)) * scale;
-                double baseBoardY = oy + (fy * (_originY - y1) + ry * (x1 - _originX)) * scale;
-                double exitBoardX = ox + (fx * (_originY - ey) + rx * (ex - _originX)) * scale;
-                double exitBoardY = oy + (fy * (_originY - ey) + ry * (ex - _originX)) * scale;
-                if (!blocker.Blocks(baseBoardX, baseBoardY, exitBoardX, exitBoardY))
-                {
-                    return true;
+                    double x1 = path[i - 1][0], y1 = path[i - 1][1];
+                    double x2 = path[i][0], y2 = path[i][1];
+                    double sx = x2 - x1, sy = y2 - y1;
+                    double lengthSq = sx * sx + sy * sy;
+                    if (lengthSq <= 0)
+                    {
+                        continue;
+                    }
+                    double t = ((tx - x1) * sx + (ty - y1) * sy) / lengthSq;
+                    double clamped = Math.Max(0, Math.Min(1, t));
+                    double nx = x1 + sx * clamped, ny = y1 + sy * clamped;
+                    double distSq = (nx - tx) * (nx - tx) + (ny - ty) * (ny - ty);
+                    if (distSq > radiusT * radiusT)
+                    {
+                        continue; // this leg misses the space entirely
+                    }
+                    double halfChord = Math.Sqrt(Math.Max(0, radiusT * radiusT - distSq));
+                    double tExit = Math.Max(0, Math.Min(1, t + halfChord / Math.Sqrt(lengthSq)));
+                    double ex = x1 + sx * tExit, ey = y1 + sy * tExit;
+
+                    // Walk the path from its base: every earlier leg in full, then this leg
+                    // up to the exit point.
+                    bool clear = true;
+                    for (int j = 1; j < i && clear; j++)
+                    {
+                        var a = ToBoard(path[j - 1][0], path[j - 1][1]);
+                        var b = ToBoard(path[j][0], path[j][1]);
+                        clear = !blocker.Blocks(a.X, a.Y, b.X, b.Y);
+                    }
+                    if (clear)
+                    {
+                        var start = ToBoard(x1, y1);
+                        var exit = ToBoard(ex, ey);
+                        if (!blocker.Blocks(start.X, start.Y, exit.X, exit.Y))
+                        {
+                            return true;
+                        }
+                    }
                 }
             }
             return false;

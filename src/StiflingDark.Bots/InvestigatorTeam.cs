@@ -42,6 +42,9 @@ public sealed partial class InvestigatorTeam
 
     /// <summary>Space -> "how close the Adversary was last seen", from public Shadow/Noise tokens.</summary>
     private readonly Dictionary<string, int> _danger = new();
+    /// <summary>Where the Adversary was last KNOWN to be (Shadow tokens, revealed figures),
+    /// rebuilt with the danger map each round — the beams aim back along these.</summary>
+    private List<string> _threatSources = new();
     private readonly Dictionary<string, int> _fleeStreak = new();
     private readonly Dictionary<string, int> _regroupStreak = new();
     /// <summary>Bulk turn-ins: the Investigator the team ferries Evidence to this round.</summary>
@@ -137,6 +140,7 @@ public sealed partial class InvestigatorTeam
             strong.Add(S.Adversary.Space);
         }
         strong.AddRange(S.Adversary.Figures.Where(f => f.Alive && f.Revealed).Select(f => f.Space));
+        _threatSources = strong.ToList();
 
         var weak = new List<string>();
         foreach (string key in S.Adversary.NoiseTokens)
@@ -636,7 +640,13 @@ public sealed partial class InvestigatorTeam
         {
             var (angle, score) = BestFlashlight(inv);
             double bestAngle = angle;
-            if (score > 0 && _act.Try("place-flashlight", () => _g.PlaceFlashlight(bestAngle)))
+            // With the adversary already Revealed nobody needs cover (a Revealed figure
+            // cannot Attack next turn), so a beam must EARN its Charge by boxing the
+            // figure out of the shadows or lighting an objective — a merely-decent
+            // placement wastes the Charge the auto-recharge would have banked instead
+            // (designer note 2026-08-31: "he was not helping anyone... a better play").
+            double bar = S.Adversary.Revealed ? 30 : 0;
+            if (score > bar && _act.Try("place-flashlight", () => _g.PlaceFlashlight(bestAngle)))
             {
                 _beamedThisRound.Add(inv.DefId);
                 SweepFlashlight(inv);
@@ -760,6 +770,13 @@ public sealed partial class InvestigatorTeam
         public HashSet<string> GuardRing = new();
         public HashSet<string> Lanes = new();
         public HashSet<string> Entrances = new();
+        /// <summary>The walk from the nearest KNOWN threat source to this Investigator —
+        /// the direction an attack actually comes from.</summary>
+        public HashSet<string> ThreatApproach = new();
+        /// <summary>Un-Bright spaces a REVEALED adversary could retreat to. A Revealed
+        /// figure cannot Attack next turn, so the beam's job becomes denying it the
+        /// Dim/Dark it needs to Disappear back into.</summary>
+        public HashSet<string> Denial = new();
     }
 
     private BeamContext BuildBeamContext(InvestigatorState inv)
@@ -788,6 +805,42 @@ public sealed partial class InvestigatorTeam
         // Turtling: after the Doors are Locked these are the only ways left in, so a beam over
         // them seals the huddle for the round.
         ctx.Entrances = Entrances(buddies);
+
+        // The corridor the Adversary would WALK from its last known position to this
+        // Investigator (movement distances, so a Locked door genuinely forces the long way
+        // around). Cover it and the attack path is lit — running away and then pointing the
+        // beam the other way was a real playtest loss (designer note 2026-08-31).
+        if (S.Adversary.Revealed && !string.IsNullOrEmpty(S.Adversary.Space))
+        {
+            // Everywhere the Revealed figure could plausibly slink to and Disappear
+            // (Disappear needs Dim or Dark, so anything not Bright counts as a hideout).
+            foreach (string space in Nav.From(_g, S.Adversary.Space, 6).Keys)
+            {
+                if (_g.Graph.EffectiveLight(space, S.Overlay) != LightLevel.Bright)
+                {
+                    ctx.Denial.Add(space);
+                }
+            }
+        }
+
+        var toInv = Nav.From(_g, inv.Space);
+        string? source = _threatSources
+            .OrderBy(s => Nav.Hops(toInv, s)).ThenBy(s => s, StringComparer.Ordinal)
+            .FirstOrDefault();
+        int span = source == null ? int.MaxValue : Nav.Hops(toInv, source);
+        if (span <= 9)
+        {
+            var fromThreat = Nav.From(_g, source!);
+            foreach (var space in _g.Graph.Def.Spaces)
+            {
+                int viaHere = Nav.Hops(fromThreat, space.Id) + Nav.Hops(toInv, space.Id);
+                if (Nav.Hops(fromThreat, space.Id) != int.MaxValue &&
+                    viaHere <= span + 1 && Nav.Hops(toInv, space.Id) <= 6)
+                {
+                    ctx.ThreatApproach.Add(space.Id);
+                }
+            }
+        }
         return ctx;
     }
 
@@ -814,6 +867,16 @@ public sealed partial class InvestigatorTeam
             if (ctx.MustLight.Contains(id))
             {
                 score += 40;
+            }
+            if (ctx.ThreatApproach.Contains(id))
+            {
+                // The strongest positional pull short of MustLight: the beam belongs between
+                // this Investigator and where the Adversary was last seen.
+                score += ctx.Threatened ? 16 : 6;
+            }
+            if (ctx.Denial.Contains(id))
+            {
+                score += 10;
             }
             if (ctx.Entrances.Contains(id))
             {

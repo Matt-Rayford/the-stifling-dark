@@ -770,7 +770,18 @@ namespace StiflingDark.Unity
             var mySpace = _board.SpaceOrNull(me.Space);
             if (mySpace != null && mySpace.Kind == SpaceKind.LightSwitch)
             {
-                Row("Turn on light", () => Send(new ActivateLightSwitchCommand()), active);
+                // A zone lights up once: after burning out it is Faltering for good, and a
+                // dead button that says so beats a click whose refusal hides in the log.
+                bool zoneSpent = mySpace.Zone != null &&
+                    (view.FalteringZones.Contains(mySpace.Zone) ||
+                     view.Overlay.BrightZones.Contains(mySpace.Zone));
+                Row("Turn on light", () => Send(new ActivateLightSwitchCommand()),
+                    active && !zoneSpent,
+                    !zoneSpent
+                        ? "Not your active turn."
+                        : view.Overlay.BrightZones.Contains(mySpace.Zone ?? "")
+                            ? "The lights here are already on."
+                            : "These lights burned out (Faltering) — they cannot be turned on again.");
             }
             if (view.Evidence.Any(e => e.Space == me.Space))
             {
