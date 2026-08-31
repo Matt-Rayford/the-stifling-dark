@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>disable</Nullable>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="/Users/matt/Documents/GitHub/the-stifling-dark/src/StiflingDark.Engine/StiflingDark.Engine.csproj" />
+    <ProjectReference Include="/Users/matt/Documents/GitHub/the-stifling-dark/src/StiflingDark.Bots/StiflingDark.Bots.csproj" />
+  </ItemGroup>
+</Project>

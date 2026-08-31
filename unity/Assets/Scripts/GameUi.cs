@@ -1384,11 +1384,19 @@ namespace StiflingDark.Unity
             {
                 if (me.Space == _walkQueue[0])
                 {
-                    // Arrived: take a beat before the next step.
+                    // Arrived: take a beat before the next step — or, at the destination,
+                    // offer the actions right where you now stand.
                     _walkQueue.RemoveAt(0);
                     _walkFrom = me.Space;
                     _walkInFlight = false;
-                    _walkNextStepTime = Time.time + WalkStepSeconds;
+                    if (_walkQueue.Count == 0)
+                    {
+                        OpenMenuAtFigure(me);
+                    }
+                    else
+                    {
+                        _walkNextStepTime = Time.time + WalkStepSeconds;
+                    }
                 }
                 else if (me.Space != _walkFrom)
                 {
@@ -1412,6 +1420,20 @@ namespace StiflingDark.Unity
         {
             _walkQueue.Clear();
             _walkInFlight = false;
+        }
+
+        /// <summary>The figure menu, opened for the player rather than by them — a finished
+        /// walk offers the actions where they now stand. Stands down when something else
+        /// already owns the screen or the mouse.</summary>
+        private void OpenMenuAtFigure(PlayerView.InvestigatorPanel me)
+        {
+            if (_tokenMenu.IsOpen || _boardView.Aiming || _pickCount > 0 || _prompt.Open ||
+                !MyTurnActive)
+            {
+                return;
+            }
+            _tokenMenu.OpenAt(me.Space);
+            RenderTokenActions(View);
         }
 
         /// <summary>

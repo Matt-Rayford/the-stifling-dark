@@ -308,6 +308,8 @@ public sealed partial class InvestigatorTeam
         }
         if (afterTravel)
         {
+            // Travel is over: every remaining Open Door in reach is safe to close.
+            LockDoorsInReach(inv);
             Turtle(inv);
         }
     }
@@ -528,8 +530,40 @@ public sealed partial class InvestigatorTeam
             }
             ResolveWindow(inv);
             FreeInteracts(inv, afterTravel: false);
+            LockDoorsInReach(inv, towardTarget: dist);
         }
         StepOffOccupied(inv);
+    }
+
+    /// <summary>
+    /// Closing doors is free for Investigators but costs the Adversary a Break Door, so
+    /// every Open Door in reach gets Locked (designer tactic, 2026-08-28). Skips a door a
+    /// teammate stands on, and — mid-travel — any door still ahead on this figure's own
+    /// path, which they are about to walk through.
+    /// </summary>
+    private void LockDoorsInReach(InvestigatorState inv, Dictionary<string, int>? towardTarget = null)
+    {
+        if (IsSpirit(inv) || !Active(inv))
+        {
+            return;
+        }
+        int here = towardTarget == null ? 0 : Nav.Hops(towardTarget, inv.Space);
+        foreach (var edge in _g.Graph.Def.Edges.Where(e => e.A == inv.Space || e.B == inv.Space))
+        {
+            string door = edge.A == inv.Space ? edge.B : edge.A;
+            if (_g.Graph.Space(door).Kind != SpaceKind.Door ||
+                S.Overlay.DoorState(door) != DoorState.Open ||
+                S.Investigators.Any(o => !o.Dead && !o.Escaped && o.Space == door))
+            {
+                continue;
+            }
+            if (towardTarget != null && Nav.Hops(towardTarget, door) < here)
+            {
+                continue; // still ahead on the path — locking it would wall ourselves off
+            }
+            string captured = door;
+            _act.Try("lock-door", () => _g.LockDoor(captured));
+        }
     }
 
     private bool OpenBlockingDoor(InvestigatorState inv)
