@@ -1086,9 +1086,11 @@ public sealed partial class InvestigatorTeam
     /// <summary>Reveal a Zone's Evidence, collect it, walk it to a turn-in feature.</summary>
     private Plan? EvidencePlan(InvestigatorState inv)
     {
-        // Pull toward the partner only when the danger is local: a Shadow token on the far side
-        // of the map should not stop four Investigators working four different Zones.
-        var buddy = Danger(inv.Space) > 0 ? Buddy(inv) : null;
+        // Once the Adversary has shown itself ANYWHERE, pairs drift toward shared ground —
+        // waiting for danger on your own doorstep meant the team never actually buddied up
+        // (playtest note 2026-08-31). Before first contact they still spread freely: with
+        // no information there is nothing to huddle against, only Zones to cover.
+        var buddy = _threatLevel > 0 ? Buddy(inv) : null;
 
         var ferry = FerryPlan(inv);
         if (ferry != null)
@@ -1231,7 +1233,11 @@ public sealed partial class InvestigatorTeam
 
     /// <summary>
     /// Closest candidate, with a pull toward the buddy's half of the board while the Adversary
-    /// is about: working the same area is what makes the buddy system affordable.
+    /// is about: working the same area is what makes the buddy system affordable. NEAR-ties
+    /// (within 2 hops of the best) are broken by the game's own dice instead of
+    /// alphabetically, so different games open with different assignments — every game
+    /// playing the identical opening was a real playtest complaint (2026-08-31). Sticky's
+    /// goal memory keeps whatever was rolled stable across turns.
     /// </summary>
     private string? Nearest(string from, IReadOnlyList<string> candidates, InvestigatorState? buddy = null)
     {
@@ -1241,8 +1247,7 @@ public sealed partial class InvestigatorTeam
         }
         var dist = CostFrom(from);
         var buddyDist = buddy == null ? null : Nav.From(_g, buddy.Space);
-        string? best = null;
-        long bestScore = long.MaxValue;
+        var scored = new List<(string Space, long Score)>();
         foreach (string candidate in candidates.OrderBy(c => c, StringComparer.Ordinal))
         {
             int hops = Nav.Hops(dist, candidate);
@@ -1256,13 +1261,15 @@ public sealed partial class InvestigatorTeam
                 int fromBuddy = Nav.Hops(buddyDist, candidate);
                 score += fromBuddy == int.MaxValue ? 20 : Math.Max(0, fromBuddy - 4);
             }
-            if (score < bestScore)
-            {
-                bestScore = score;
-                best = candidate;
-            }
+            scored.Add((candidate, score));
         }
-        return best;
+        if (scored.Count == 0)
+        {
+            return null;
+        }
+        long best = scored.Min(s => s.Score);
+        var close = scored.Where(s => s.Score <= best + 4).Select(s => s.Space).ToList();
+        return close[_rng.Next(close.Count)];
     }
 
     // ---------- Objective drives ----------
