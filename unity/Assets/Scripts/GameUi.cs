@@ -794,17 +794,21 @@ namespace StiflingDark.Unity
                             ? "The lights here are already on."
                             : "These lights burned out (Faltering) — they cannot be turned on again.");
             }
-            if (view.Evidence.Any(e => e.Space == me.Space))
+            // Spirits acquire nothing new — no pickup rows (ruling 2026-08-31).
+            bool canPickUp = me.SpiritId == null;
+            if (canPickUp && view.Evidence.Any(e => e.Space == me.Space))
             {
                 Row("Pickup evidence", () => Send(new PickUpEvidenceCommand()), active);
             }
-            if (view.MedicalItemSpaces.Contains(me.Space))
+            if (canPickUp && view.MedicalItemSpaces.Contains(me.Space))
             {
                 Row("Pickup medical item", () => Send(new PickUpMedicalItemCommand()), active);
             }
             // A discovered POI token is an item stash: 2 General Items, or the Cursed Item on
             // the purple front.
-            foreach (var poi in view.PoiTokens.Where(p => p.TokenSpace == me.Space && !p.Collected))
+            foreach (var poi in canPickUp
+                ? view.PoiTokens.Where(p => p.TokenSpace == me.Space && !p.Collected)
+                : Enumerable.Empty<PlayerView.PoiInfo>())
             {
                 string label = poi.CursedFront == true
                     ? "Pickup Cursed Item"
@@ -830,11 +834,14 @@ namespace StiflingDark.Unity
                 }
             }
             // Turn-in only where the scenario's feature stands (Computer at the Sawmill,
-            // Ticket Booth at the park) — the engine refuses elsewhere, so no button.
+            // Ticket Booth at the park) and never for a Spirit (ruling: a Spirit's Evidence
+            // only leaves via a living Investigator Trading with it) — the engine refuses
+            // both, so no button.
             var turnInKind = view.ScenarioId == "amusement-park"
                 ? SpaceKind.TicketBooth
                 : SpaceKind.Computer;
-            if (me.EvidenceCarried.Count > 0 && mySpace != null && mySpace.Kind == turnInKind)
+            if (me.EvidenceCarried.Count > 0 && me.SpiritId == null && mySpace != null &&
+                mySpace.Kind == turnInKind)
             {
                 Row("Turn " + me.EvidenceCarried.Count + " in evidence",
                     () => ShowEvidenceTurnIn(me), active);

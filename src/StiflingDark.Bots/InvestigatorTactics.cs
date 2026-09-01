@@ -469,9 +469,10 @@ public sealed partial class InvestigatorTeam
         {
             return null;
         }
-        // A face-up Ergophobia bars the Involved Action for good: whatever this Investigator is
-        // carrying has to change hands or it never gets turned in.
-        bool mustPass = !CanTakeInvolved(inv);
+        // A face-up Ergophobia bars the Involved Action for good, and a Spirit may never turn
+        // in at all (designer ruling 2026-08-31): whatever this Investigator is carrying has
+        // to change hands or it never gets turned in.
+        bool mustPass = !CanTakeInvolved(inv) || IsSpirit(inv);
         if (!mustPass && (_runner == null || _runner == inv.DefId))
         {
             return null;

@@ -50,6 +50,13 @@ public sealed class BotTable : IAnomalySink
         set => _actor.TraceRefusals = value;
     }
 
+    /// <summary>Probe hook: the label of every engine-accepted bot action, in order.</summary>
+    public Action<string>? TraceActions
+    {
+        get => _actor.TraceActions;
+        set => _actor.TraceActions = value;
+    }
+
     public BotTable(Game game, ulong seed, IEnumerable<string> botInvestigatorIds,
         bool botAdversary, IEnumerable<string> startSpaces)
     {

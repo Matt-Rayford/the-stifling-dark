@@ -22,6 +22,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\StiflingDark.Engine\StiflingDark.Engine.csproj" />
+    <ProjectReference Include="..\..\src\StiflingDark.Bots\StiflingDark.Bots.csproj" />
   </ItemGroup>
 
 </Project>

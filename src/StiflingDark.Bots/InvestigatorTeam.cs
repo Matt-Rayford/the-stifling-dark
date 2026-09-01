@@ -42,6 +42,9 @@ public sealed partial class InvestigatorTeam
 
     /// <summary>Space -> "how close the Adversary was last seen", from public Shadow/Noise tokens.</summary>
     private readonly Dictionary<string, int> _danger = new();
+    /// <summary>Where every hidden hostile figure COULD be, from public information only —
+    /// beams score extra for biting into this set (reveal it or rule it out, both pay).</summary>
+    private readonly AdversaryBelief _belief;
     /// <summary>Where the Adversary was last KNOWN to be (Shadow tokens, revealed figures),
     /// rebuilt with the danger map each round — the beams aim back along these.</summary>
     private List<string> _threatSources = new();
@@ -66,6 +69,7 @@ public sealed partial class InvestigatorTeam
         _act = act;
         _rng = rng;
         _sink = sink;
+        _belief = new AdversaryBelief(g);
         _turnInKind = g.State.ScenarioId == "sawmill" ? SpaceKind.Computer : SpaceKind.TicketBooth;
         _turnInSpaces = g.Graph.Def.Spaces.Where(s => s.Kind == _turnInKind)
             .Select(s => s.Id).OrderBy(id => id, StringComparer.Ordinal).ToList();
@@ -117,6 +121,7 @@ public sealed partial class InvestigatorTeam
             _woundsAtRoundStart[inv.DefId] = inv.Wounds.Count;
         }
         RebuildDanger();
+        _belief.Update();
     }
 
     /// <summary>
@@ -280,7 +285,8 @@ public sealed partial class InvestigatorTeam
         }
         ResolveWindow(inv);
 
-        if (S.Evidence.Any(kv => kv.Value.Revealed && kv.Value.Space == inv.Space))
+        // Spirits acquire nothing new: no Evidence, Medical, or POI pickups (designer ruling).
+        if (!IsSpirit(inv) && S.Evidence.Any(kv => kv.Value.Revealed && kv.Value.Space == inv.Space))
         {
             _act.Try("pick-up-evidence", () => _g.PickUpEvidence());
         }
@@ -288,7 +294,7 @@ public sealed partial class InvestigatorTeam
         {
             _act.Try("pick-up-medical", () => _g.PickUpMedicalItem());
         }
-        if (S.PoiTokens.Any(p => p.TokenSpace == inv.Space && p.Revealed && !p.Collected))
+        if (!IsSpirit(inv) && S.PoiTokens.Any(p => p.TokenSpace == inv.Space && p.Revealed && !p.Collected))
         {
             _act.Try("pick-up-poi", () => _g.PickUpPoiToken());
         }
@@ -385,10 +391,17 @@ public sealed partial class InvestigatorTeam
         int guard = 0;
         while (S.PendingWindowChoice && S.Phase != GamePhase.GameOver && guard++ < 4)
         {
-            // Wounds are lethal at 4; a stop-and-lose-Stamina keeps the body intact but ends
-            // movement — which is unplayable if the Window dropped you onto a teammate, because
-            // a turn may not end there and Movement is now locked.
-            bool stop = inv.Wounds.Count >= 1 && inv.Stamina >= 3 && !Occupied(inv, inv.Space);
+            // Designer ruling (2026-08-31): paying the Wound to keep moving is a LAST-RESORT
+            // mechanic — stop-and-lose-Stamina is the sensible play almost always. The
+            // exceptions: the Window dropped you onto a teammate (a turn may not end there,
+            // and stopping locks Movement — an unplayable wedge); an unhurt Investigator
+            // diving away from an Adversary that is right on top of them, where ending the
+            // turn here means being attacked; and a Stamina so low that the stop's own
+            // Stamina loss lands on a track Wound icon — the Wound comes either way then,
+            // so keep the movement it buys.
+            bool mustKeepMoving = Occupied(inv, inv.Space);
+            bool desperateDive = inv.Wounds.Count == 0 && Danger(inv.Space) >= 3;
+            bool stop = !mustKeepMoving && !desperateDive && !StopWouldWound(inv);
             _act.Must("resolve-window", () => _g.ResolveWindow(stop));
         }
     }
@@ -444,11 +457,14 @@ public sealed partial class InvestigatorTeam
     /// </summary>
     private Dictionary<string, int> CostTo(string goal, InvestigatorState? forWhom = null) =>
         CostField(goal, toward: true, darkIsDim: forWhom != null && RoutesThroughDark(forWhom),
-            figure: FigureKindFor(forWhom));
+            figure: FigureKindFor(forWhom), windowPenalty: WindowPenaltyFor(forWhom));
 
     private Dictionary<string, int> CostFrom(string origin, InvestigatorState? forWhom = null) =>
         CostField(origin, toward: false, darkIsDim: forWhom != null && RoutesThroughDark(forWhom),
-            figure: FigureKindFor(forWhom));
+            figure: FigureKindFor(forWhom), windowPenalty: WindowPenaltyFor(forWhom));
+
+    private int WindowPenaltyFor(InvestigatorState? forWhom) =>
+        forWhom != null && StopWouldWound(forWhom) ? WindowPenaltyWhenStopWounds : WindowPenalty;
 
     /// <summary>Spirits glide through Locked Doors and Windows the living must route around;
     /// pricing a Spirit's route as an Investigator left one standing "cut off" one space from
@@ -456,10 +472,39 @@ public sealed partial class InvestigatorTeam
     private static FigureKind FigureKindFor(InvestigatorState? inv) =>
         inv != null && IsSpirit(inv) ? FigureKind.Spirit : FigureKind.Investigator;
 
-    private const int WindowPenalty = 2;
+    /// <summary>Route-planning price of a Window edge. High on purpose: crossing costs a
+    /// Wound or the rest of the turn plus Stamina, so a Window is only ever the right path
+    /// when it shortcuts a genuinely long way around (designer note 2026-08-31 — Mitchell
+    /// window-hopping himself to death was a real playtest loss). Higher still when this
+    /// Investigator's Stamina is low enough that even stopping costs a Wound.</summary>
+    private const int WindowPenalty = 25;
+    private const int WindowPenaltyWhenStopWounds = 30;
+
+    /// <summary>Would the stop-and-lose-Stamina choice drop onto a track Wound icon?</summary>
+    private bool StopWouldWound(InvestigatorState inv)
+    {
+        var track = _g.Db.Investigator(inv.DefId).StaminaTrack;
+        return inv.Stamina > 0 && track.WoundIconSpaces.Contains(inv.Stamina - 1);
+    }
+
+    private bool StepCrossesWindow(InvestigatorState inv, string to) =>
+        _g.Graph.TryStep(IsSpirit(inv) ? FigureKind.Spirit : FigureKind.Investigator,
+            inv.Space, to, S.Overlay)?.CrossesWindow == true;
+
+    /// <summary>A Door an Investigator can walk through after a free adjacent Open: Locked
+    /// (Open resets it) or Damaged (Open destroys it). False Doors never open.</summary>
+    private bool DoorOpenableInPassing(string space)
+    {
+        if (_g.Graph.Space(space).Kind != SpaceKind.Door)
+        {
+            return false;
+        }
+        var state = S.Overlay.DoorState(space);
+        return state == DoorState.Locked || state == DoorState.Damaged;
+    }
 
     private Dictionary<string, int> CostField(string root, bool toward, bool darkIsDim = false,
-        FigureKind figure = FigureKind.Investigator)
+        FigureKind figure = FigureKind.Investigator, int windowPenalty = WindowPenalty)
     {
         var best = new Dictionary<string, int> { [root] = 0 };
         var settled = new HashSet<string>();
@@ -482,17 +527,32 @@ public sealed partial class InvestigatorTeam
                 var step = toward
                     ? _g.Graph.TryStep(figure, other, current, S.Overlay)
                     : _g.Graph.TryStep(figure, current, other, S.Overlay);
-                if (step == null)
+                string entered = toward ? current : other;
+                int stepCost;
+                bool crossesWindow;
+                bool dark = _g.Graph.EffectiveLight(entered, S.Overlay) == LightLevel.Dark;
+                if (step != null)
+                {
+                    // Dylan treats up to 3 Dark spaces a turn as Dim, so route him through the
+                    // dark that everybody else has to walk around.
+                    stepCost = darkIsDim && dark ? 1 : step.Cost;
+                    crossesWindow = step.CrossesWindow;
+                }
+                else if (figure == FigureKind.Investigator && DoorOpenableInPassing(entered))
+                {
+                    // A Locked or Damaged Door is one free adjacent Open away from passable.
+                    // Pricing it as a wall pushed routes out WINDOWS instead — the team locks
+                    // every door behind itself, so its own yesterday's locks walled off every
+                    // building (window-hopping playtest loss, 2026-08-31). Travel opens the
+                    // door in passing.
+                    stepCost = dark && !darkIsDim ? 2 : 1;
+                    crossesWindow = false;
+                }
+                else
                 {
                     continue;
                 }
-                // Dylan treats up to 3 Dark spaces a turn as Dim, so route him through the dark
-                // that everybody else has to walk around.
-                string entered = toward ? current : other;
-                int stepCost = darkIsDim && _g.Graph.EffectiveLight(entered, S.Overlay) == LightLevel.Dark
-                    ? 1
-                    : step.Cost;
-                int candidate = cost + stepCost + (step.CrossesWindow ? WindowPenalty : 0);
+                int candidate = cost + stepCost + (crossesWindow ? windowPenalty : 0);
                 if (!best.TryGetValue(other, out int existing) || candidate < existing)
                 {
                     best[other] = candidate;
@@ -532,6 +592,14 @@ public sealed partial class InvestigatorTeam
             // never take a step onto an occupied space that would also exhaust the MP pool.
             var options = Nav.Neighbors(_g, inv.Space)
                 .Where(n => Nav.Hops(dist, n) < here)
+                // A Window is never a SHORTCUT, only a last resort (designer ruling
+                // 2026-08-31): the cost field prices windowed routes into near-irrelevance,
+                // but this greedy stepper only compares field values — and a Window edge
+                // joins a far-from-goal outdoor space straight to a near-goal indoor one,
+                // so it must be barred whenever any windowless step still makes progress.
+                .Where(n => !StepCrossesWindow(inv, n) ||
+                            !Nav.Neighbors(_g, inv.Space).Any(o =>
+                                Nav.Hops(dist, o) < here && !StepCrossesWindow(inv, o)))
                 // Leave enough MP to peel off again — a Dark step out costs 2.
                 .Where(n => !Occupied(inv, n) || inv.MpRemaining >= StepCost(n) + 2)
                 .OrderBy(n => Nav.Hops(dist, n))
@@ -548,6 +616,15 @@ public sealed partial class InvestigatorTeam
             {
                 string to = next;
                 if (_act.Try("move", () => _g.MoveStep(to)))
+                {
+                    moved = true;
+                    break;
+                }
+                // The step was refused and the way is a Door the team shut earlier: opening
+                // it is a free adjacent interact, so open in passing and step through.
+                if (DoorOpenableInPassing(to) &&
+                    _act.Try("open-door", () => _g.OpenDoor(to)) &&
+                    _act.Try("move", () => _g.MoveStep(to)))
                 {
                     moved = true;
                     break;
@@ -805,6 +882,12 @@ public sealed partial class InvestigatorTeam
         /// and none of the always-on forms are in play) — defensive cover is worthless
         /// this round, so its score contributions are zeroed.</summary>
         public bool AttackImpossible;
+        /// <summary>Where a hidden hostile figure could be (the team's possibility set) and
+        /// what one lit space of it is worth. Lighting these spaces pays either way: the
+        /// figure is Revealed, or a chunk of the cloud is ruled out. The weight climbs
+        /// steeply as the cloud shrinks — a near-cornered figure is worth hunting.</summary>
+        public HashSet<string> Possible = new();
+        public double PruneWeight;
     }
 
     private BeamContext BuildBeamContext(InvestigatorState inv)
@@ -839,6 +922,12 @@ public sealed partial class InvestigatorTeam
         // around). Cover it and the attack path is lit — running away and then pointing the
         // beam the other way was a real playtest loss (designer note 2026-08-31).
         ctx.AttackImpossible = AttackImpossibleNextTurn();
+        // Worth is the FRACTION of the cloud a lit space eliminates, so a beam that eats a
+        // third of a small cloud outranks positional habits, while against a diffuse cloud
+        // the term is a mild tiebreak toward informative angles. Capped below MustLight —
+        // even a fully cornered figure never outranks an objective that needs the light.
+        ctx.Possible = _belief.HiddenUnion();
+        ctx.PruneWeight = ctx.Possible.Count == 0 ? 0 : Math.Min(30, 60.0 / ctx.Possible.Count);
 
         if (S.Adversary.Revealed && !string.IsNullOrEmpty(S.Adversary.Space))
         {
@@ -900,6 +989,11 @@ public sealed partial class InvestigatorTeam
             if (ctx.MustLight.Contains(id))
             {
                 score += 40;
+            }
+            if (ctx.Possible.Contains(id))
+            {
+                // Information is offense: reveal the figure or shrink where it could hide.
+                score += ctx.PruneWeight;
             }
             if (ctx.Denial.Contains(id))
             {
@@ -1000,7 +1094,7 @@ public sealed partial class InvestigatorTeam
         // at risk another round (playtest 2026-08-31: dylan stood ON the Computer holding
         // Evidence and ran instead).
         if (_turnInSpaces.Contains(inv.Space) && inv.EvidenceCarried.Count > 0 &&
-            CanTakeInvolved(inv) && ShouldTurnInNow(inv))
+            !IsSpirit(inv) && CanTakeInvolved(inv) && ShouldTurnInNow(inv))
         {
             return TurnInHerePlan(inv);
         }
@@ -1176,9 +1270,10 @@ public sealed partial class InvestigatorTeam
     /// </summary>
     private Plan? CloseEvidenceGrab(InvestigatorState inv)
     {
-        if (S.Objective.SelectedEscapeCard != null)
+        // Spirits may not pick up Evidence (designer ruling 2026-08-31).
+        if (IsSpirit(inv) || S.Objective.SelectedEscapeCard != null)
         {
-            return null; // the Evidence economy is over
+            return null; // the Evidence economy is over, or this hand can't hold it
         }
         var costs = CostFrom(inv.Space, inv);
         string? token = S.Evidence.Where(kv => kv.Value.Revealed)
@@ -1210,7 +1305,8 @@ public sealed partial class InvestigatorTeam
             return ferry;
         }
 
-        if (inv.EvidenceCarried.Count > 0 && CanTakeInvolved(inv) && ShouldTurnInNow(inv))
+        if (inv.EvidenceCarried.Count > 0 && !IsSpirit(inv) && CanTakeInvolved(inv) &&
+            ShouldTurnInNow(inv))
         {
             string? feature = Sticky(inv, _turnInSpaces, buddy);
             if (feature != null)
@@ -1229,8 +1325,10 @@ public sealed partial class InvestigatorTeam
             }
         }
 
-        var revealed = S.Evidence.Where(kv => kv.Value.Revealed).Select(kv => kv.Value.Space)
-            .Where(s => !_claims.Contains(s)).ToList();
+        var revealed = IsSpirit(inv)
+            ? new List<string>()
+            : S.Evidence.Where(kv => kv.Value.Revealed).Select(kv => kv.Value.Space)
+                .Where(s => !_claims.Contains(s)).ToList();
         string? token = Sticky(inv, revealed, buddy);
         if (token != null)
         {
@@ -1271,8 +1369,10 @@ public sealed partial class InvestigatorTeam
             return new Plan { Space = staging, StopAt = 1, Label = "stage-for-evidence" };
         }
 
-        var poi = S.PoiTokens.Where(p => p.Revealed && !p.Collected && !_claims.Contains(p.TokenSpace))
-            .Select(p => p.TokenSpace).ToList();
+        var poi = IsSpirit(inv)
+            ? new List<string>()
+            : S.PoiTokens.Where(p => p.Revealed && !p.Collected && !_claims.Contains(p.TokenSpace))
+                .Select(p => p.TokenSpace).ToList();
         string? poiSpace = Sticky(inv, poi, buddy);
         if (poiSpace != null)
         {

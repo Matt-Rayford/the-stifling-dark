@@ -38,6 +38,9 @@ public sealed class Actor
     /// </summary>
     public Action? AfterAction { get; set; }
 
+    /// <summary>Probe: the label of every action the engine ACCEPTED, in order.</summary>
+    public Action<string>? TraceActions { get; set; }
+
     /// <summary>Probe: an InvalidOperationException just means "not legal right now".</summary>
     public bool Try(string label, Action action)
     {
@@ -45,6 +48,7 @@ public sealed class Actor
         {
             action();
             Actions++;
+            TraceActions?.Invoke(label);
             AfterAction?.Invoke();
             return true;
         }
@@ -78,6 +82,7 @@ public sealed class Actor
         {
             action();
             Actions++;
+            TraceActions?.Invoke(label);
             AfterAction?.Invoke();
             return null;
         }
@@ -99,6 +104,7 @@ public sealed class Actor
         {
             action();
             Actions++;
+            TraceActions?.Invoke(label);
         }
         catch (Exception e)
         {

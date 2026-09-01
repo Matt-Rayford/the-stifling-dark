@@ -445,6 +445,9 @@ namespace StiflingDark.Engine.Core
         {
             var inv = ActiveInv();
             RequireNoPendingWindow();
+            // Designer ruling (2026-08-31): Spirits keep what they died holding but acquire
+            // nothing new — their inventory only moves by giving it away in a Trade.
+            RequireNotSpirit(inv, "pick up Evidence");
             string? zone = State.Evidence
                 .Where(kv => kv.Value.Space == inv.Space && kv.Value.Revealed)
                 .Select(kv => kv.Key)
@@ -549,6 +552,7 @@ namespace StiflingDark.Engine.Core
         {
             var inv = ActiveInv();
             RequireNoPendingWindow();
+            RequireNotSpirit(inv, "pick up Point of Interest tokens");
             RequireActionAllowed(inv, ActionPickUpPoi);
             var token = State.PoiTokens.FirstOrDefault(p => p.TokenSpace == inv.Space && p.Revealed && !p.Collected)
                 ?? throw new InvalidOperationException("No revealed POI token here.");
