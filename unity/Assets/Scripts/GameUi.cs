@@ -829,7 +829,12 @@ namespace StiflingDark.Unity
                         active);
                 }
             }
-            if (me.EvidenceCarried.Count > 0)
+            // Turn-in only where the scenario's feature stands (Computer at the Sawmill,
+            // Ticket Booth at the park) — the engine refuses elsewhere, so no button.
+            var turnInKind = view.ScenarioId == "amusement-park"
+                ? SpaceKind.TicketBooth
+                : SpaceKind.Computer;
+            if (me.EvidenceCarried.Count > 0 && mySpace != null && mySpace.Kind == turnInKind)
             {
                 Row("Turn " + me.EvidenceCarried.Count + " in evidence",
                     () => ShowEvidenceTurnIn(me), active);
@@ -1140,45 +1145,64 @@ namespace StiflingDark.Unity
             }
         }
 
+        /// <summary>
+        /// ONE Involved Action turns in EVERYTHING carried, all rewards collected (designer
+        /// 2026-08-31 — the old picker sent one token and ended the turn). The wizard walks
+        /// the carried tokens: each picks its reward (arguments included), and the single
+        /// command with the whole list goes out at the end. Cancelling anywhere abandons
+        /// the lot — nothing is sent, the turn is untouched.
+        /// </summary>
         private void ShowEvidenceTurnIn(PlayerView.InvestigatorPanel me)
         {
-            // One token at a time keeps the picker honest: the command takes a list, but a
-            // reward with an argument needs its own question.
-            var options = new List<PromptOption>();
-            foreach (string zone in me.EvidenceCarried)
+            CollectTurnIns(me.EvidenceCarried.ToList(), new List<EvidenceTurnIn>());
+        }
+
+        private void CollectTurnIns(List<string> remaining, List<EvidenceTurnIn> chosen)
+        {
+            if (remaining.Count == 0)
             {
-                string carried = zone;
-                foreach (var reward in Describe.EvidenceRewards)
-                {
-                    var captured = reward;
-                    options.Add(new PromptOption(
-                        _board.ZoneName(carried) + " Evidence  →  " + captured.Label,
-                        () => TurnIn(carried, captured)));
-                }
+                Send(new TurnInEvidenceCommand { TurnIns = chosen });
+                return;
             }
-            _prompt.Show("turnin:" + me.EvidenceCarried.Count, "Turn in Evidence",
-                "This is an Involved Action: it ends your turn. Standing on the scenario's " +
-                "turn-in feature is required (Computer at the Sawmill, Ticket Booth at the park).",
+            string zone = remaining[0];
+            var rest = remaining.Skip(1).ToList();
+            var options = new List<PromptOption>();
+            foreach (var reward in Describe.EvidenceRewards)
+            {
+                var captured = reward;
+                options.Add(new PromptOption(captured.Label, () =>
+                    ChooseRewardArg(captured, arg =>
+                    {
+                        chosen.Add(new EvidenceTurnIn
+                        {
+                            Zone = zone,
+                            Reward = captured.Reward,
+                            Arg = arg,
+                        });
+                        CollectTurnIns(rest, chosen);
+                    })));
+            }
+            // The reward menu is identical no matter whose Zone the token came from, so the
+            // steps are numbered plainly and the zones are consumed behind the scenes.
+            int step = chosen.Count + 1;
+            int total = chosen.Count + remaining.Count;
+            _prompt.Show("turnin:" + zone + ":" + step,
+                "Turn in Evidence — reward " + step + " of " + total,
+                "One Involved Action turns in everything you carry; pick a reward for each " +
+                "token. Turning in ends your turn.",
                 options, () => { });
         }
 
-        private void TurnIn(string zone, (string Reward, string Label, Describe.RewardArg Arg) reward)
+        private void ChooseRewardArg(
+            (string Reward, string Label, Describe.RewardArg Arg) reward, Action<string> done)
         {
-            void Post(string arg) => Send(new TurnInEvidenceCommand
-            {
-                TurnIns = new List<EvidenceTurnIn>
-                {
-                    new EvidenceTurnIn { Zone = zone, Reward = reward.Reward, Arg = arg },
-                },
-            });
-
             switch (reward.Arg)
             {
                 case Describe.RewardArg.PoiSpace:
                 {
                     var options = View.PoiTokens
                         .Select(p => new PromptOption("Point of Interest at " + p.PoiSpace,
-                            () => Post(p.PoiSpace)))
+                            () => done(p.PoiSpace)))
                         .ToList();
                     _prompt.Show("reward-poi", "Reveal which Point of Interest?", null, options,
                         () => { });
@@ -1187,7 +1211,7 @@ namespace StiflingDark.Unity
                 case Describe.RewardArg.MirrorColor:
                 {
                     var options = new[] { "red", "green", "blue" }
-                        .Select(c => new PromptOption(c, () => Post(c))).ToList();
+                        .Select(c => new PromptOption(c, () => done(c))).ToList();
                     _prompt.Show("reward-mirror", "Which Mirror Maze color is open?", null, options,
                         () => { });
                     break;
@@ -1196,14 +1220,14 @@ namespace StiflingDark.Unity
                 {
                     var options = View.Investigators
                         .Select(i => new PromptOption(_describe.Investigator(i.DefId),
-                            () => Post(i.DefId)))
+                            () => done(i.DefId)))
                         .ToList();
                     _prompt.Show("reward-inv", "Give the Major Ability token to whom?", null, options,
                         () => { });
                     break;
                 }
                 default:
-                    Post(null);
+                    done(null);
                     break;
             }
         }

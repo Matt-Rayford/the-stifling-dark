@@ -325,6 +325,10 @@ namespace StiflingDark.Unity
         {
             _view = view;
             _myInvestigatorId = myInvestigatorId ?? "";
+            if (view != null)
+            {
+                _board.UpdateDoorStates(view.Overlay.DoorStates);
+            }
             _light.SetLight(view);
             UiKit.Clear(_dynamic);
             _notes.Clear();

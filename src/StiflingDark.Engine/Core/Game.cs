@@ -50,7 +50,8 @@ namespace StiflingDark.Engine.Core
             var mask = db.LosMask(state.ScenarioId);
             if (mask != null)
             {
-                _losBlocker = mask;
+                // Closed doors re-wall their strip live (the raster keeps door spaces clear).
+                _losBlocker = new DoorAwareLosBlocker(mask, Graph, () => State.Overlay.DoorStates);
             }
         }
 

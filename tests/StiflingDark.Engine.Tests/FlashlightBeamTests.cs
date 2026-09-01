@@ -97,5 +97,25 @@ namespace StiflingDark.Engine.Tests
             var bright = Beam.ComputeBright(graph, "171", 3.39, mask);
             Assert.Contains("O-10", bright);
         }
+
+        /// <summary>Designer ruling (2026-08-31): a Locked (or Damaged) Door blocks sight
+        /// across its whole strip like a wall — the exact beam that reaches O-10 through
+        /// the OPEN door O-11 above goes dark once that door is Locked. Destroyed doors
+        /// stay transparent.</summary>
+        [Fact]
+        public void A_locked_door_walls_off_the_sight_line_through_it()
+        {
+            var graph = Sawmill;
+            var mask = TestData.Db.LosMask("sawmill");
+            Assert.NotNull(mask);
+            var doors = new Dictionary<string, DoorState>();
+            var blocker = new DoorAwareLosBlocker(mask!, graph, () => doors);
+
+            doors["O-11"] = DoorState.Locked;
+            Assert.DoesNotContain("O-10", Beam.ComputeBright(graph, "171", 3.39, blocker));
+
+            doors["O-11"] = DoorState.Destroyed;
+            Assert.Contains("O-10", Beam.ComputeBright(graph, "171", 3.39, blocker));
+        }
     }
 }

@@ -296,7 +296,17 @@ public sealed partial class InvestigatorTeam
         if (space.Kind == SpaceKind.LightSwitch && space.Zone != null &&
             !S.FalteringZones.Contains(space.Zone) && !S.Overlay.BrightZones.Contains(space.Zone))
         {
-            _act.Try("light-switch", () => _g.ActivateLightSwitch());
+            // The lights burn for one round only, so a flip must be worth spending: either
+            // there is movement left to work the lit Zone right now, or a HIDDEN adversary
+            // is about and the bright Zone doubles as armor through its turn. Otherwise
+            // stand on the switch and flip at the START of the next turn with full MP
+            // (designer note 2026-08-31: flipping after spending all movement wastes it).
+            bool canExploit = inv.MpRemaining >= 2;
+            bool defensive = !S.Adversary.Revealed && _threatLevel > 0;
+            if (canExploit || defensive)
+            {
+                _act.Try("light-switch", () => _g.ActivateLightSwitch());
+            }
         }
         foreach (string token in CarriableTokensAt(inv.Space))
         {
@@ -514,6 +524,9 @@ public sealed partial class InvestigatorTeam
                 .Where(n => !Occupied(inv, n) || inv.MpRemaining >= StepCost(n) + 2)
                 .OrderBy(n => Nav.Hops(dist, n))
                 .ThenBy(n => Danger(n))
+                // Free detour: between otherwise-equal steps, walk OVER revealed Evidence —
+                // FreeInteracts scoops it in passing.
+                .ThenBy(n => S.Evidence.Any(kv => kv.Value.Revealed && kv.Value.Space == n) ? 0 : 1)
                 .ThenBy(n => Occupied(inv, n) ? 1 : 0)
                 .ThenBy(n => _g.Graph.EffectiveLight(n, S.Overlay) == LightLevel.Dark ? 1 : 0)
                 .ThenBy(n => n, StringComparer.Ordinal)
@@ -640,12 +653,11 @@ public sealed partial class InvestigatorTeam
         {
             var (angle, score) = BestFlashlight(inv);
             double bestAngle = angle;
-            // With the adversary already Revealed nobody needs cover (a Revealed figure
-            // cannot Attack next turn), so a beam must EARN its Charge by boxing the
-            // figure out of the shadows or lighting an objective — a merely-decent
-            // placement wastes the Charge the auto-recharge would have banked instead
-            // (designer note 2026-08-31: "he was not helping anyone... a better play").
-            double bar = S.Adversary.Revealed ? 30 : 0;
+            // With nothing hostile able to Attack next turn nobody needs cover, so a beam
+            // must EARN its Charge by boxing the Revealed figure out of the shadows or
+            // lighting an objective — a merely-decent placement wastes the Charge the
+            // auto-recharge would have banked instead (designer notes 2026-08-31).
+            double bar = AttackImpossibleNextTurn() ? 30 : 0;
             if (score > bar && _act.Try("place-flashlight", () => _g.PlaceFlashlight(bestAngle)))
             {
                 _beamedThisRound.Add(inv.DefId);
@@ -777,6 +789,10 @@ public sealed partial class InvestigatorTeam
         /// figure cannot Attack next turn, so the beam's job becomes denying it the
         /// Dim/Dark it needs to Disappear back into.</summary>
         public HashSet<string> Denial = new();
+        /// <summary>No hostile figure can Attack next turn (everything hostile is Revealed
+        /// and none of the always-on forms are in play) — defensive cover is worthless
+        /// this round, so its score contributions are zeroed.</summary>
+        public bool AttackImpossible;
     }
 
     private BeamContext BuildBeamContext(InvestigatorState inv)
@@ -810,6 +826,8 @@ public sealed partial class InvestigatorTeam
         // Investigator (movement distances, so a Locked door genuinely forces the long way
         // around). Cover it and the attack path is lit — running away and then pointing the
         // beam the other way was a real playtest loss (designer note 2026-08-31).
+        ctx.AttackImpossible = AttackImpossibleNextTurn();
+
         if (S.Adversary.Revealed && !string.IsNullOrEmpty(S.Adversary.Space))
         {
             // Everywhere the Revealed figure could plausibly slink to and Disappear
@@ -871,32 +889,39 @@ public sealed partial class InvestigatorTeam
             {
                 score += 40;
             }
-            if (ctx.ThreatApproach.Contains(id))
-            {
-                // The strongest positional pull short of MustLight: the beam belongs between
-                // this Investigator and where the Adversary was last seen.
-                score += ctx.Threatened ? 16 : 6;
-            }
             if (ctx.Denial.Contains(id))
             {
                 score += 10;
             }
-            if (ctx.Entrances.Contains(id))
+            // Defensive cover is worth NOTHING for a round in which nothing hostile can
+            // Attack — a wasted-Charge alley beam with the Butcher revealed across the map
+            // was a real playtest complaint (2026-08-31).
+            if (!ctx.AttackImpossible)
             {
-                score += ctx.Threatened ? 14 : 2;
-            }
-            if (ctx.GuardRing.Contains(id))
-            {
-                score += ctx.Threatened ? 12 : 2;
-            }
-            if (ctx.Lanes.Contains(id))
-            {
-                score += ctx.Threatened ? 6 : 2;
-            }
-            // Choke points: a beam down a corridor mouth walls off a whole approach.
-            if (_degree.TryGetValue(id, out int degree) && degree <= 2 && Nav.Hops(ctx.Near, id) <= 3)
-            {
-                score += ctx.Threatened ? 4 : 1;
+                if (ctx.ThreatApproach.Contains(id))
+                {
+                    // The strongest positional pull short of MustLight: the beam belongs
+                    // between this Investigator and where the Adversary was last seen.
+                    score += ctx.Threatened ? 16 : 6;
+                }
+                if (ctx.Entrances.Contains(id))
+                {
+                    score += ctx.Threatened ? 14 : 2;
+                }
+                if (ctx.GuardRing.Contains(id))
+                {
+                    score += ctx.Threatened ? 12 : 2;
+                }
+                if (ctx.Lanes.Contains(id))
+                {
+                    score += ctx.Threatened ? 6 : 2;
+                }
+                // Choke points: a beam down a corridor mouth walls off a whole approach.
+                if (_degree.TryGetValue(id, out int degree) && degree <= 2 &&
+                    Nav.Hops(ctx.Near, id) <= 3)
+                {
+                    score += ctx.Threatened ? 4 : 1;
+                }
             }
             string? zone = _g.Graph.Space(id).Zone;
             if (zone != null && ctx.DarkZones.Contains(zone))
@@ -1071,6 +1096,19 @@ public sealed partial class InvestigatorTeam
     }
 
     /// <summary>Pair Investigators off in seat order: 0 with 1, 2 with 3.</summary>
+    private int AdvCounter(string key) =>
+        S.Adversary.Counters.TryGetValue(key, out int value) ? value : 0;
+
+    /// <summary>
+    /// A figure that BEGINS its turn Revealed may not Attack — but the Enraged Horror and
+    /// Corporeal Mor'gonnod attack regardless, and any hidden Cultist is still an unseen
+    /// knife. Only without all of those is the other side genuinely disarmed for a round.
+    /// </summary>
+    private bool AttackImpossibleNextTurn() =>
+        S.Adversary.Revealed &&
+        AdvCounter("enraged") != 1 && AdvCounter("corporeal") != 1 &&
+        !S.Adversary.Figures.Any(f => f.Alive && !f.Revealed);
+
     private InvestigatorState? Buddy(InvestigatorState inv)
     {
         var alive = Alive;

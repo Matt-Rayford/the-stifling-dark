@@ -430,7 +430,7 @@ namespace StiflingDark.Unity
         public static string EvidenceToken(string scenarioId) =>
             scenarioId == "amusement-park" ? "amusement-park/Evidence.png" : "sawmill/Evidence.png";
 
-        public const string PoiBack = "general-items/Point-of-Interest-Back.png";
+        public const string PoiBack = "other/Point-of-Interest-Back.png";
         public const string ItemFront = "general-items/Generic-Item-Front.png";
         public const string CursedFront = "cursed-items/Generic-Cursed-Item-Front.png";
         public const string MedicalBack = "other/Medical-Item-Back.png";
