@@ -422,8 +422,9 @@ public sealed partial class InvestigatorTeam
         }
         // Batching only pays when the gate is bigger than the party: if the team already holds
         // enough tokens between them, everybody cashing in their own is strictly faster than
-        // funnelling them through one runner.
-        if (Alive.Sum(i => i.EvidenceCarried.Count) >= needed)
+        // funnelling them through one runner. Spirits count — they carry and turn in too.
+        if (S.Investigators.Where(i => (!i.Dead || i.SpiritId != null) && !i.Escaped)
+                .Sum(i => i.EvidenceCarried.Count) >= needed)
         {
             return true;
         }
@@ -523,7 +524,10 @@ public sealed partial class InvestigatorTeam
     /// </summary>
     private Plan? ScreenPlan(InvestigatorState inv)
     {
-        if (IsSpirit(inv) || inv.Wounds.Count > 1 || _threatLevel == 0)
+        // A carrier never screens: their death loses the Evidence too, and the batch belongs
+        // at a Computer, not between the Adversary and a casualty.
+        if (IsSpirit(inv) || inv.Wounds.Count > 1 || _threatLevel == 0 ||
+            inv.EvidenceCarried.Count > 0)
         {
             return null;
         }

@@ -443,14 +443,23 @@ public sealed partial class InvestigatorTeam
     /// what it actually spends, which is worth roughly a fifth of the team's mileage over a game.
     /// </summary>
     private Dictionary<string, int> CostTo(string goal, InvestigatorState? forWhom = null) =>
-        CostField(goal, toward: true, darkIsDim: forWhom != null && RoutesThroughDark(forWhom));
+        CostField(goal, toward: true, darkIsDim: forWhom != null && RoutesThroughDark(forWhom),
+            figure: FigureKindFor(forWhom));
 
     private Dictionary<string, int> CostFrom(string origin, InvestigatorState? forWhom = null) =>
-        CostField(origin, toward: false, darkIsDim: forWhom != null && RoutesThroughDark(forWhom));
+        CostField(origin, toward: false, darkIsDim: forWhom != null && RoutesThroughDark(forWhom),
+            figure: FigureKindFor(forWhom));
+
+    /// <summary>Spirits glide through Locked Doors and Windows the living must route around;
+    /// pricing a Spirit's route as an Investigator left one standing "cut off" one space from
+    /// a Computer for the rest of a game (playtest 2026-08-31).</summary>
+    private static FigureKind FigureKindFor(InvestigatorState? inv) =>
+        inv != null && IsSpirit(inv) ? FigureKind.Spirit : FigureKind.Investigator;
 
     private const int WindowPenalty = 2;
 
-    private Dictionary<string, int> CostField(string root, bool toward, bool darkIsDim = false)
+    private Dictionary<string, int> CostField(string root, bool toward, bool darkIsDim = false,
+        FigureKind figure = FigureKind.Investigator)
     {
         var best = new Dictionary<string, int> { [root] = 0 };
         var settled = new HashSet<string>();
@@ -471,8 +480,8 @@ public sealed partial class InvestigatorTeam
                 // "toward": the field holds the cost of walking from `other` to the root, so the
                 // step being priced is other -> current. Otherwise it is current -> other.
                 var step = toward
-                    ? _g.Graph.TryStep(FigureKind.Investigator, other, current, S.Overlay)
-                    : _g.Graph.TryStep(FigureKind.Investigator, current, other, S.Overlay);
+                    ? _g.Graph.TryStep(figure, other, current, S.Overlay)
+                    : _g.Graph.TryStep(figure, current, other, S.Overlay);
                 if (step == null)
                 {
                     continue;
@@ -507,7 +516,10 @@ public sealed partial class InvestigatorTeam
         var dist = CostTo(plan.Space, inv);
         for (int guard = 0; guard < 40; guard++)
         {
-            if (!Active(inv) || inv.Dead || inv.MovementLocked || inv.MpRemaining <= 0)
+            // A Spirit is Dead by definition but very much still walks; the Dead check is only
+            // for an Investigator killed mid-turn (a Window Wound). Without the exception every
+            // Spirit planned moves and never took one (playtest 2026-08-31).
+            if (!Active(inv) || (inv.Dead && !IsSpirit(inv)) || inv.MovementLocked || inv.MpRemaining <= 0)
             {
                 return;
             }
@@ -983,10 +995,27 @@ public sealed partial class InvestigatorTeam
 
     private Plan? ChoosePlan(InvestigatorState inv)
     {
+        // Already standing on the feature with a batch worth banking: bank it before anything
+        // else. Turn-in ends the turn, so fleeing first is really choosing to keep the tokens
+        // at risk another round (playtest 2026-08-31: dylan stood ON the Computer holding
+        // Evidence and ran instead).
+        if (_turnInSpaces.Contains(inv.Space) && inv.EvidenceCarried.Count > 0 &&
+            CanTakeInvolved(inv) && ShouldTurnInNow(inv))
+        {
+            return TurnInHerePlan(inv);
+        }
         var flee = FleePlan(inv);
         if (flee != null)
         {
             return flee;
+        }
+        // A revealed token in arm's reach outranks screening and regrouping — and any claim a
+        // farther teammate staked on it (playtest 2026-08-31: Mitchell walked past one because
+        // its "owner" was half a map away).
+        var grab = CloseEvidenceGrab(inv);
+        if (grab != null)
+        {
+            return grab;
         }
         var screen = ScreenPlan(inv);
         if (screen != null)
@@ -1040,9 +1069,17 @@ public sealed partial class InvestigatorTeam
         _fleeStreak[inv.DefId] = streak + 1;
         _regroupStreak[inv.DefId] = 0;
         var reachable = Nav.From(_g, inv.Space, Math.Max(1, inv.MpRemaining + 2));
+        // A carrier with a batch worth banking retreats TOWARD a Computer, so the flight
+        // rounds still make progress instead of drawing the game out.
+        var featureFields = inv.EvidenceCarried.Count > 0 && CanTakeInvolved(inv) && ShouldTurnInNow(inv)
+            ? _turnInSpaces.Select(f => Nav.From(_g, f)).ToList()
+            : null;
         string target = reachable.Keys
             .Where(k => !Occupied(inv, k))
             .OrderBy(Danger)
+            .ThenBy(k => featureFields == null
+                ? 0
+                : featureFields.Min(ff => Nav.Hops(ff, k)))
             .ThenByDescending(k => Nav.Hops(reachable, k))
             .ThenBy(k => k, StringComparer.Ordinal)
             .First();
@@ -1119,6 +1156,43 @@ public sealed partial class InvestigatorTeam
         }
         int partner = index % 2 == 0 ? index + 1 : index - 1;
         return partner >= 0 && partner < alive.Count ? alive[partner] : null;
+    }
+
+    private Plan TurnInHerePlan(InvestigatorState inv) => new()
+    {
+        Space = inv.Space,
+        Label = $"turn-in-{inv.EvidenceCarried.Count}-evidence",
+        Arrive = () =>
+        {
+            _g.TurnInEvidence(BuildTurnIns(inv.EvidenceCarried.ToList()));
+            return true;
+        },
+    };
+
+    /// <summary>
+    /// Revealed Evidence close enough to scoop up this turn, claimed or not. Claims stop the
+    /// team swapping errands across the map; they should never stop whoever is standing next
+    /// to a token from grabbing it.
+    /// </summary>
+    private Plan? CloseEvidenceGrab(InvestigatorState inv)
+    {
+        if (S.Objective.SelectedEscapeCard != null)
+        {
+            return null; // the Evidence economy is over
+        }
+        var costs = CostFrom(inv.Space, inv);
+        string? token = S.Evidence.Where(kv => kv.Value.Revealed)
+            .Select(kv => kv.Value.Space)
+            .Where(s => Nav.Hops(costs, s) <= 3)
+            .OrderBy(s => Nav.Hops(costs, s))
+            .ThenBy(s => s, StringComparer.Ordinal)
+            .FirstOrDefault();
+        if (token == null)
+        {
+            return null;
+        }
+        _claims.Add(token);
+        return new Plan { Space = token, Label = "collect-evidence" };
     }
 
     /// <summary>Reveal a Zone's Evidence, collect it, walk it to a turn-in feature.</summary>
@@ -1206,7 +1280,10 @@ public sealed partial class InvestigatorTeam
             return new Plan { Space = poiSpace, Label = "collect-poi" };
         }
 
-        string? medical = Sticky(inv, S.MedicalItemSpaces.Where(s => !_claims.Contains(s)).ToList(), buddy);
+        // Spirits may not pick up Medical Items (engine rule), so never send one to fetch.
+        string? medical = IsSpirit(inv)
+            ? null
+            : Sticky(inv, S.MedicalItemSpaces.Where(s => !_claims.Contains(s)).ToList(), buddy);
         if (medical != null)
         {
             _claims.Add(medical);

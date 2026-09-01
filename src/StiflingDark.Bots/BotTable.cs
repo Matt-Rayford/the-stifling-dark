@@ -36,6 +36,20 @@ public sealed class BotTable : IAnomalySink
         set => _actor.AfterAction = value;
     }
 
+    /// <summary>Probe hook: dumps each Investigator's chosen plan (see InvestigatorTeam.Trace).</summary>
+    public Action<string>? TraceInvestigators
+    {
+        get => _team.Trace;
+        set => _team.Trace = value;
+    }
+
+    /// <summary>Probe hook: every engine refusal the bots shrugged off (label, message).</summary>
+    public Action<string, string>? TraceRefusals
+    {
+        get => _actor.TraceRefusals;
+        set => _actor.TraceRefusals = value;
+    }
+
     public BotTable(Game game, ulong seed, IEnumerable<string> botInvestigatorIds,
         bool botAdversary, IEnumerable<string> startSpaces)
     {
