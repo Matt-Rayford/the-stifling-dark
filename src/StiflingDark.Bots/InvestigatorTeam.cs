@@ -637,6 +637,25 @@ public sealed partial class InvestigatorTeam
             ResolveWindow(inv);
             FreeInteracts(inv, afterTravel: false);
             LockDoorsInReach(inv, towardTarget: dist);
+
+            // A Light Switch flipped in passing can reveal Evidence right beside the route —
+            // but the plan was chosen before the reveal, so without this the flipper lights
+            // the room and walks straight out of it (Mitchell in the Garage, playtest
+            // 2026-08-31). Redirect the rest of the walk at any fresh token in easy reach;
+            // plans with an arrival action, and flights, are never hijacked.
+            if (plan.Arrive == null && plan.Label != "flee" && plan.Label != "collect-evidence")
+            {
+                var grab = CloseEvidenceGrab(inv);
+                if (grab != null && grab.Space != plan.Space)
+                {
+                    plan.Space = grab.Space;
+                    plan.Label = grab.Label;
+                    plan.StopAt = 0;
+                    _goal[inv.DefId] = grab.Space;
+                    hops = Nav.From(_g, plan.Space);
+                    dist = CostTo(plan.Space, inv);
+                }
+            }
         }
         StepOffOccupied(inv);
     }
@@ -909,7 +928,17 @@ public sealed partial class InvestigatorTeam
             ctx.GuardRing.Add(friend.Space);
             foreach (string neighbour in Nav.Neighbors(_g, friend.Space))
             {
-                ctx.GuardRing.Add(neighbour);
+                // A Window approach is its own alarm — the Adversary cannot cross without
+                // leaving a Noise token — so the guard beam belongs on the SILENT ways in
+                // (designer note 2026-08-31: a beam watched a Window while the open alley
+                // went dark).
+                var edge = _g.Graph.Edge(friend.Space, neighbour);
+                bool noisyWindow = edge != null && edge.Type == EdgeType.Window &&
+                                   !S.Overlay.OpenWindows.Contains(BoardOverlay.EdgeKey(edge.A, edge.B));
+                if (!noisyWindow)
+                {
+                    ctx.GuardRing.Add(neighbour);
+                }
             }
         }
         ctx.Lanes = ctx.Near.Keys.Where(k => Danger(k) > 0).ToHashSet();
@@ -985,7 +1014,11 @@ public sealed partial class InvestigatorTeam
             {
                 continue; // a teammate already covers it; do not pay twice for the same space
             }
-            score += 0.1;
+            // Raw coverage is a first-class goal, not a tiebreak: a cone burying a third of
+            // its template in a wall must lose to one that lights more of the board
+            // (designer note 2026-08-31 — Brielle wasted 30% of her light on a wall while
+            // small positional bonuses carried the angle).
+            score += 1.0;
             if (ctx.MustLight.Contains(id))
             {
                 score += 40;
@@ -1002,31 +1035,39 @@ public sealed partial class InvestigatorTeam
             // Defensive cover is worth NOTHING for a round in which nothing hostile can
             // Attack — a wasted-Charge alley beam with the Butcher revealed across the map
             // was a real playtest complaint (2026-08-31).
+            // Defensive cover pays ONLY while there is a threat to defend against: before
+            // first contact nobody can be attacked, so guarding habits must not outbid
+            // coverage and evidence work (designer note 2026-08-31 — Marci guarded a Window
+            // on round one instead of lighting the main alley).
             if (!ctx.AttackImpossible)
             {
+                // ThreatApproach is not a habit — it only exists when the Adversary's last
+                // KNOWN position is within 9 hops, so it keeps a floor even at low threat
+                // (fleeing and then pointing the beam the wrong way was a real loss).
                 if (ctx.ThreatApproach.Contains(id))
                 {
-                    // The strongest positional pull short of MustLight: the beam belongs
-                    // between this Investigator and where the Adversary was last seen.
                     score += ctx.Threatened ? 16 : 6;
                 }
-                if (ctx.Entrances.Contains(id))
+                if (ctx.Threatened)
                 {
-                    score += ctx.Threatened ? 14 : 2;
-                }
-                if (ctx.GuardRing.Contains(id))
-                {
-                    score += ctx.Threatened ? 12 : 2;
-                }
-                if (ctx.Lanes.Contains(id))
-                {
-                    score += ctx.Threatened ? 6 : 2;
-                }
-                // Choke points: a beam down a corridor mouth walls off a whole approach.
-                if (_degree.TryGetValue(id, out int degree) && degree <= 2 &&
-                    Nav.Hops(ctx.Near, id) <= 3)
-                {
-                    score += ctx.Threatened ? 4 : 1;
+                    if (ctx.Entrances.Contains(id))
+                    {
+                        score += 14;
+                    }
+                    if (ctx.GuardRing.Contains(id))
+                    {
+                        score += 12;
+                    }
+                    if (ctx.Lanes.Contains(id))
+                    {
+                        score += 6;
+                    }
+                    // Choke points: a beam down a corridor mouth walls off a whole approach.
+                    if (_degree.TryGetValue(id, out int degree) && degree <= 2 &&
+                        Nav.Hops(ctx.Near, id) <= 3)
+                    {
+                        score += 4;
+                    }
                 }
             }
             string? zone = _g.Graph.Space(id).Zone;
@@ -1275,10 +1316,13 @@ public sealed partial class InvestigatorTeam
         {
             return null; // the Evidence economy is over, or this hand can't hold it
         }
+        // Radius 4 in MOVEMENT COST: a just-lit Zone is Bright at 1 MP a space, so this spans
+        // the room whoever flipped the switch is standing in (Mitchell lit the Garage,
+        // revealed the token across the room, and left — playtest 2026-08-31).
         var costs = CostFrom(inv.Space, inv);
         string? token = S.Evidence.Where(kv => kv.Value.Revealed)
             .Select(kv => kv.Value.Space)
-            .Where(s => Nav.Hops(costs, s) <= 3)
+            .Where(s => Nav.Hops(costs, s) <= 4)
             .OrderBy(s => Nav.Hops(costs, s))
             .ThenBy(s => s, StringComparer.Ordinal)
             .FirstOrDefault();

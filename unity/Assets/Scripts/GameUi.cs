@@ -1411,10 +1411,20 @@ namespace StiflingDark.Unity
         }
 
         /// <summary>
+        /// Preview-only surcharge on a Window step: the route prefers a slightly longer
+        /// walk around, but a Window still previews (and walks) when it is genuinely
+        /// shorter or the only way — the walk then pauses at the crossing for the
+        /// Wound-or-Stamina prompt, which stays a manual, deliberate choice.
+        /// </summary>
+        private const int WindowPreviewSurcharge = 4;
+
+        /// <summary>
         /// Dijkstra over legal steps (light-based costs included) from the figure to
-        /// <paramref name="target"/>, cut down to what the remaining MP affords. Window
-        /// crossings are never auto-walked — the Wound-or-Stamina choice stays a manual,
-        /// deliberate step. Empty when no route exists or the first step is unaffordable.
+        /// <paramref name="target"/>, cut down to what the remaining MP affords. Routes
+        /// prefer to avoid Windows (see <see cref="WindowPreviewSurcharge"/>) but never
+        /// blank out because of one: the blue path shows across the frame, and the
+        /// auto-walk stops there for the crossing choice (ContinueWalk bails on
+        /// PendingWindowChoice). Empty when no route exists at all.
         /// </summary>
         private List<string> PathToward(string target, PlayerView.InvestigatorPanel me)
         {
@@ -1422,7 +1432,10 @@ namespace StiflingDark.Unity
             var kind = me.Dead && me.SpiritId != null
                 ? FigureKind.Spirit
                 : FigureKind.Investigator;
-            var dist = new Dictionary<string, int> { [me.Space] = 0 };
+            // prio orders the search (with the Window surcharge); mp is the honest MP spend
+            // used to trim the path to what this turn affords.
+            var prio = new Dictionary<string, int> { [me.Space] = 0 };
+            var mp = new Dictionary<string, int> { [me.Space] = 0 };
             var prev = new Dictionary<string, string>();
             var open = new List<string> { me.Space };
             var settled = new HashSet<string>();
@@ -1433,7 +1446,7 @@ namespace StiflingDark.Unity
                 string current = open[0];
                 foreach (string candidate in open)
                 {
-                    if (dist[candidate] < dist[current])
+                    if (prio[candidate] < prio[current])
                     {
                         current = candidate;
                     }
@@ -1449,14 +1462,12 @@ namespace StiflingDark.Unity
                 }
                 foreach (var step in _board.StepsFrom(current, kind, overlay))
                 {
-                    if (step.Value.CrossesWindow)
+                    int surcharge = step.Value.CrossesWindow ? WindowPreviewSurcharge : 0;
+                    int cost = prio[current] + step.Value.Cost + surcharge;
+                    if (!prio.TryGetValue(step.Key, out int known) || cost < known)
                     {
-                        continue;
-                    }
-                    int cost = dist[current] + step.Value.Cost;
-                    if (!dist.TryGetValue(step.Key, out int known) || cost < known)
-                    {
-                        dist[step.Key] = cost;
+                        prio[step.Key] = cost;
+                        mp[step.Key] = mp[current] + step.Value.Cost;
                         prev[step.Key] = current;
                         if (!settled.Contains(step.Key))
                         {
@@ -1475,7 +1486,7 @@ namespace StiflingDark.Unity
                 full.Add(space);
             }
             full.Reverse();
-            var affordable = full.Where(space => dist[space] <= me.MpRemaining).ToList();
+            var affordable = full.Where(space => mp[space] <= me.MpRemaining).ToList();
             return affordable;
         }
 

@@ -522,6 +522,26 @@ namespace StiflingDark.Unity
             {
                 return "sawmill/Truck.png";
             }
+            if (name.Contains("battery"))
+            {
+                return "sawmill/Car-Battery.png";
+            }
+            if (name.Contains("spark-plug"))
+            {
+                return "sawmill/Spark-Plug.png";
+            }
+            if (name.Contains("repair-kit"))
+            {
+                return "sawmill/Repair-Kit.png";
+            }
+            if (name.Contains("lockbox"))
+            {
+                return "sawmill/Lockbox.png";
+            }
+            if (name.Contains("angle-grinder"))
+            {
+                return "sawmill/Angle-Grinder.png";
+            }
             if (name.Contains("saw"))
             {
                 return "sawmill/Saw.png";
@@ -529,6 +549,18 @@ namespace StiflingDark.Unity
             if (name.Contains("duck"))
             {
                 return "amusement-park/Duck.png";
+            }
+            if (name.Contains("ammo"))
+            {
+                return "amusement-park/Ammo.png";
+            }
+            if (name.Contains("flare-gun"))
+            {
+                return "amusement-park/Flare-Gun.png";
+            }
+            if (name.Contains("ride-parts"))
+            {
+                return "amusement-park/Ride-Parts.png";
             }
             if (name.Contains("tunnel"))
             {
