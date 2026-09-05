@@ -10,11 +10,14 @@ namespace StiflingDark.Unity
     /// <summary>
     /// The carried Items as a hand of cards along the bottom edge, Lemonade Wars style:
     /// cards peek two-thirds up at rest, rise fully on hover, and a dwell (or Alt/Cmd for
-    /// instant) opens the big readable preview beside the cursor. Display only — using an
-    /// Item still goes through the side panel's buttons.
+    /// instant) opens the big readable preview beside the cursor. Clicking a card plays it
+    /// (see <see cref="UseRequested"/>); the side panel's buttons remain as a fallback.
     /// </summary>
     public sealed class HandView
     {
+        /// <summary>Raised with the card id when a hand card is clicked.</summary>
+        public System.Action<string> UseRequested;
+
         // The print card aspect (~0.655), sized to read as a hand rather than a wall.
         private const float CardWidth = 170f;
         private const float CardHeight = 260f;
@@ -49,7 +52,11 @@ namespace StiflingDark.Unity
         /// </summary>
         public void Render(PlayerView.InvestigatorPanel me, bool standDown)
         {
-            var items = me == null || standDown ? new List<string>() : me.Items ?? new List<string>();
+            // The engine keeps its Supply counters and standing markers in the same list as
+            // the real cards ("supply:…", "marker:…" — never a card id); those are not cards.
+            var items = me == null || standDown
+                ? new List<string>()
+                : (me.Items ?? new List<string>()).Where(id => !id.Contains(":")).ToList();
             string signature = string.Join(",", items) + "|" +
                 Mathf.RoundToInt(_host.rect.width);
             if (signature == _signature)
@@ -114,6 +121,11 @@ namespace StiflingDark.Unity
 
             var motion = frameGo.AddComponent<HandCardMotion>();
             motion.TargetY = restY;
+            UiKit.AddClick(frameGo, () =>
+            {
+                _preview.Hide();
+                UseRequested?.Invoke(cardId);
+            });
             UiKit.AddHover(frameGo,
                 () =>
                 {

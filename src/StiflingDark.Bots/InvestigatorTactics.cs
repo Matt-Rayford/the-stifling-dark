@@ -438,8 +438,17 @@ public sealed partial class InvestigatorTeam
         {
             return true;
         }
-        // Anything else still worth collecting before the trip?
         var costs = CostFrom(inv.Space, inv);
+        int nearestFeature = _turnInSpaces.Select(f => Nav.Hops(costs, f))
+            .DefaultIfEmpty(int.MaxValue).Min();
+        // A feature practically underfoot is banked in passing: the trip costs nothing and
+        // every token in hand at a wipe is a token lost (measured 2026-08-31: 103 of 514
+        // revealed tokens per 120 games died in carriers' hands).
+        if (nearestFeature <= 3)
+        {
+            return true;
+        }
+        // Anything else still worth collecting before the trip?
         var loose = S.Evidence.Where(kv => kv.Value.Revealed).Select(kv => kv.Value.Space).ToList();
         var switches = _g.Graph.Def.Spaces
             .Where(sp => sp.Kind == SpaceKind.LightSwitch && sp.Zone != null &&
@@ -448,14 +457,13 @@ public sealed partial class InvestigatorTeam
             .Select(sp => sp.Id);
         int nearestMore = loose.Concat(switches).Select(sp => Nav.Hops(costs, sp))
             .DefaultIfEmpty(int.MaxValue).Min();
-        int nearestFeature = _turnInSpaces.Select(f => Nav.Hops(costs, f))
-            .DefaultIfEmpty(int.MaxValue).Min();
         if (nearestMore == int.MaxValue)
         {
             return true;
         }
-        // Only detour for another token while the detour stays cheaper than a second whole trip.
-        return nearestMore > nearestFeature + 10;
+        // Only detour for another token while the detour stays cheaper than a second whole
+        // trip — how much cheaper depends on how hard the clock is pressing (per Adversary).
+        return nearestMore > nearestFeature + _playbook.TurnInDetourSlack;
     }
 
     /// <summary>

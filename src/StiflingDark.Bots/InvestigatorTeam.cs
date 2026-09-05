@@ -45,6 +45,8 @@ public sealed partial class InvestigatorTeam
     /// <summary>Where every hidden hostile figure COULD be, from public information only —
     /// beams score extra for biting into this set (reveal it or rule it out, both pay).</summary>
     private readonly AdversaryBelief _belief;
+    /// <summary>Posture against THIS Adversary (see <see cref="AdversaryPlaybook"/>).</summary>
+    private readonly AdversaryPlaybook _playbook;
     /// <summary>Where the Adversary was last KNOWN to be (Shadow tokens, revealed figures),
     /// rebuilt with the danger map each round — the beams aim back along these.</summary>
     private List<string> _threatSources = new();
@@ -70,6 +72,7 @@ public sealed partial class InvestigatorTeam
         _rng = rng;
         _sink = sink;
         _belief = new AdversaryBelief(g);
+        _playbook = AdversaryPlaybook.For(g.State.Adversary.DefId);
         _turnInKind = g.State.ScenarioId == "sawmill" ? SpaceKind.Computer : SpaceKind.TicketBooth;
         _turnInSpaces = g.Graph.Def.Spaces.Where(s => s.Kind == _turnInKind)
             .Select(s => s.Id).OrderBy(id => id, StringComparer.Ordinal).ToList();
@@ -122,6 +125,8 @@ public sealed partial class InvestigatorTeam
         }
         RebuildDanger();
         _belief.Update();
+        RecordSweeps();
+        AssignErrands();
     }
 
     /// <summary>
@@ -219,6 +224,7 @@ public sealed partial class InvestigatorTeam
     {
         _act.Must("begin-turn:" + invId, () => _g.BeginInvestigatorTurn(invId));
         var inv = S.Investigators.First(i => i.DefId == invId);
+        RecordSweeps();
 
         ResolveWindow(inv);
         FreeInteracts(inv, afterTravel: false);
@@ -757,9 +763,9 @@ public sealed partial class InvestigatorTeam
             _act.Try("spare-batteries", () => _g.UseItem("spare-batteries"));
             cost = Math.Max(0, cost - 1);
         }
-        if (WantsBeam(inv, cost))
+        var (angle, score) = BestFlashlight(inv);
+        if (WantsBeam(inv, cost, score))
         {
-            var (angle, score) = BestFlashlight(inv);
             double bestAngle = angle;
             // With nothing hostile able to Attack next turn nobody needs cover, so a beam
             // must EARN its Charge by boxing the Revealed figure out of the shadows or
@@ -770,6 +776,9 @@ public sealed partial class InvestigatorTeam
             {
                 _beamedThisRound.Add(inv.DefId);
                 SweepFlashlight(inv);
+                // Light clears at round end, so the round's last beam would otherwise never
+                // count toward the Evidence search.
+                RecordSweeps();
             }
         }
         // No beam means the automatic end-of-turn Charge tops us up — nothing to do here.
@@ -781,11 +790,18 @@ public sealed partial class InvestigatorTeam
     /// alternates by round and seat so half the group is always topping up and the other half
     /// is always lighting.
     /// </summary>
-    private bool WantsBeam(InvestigatorState inv, int cost)
+    private bool WantsBeam(InvestigatorState inv, int cost, double bestScore)
     {
         if (inv.Charge < cost)
         {
             return false;
+        }
+        // A beam that can find a token (or light an objective) is worth the last Charge
+        // outright — the Evidence search is the team's engine, and alternating by seat
+        // halved its pace for no safety gain before first contact.
+        if (bestScore >= 24)
+        {
+            return true;
         }
         // Flashlight swapping: if I lit the area last round and my partner can light it this
         // round, I top up instead, so the pair's cover never lapses and neither of us runs dry.
@@ -883,7 +899,10 @@ public sealed partial class InvestigatorTeam
     /// per placement decision so the fine sweep's ~60 candidate angles share one BFS.</summary>
     private sealed class BeamContext
     {
-        public HashSet<string> DarkZones = new();
+        /// <summary>Spaces a hidden Evidence token could still be on: every one lit is
+        /// either the token found or one fewer place to look (see InvestigatorErrands).</summary>
+        public HashSet<string> Search = new();
+        public double SearchWeight;
         public HashSet<string> MustLight = new();
         public bool Threatened;
         public Dictionary<string, int> Near = new();
@@ -913,7 +932,10 @@ public sealed partial class InvestigatorTeam
     {
         var ctx = new BeamContext
         {
-            DarkZones = S.Evidence.Where(kv => !kv.Value.Revealed).Select(kv => kv.Key).ToHashSet(),
+            Search = S.Objective.SelectedEscapeCard == null ? EvidenceSearchSpaces() : new HashSet<string>(),
+            // Finding tokens by light is the team's main engine before the Escape card;
+            // under threat it still matters, just below the cover that keeps people alive.
+            SearchWeight = _threatLevel > 0 ? _playbook.EvidenceSearchWeight / 2 : _playbook.EvidenceSearchWeight,
             MustLight = MustLightSpaces(),
             Threatened = _threatLevel > 0,
             Near = Nav.From(_g, inv.Space, 3),
@@ -1032,13 +1054,15 @@ public sealed partial class InvestigatorTeam
             {
                 score += 10;
             }
+            if (ctx.Search.Contains(id))
+            {
+                score += ctx.SearchWeight;
+            }
             // Defensive cover is worth NOTHING for a round in which nothing hostile can
-            // Attack — a wasted-Charge alley beam with the Butcher revealed across the map
-            // was a real playtest complaint (2026-08-31).
-            // Defensive cover pays ONLY while there is a threat to defend against: before
-            // first contact nobody can be attacked, so guarding habits must not outbid
-            // coverage and evidence work (designer note 2026-08-31 — Marci guarded a Window
-            // on round one instead of lighting the main alley).
+            // Attack (a wasted-Charge alley beam with the Butcher revealed across the map),
+            // and it pays ONLY while there is a threat to defend against: before first
+            // contact nobody can be attacked, so guarding habits must not outbid coverage
+            // and evidence work (designer notes 2026-08-31).
             if (!ctx.AttackImpossible)
             {
                 // ThreatApproach is not a habit — it only exists when the Adversary's last
@@ -1069,11 +1093,6 @@ public sealed partial class InvestigatorTeam
                         score += 4;
                     }
                 }
-            }
-            string? zone = _g.Graph.Space(id).Zone;
-            if (zone != null && ctx.DarkZones.Contains(zone))
-            {
-                score += ctx.Threatened ? 1 : 2;
             }
         }
         return score;
@@ -1186,17 +1205,18 @@ public sealed partial class InvestigatorTeam
             return null;
         }
         bool stalked = S.Adversary.SpineChill.ContainsKey(inv.DefId);
-        int wounds = inv.Wounds.Count;
+        // Against a one-kill Adversary the same Wound count is a Wound more dangerous.
+        int wounds = inv.Wounds.Count + _playbook.Caution;
         // here >= 3 means "within 1 space of where the Adversary last showed itself".
         bool scared = (wounds >= 3 && here >= 2) || (wounds == 2 && here >= 3) || (wounds >= 1 && stalked && here >= 3);
         if (!scared)
         {
             return null;
         }
-        // Running forever loses on the clock just as surely: after two rounds of retreating,
-        // get back to work.
+        // Running forever loses on the clock just as surely: after a round or two of
+        // retreating (per Adversary), get back to work.
         _fleeStreak.TryGetValue(inv.DefId, out int streak);
-        if (streak >= 2)
+        if (streak >= _playbook.FleeStreakMax)
         {
             _fleeStreak[inv.DefId] = 0;
             return null;
@@ -1340,8 +1360,9 @@ public sealed partial class InvestigatorTeam
         // Once the Adversary has shown itself ANYWHERE, pairs drift toward shared ground —
         // waiting for danger on your own doorstep meant the team never actually buddied up
         // (playtest note 2026-08-31). Before first contact they still spread freely: with
-        // no information there is nothing to huddle against, only Zones to cover.
-        var buddy = _threatLevel > 0 ? Buddy(inv) : null;
+        // no information there is nothing to huddle against, only Zones to cover — except
+        // against a one-kill Adversary, where nobody is ever alone (playbook).
+        var buddy = _threatLevel > 0 || _playbook.BuddyAlways ? Buddy(inv) : null;
 
         var ferry = FerryPlan(inv);
         if (ferry != null)
@@ -1369,6 +1390,15 @@ public sealed partial class InvestigatorTeam
             }
         }
 
+        // The round's errand assignment (InvestigatorErrands) decides who collects, who
+        // reveals, and who closes up in support. What follows is only the fallback for a
+        // job that went stale mid-round.
+        var errand = ErrandPlan(inv);
+        if (errand != null)
+        {
+            return errand;
+        }
+
         var revealed = IsSpirit(inv)
             ? new List<string>()
             : S.Evidence.Where(kv => kv.Value.Revealed).Select(kv => kv.Value.Space)
@@ -1380,39 +1410,31 @@ public sealed partial class InvestigatorTeam
             return new Plan { Space = token, Label = "collect-evidence" };
         }
 
-        var switches = _g.Graph.Def.Spaces
-            .Where(s => s.Kind == SpaceKind.LightSwitch && s.Zone != null &&
-                        !S.FalteringZones.Contains(s.Zone) &&
-                        !S.Overlay.BrightZones.Contains(s.Zone) &&
-                        S.Evidence.TryGetValue(s.Zone, out var e) && !e.Revealed &&
-                        !_claims.Contains(s.Zone))
-            .Select(s => s.Id).ToList();
-        string? lightSwitch = Sticky(inv, switches, buddy);
-        if (lightSwitch != null)
-        {
-            string? zone = _g.Graph.Space(lightSwitch).Zone;
-            if (zone != null)
-            {
-                _claims.Add(zone);
-            }
-            return new Plan { Space = lightSwitch, Label = "light-switch" };
-        }
-
-        // The last Zone's Evidence is a single-threaded chain — switch, then token, then
-        // Computer. Everyone with nothing better to do waits inside that Zone so whoever flips
-        // the switch is not also the only one who can run the token in.
+        // Close up on a Zone still hiding its token: the approach's beams sweep it, and
+        // the switch trip happens only once it is short (see ErrandPlan).
         var hubs = S.Evidence.Where(kv => !kv.Value.Revealed)
             .Select(kv => _zoneHub.TryGetValue(kv.Key, out string? hub) ? hub : null)
-            .Where(hub => hub != null && !_claims.Contains(hub!) && !OwnedByAnother(inv, hub!))
+            .Where(hub => hub != null)
             .Select(hub => hub!)
             .ToList();
         string? staging = Sticky(inv, hubs, buddy);
         if (staging != null)
         {
-            _claims.Add(staging);
-            return new Plan { Space = staging, StopAt = 1, Label = "stage-for-evidence" };
+            return new Plan { Space = staging, StopAt = 1, Label = "support-zone" };
         }
 
+        if (ClockCrunch)
+        {
+            // No time left for side errands: shadow the nearest carrier instead, so the
+            // batch walks in under a second beam (idle hands were 7% of late turns).
+            var carrier = Alive
+                .Where(o => o != inv && o.EvidenceCarried.Count > 0)
+                .OrderBy(o => Nav.Hops(CostFrom(inv.Space, inv), o.Space))
+                .FirstOrDefault();
+            return carrier == null || Nav.Hops(Nav.From(_g, carrier.Space, 1), inv.Space) <= 1
+                ? null
+                : new Plan { Space = carrier.Space, StopAt = 1, Label = "escort-" + carrier.DefId };
+        }
         var poi = IsSpirit(inv)
             ? new List<string>()
             : S.PoiTokens.Where(p => p.Revealed && !p.Collected && !_claims.Contains(p.TokenSpace))

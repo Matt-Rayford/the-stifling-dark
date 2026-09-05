@@ -292,6 +292,10 @@ namespace StiflingDark.Engine.Core
             {
                 throw new InvalidOperationException($"{State.ActiveInvestigator} has not finished their turn.");
             }
+            if (EscapeChoicePending)
+            {
+                throw new InvalidOperationException("Enough Evidence is in: choose the team's Escape card before any further turn.");
+            }
             var inv = Investigator(invId);
             // A dead Investigator whose player took a Spirit card keeps taking turns (4 MP plus
             // a free Sprint die); anyone else who is Dead or Escaped is off the board.
@@ -666,8 +670,7 @@ namespace StiflingDark.Engine.Core
         /// </summary>
         private void PayFlashlightCharge(InvestigatorState inv)
         {
-            string waiverKey = FlashlightChargeWaiverPrefix + inv.DefId;
-            bool waived = HasRoundModifier(waiverKey);
+            bool waived = HasMarker(inv, FlashlightChargeWaiverMarker);
             int cost = 1 + Math.Max(0, EventRoundModifier(FlashlightChargeSurchargeKey)) - (waived ? 1 : 0);
             // Validate before spending anything, the waiver included: a refused placement must
             // leave the Investigator exactly as they were.
@@ -678,7 +681,7 @@ namespace StiflingDark.Engine.Core
             }
             if (waived)
             {
-                ClearRoundModifier(waiverKey);
+                RemoveMarker(inv, FlashlightChargeWaiverMarker);
                 Log("flashlight", $"{inv.DefId} pays 1 less Charge for this placement");
             }
             inv.Charge -= cost;
@@ -783,13 +786,33 @@ namespace StiflingDark.Engine.Core
             NoteTurnResourceGains(inv);
             inv.TurnTakenThisRound = true;
             State.ActiveInvestigator = null;
-            // Spirits still take a turn every round, so a dead Investigator only stops holding
-            // the phase open once their player has declined (or lost) a Spirit card.
-            if (State.Investigators.All(i => i.TurnTakenThisRound || i.Escaped || (i.Dead && !IsSpirit(i))))
+            AdvanceToAdversaryTurnIfRoundComplete();
+        }
+
+        /// <summary>
+        /// Hand the round to the Adversary once every Investigator has acted. Spirits still
+        /// take a turn every round, so a dead Investigator only stops holding the phase open
+        /// once their player has declined (or lost) a Spirit card. Held while the team owes
+        /// an Escape card choice (see <see cref="EscapeChoicePending"/>); SelectEscapeCard
+        /// calls back in to release it.
+        /// </summary>
+        private void AdvanceToAdversaryTurnIfRoundComplete()
+        {
+            if (State.Phase != GamePhase.InvestigatorTurns || State.ActiveInvestigator != null)
             {
-                State.Phase = GamePhase.AdversaryTurn;
-                State.Adversary.NoiseTokens.Clear();
+                return;
             }
+            if (!State.Investigators.All(i => i.TurnTakenThisRound || i.Escaped || (i.Dead && !IsSpirit(i))))
+            {
+                return;
+            }
+            if (EscapeChoicePending)
+            {
+                Log("objective", "enough Evidence is in: the round waits for the team's Escape card");
+                return;
+            }
+            State.Phase = GamePhase.AdversaryTurn;
+            State.Adversary.NoiseTokens.Clear();
         }
 
         /// <summary>

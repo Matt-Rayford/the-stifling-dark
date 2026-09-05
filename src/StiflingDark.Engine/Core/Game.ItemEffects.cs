@@ -829,8 +829,10 @@ namespace StiflingDark.Engine.Core
                 case "spare-batteries":
                     // "You may spend a Supply token from this card instead of spending a Charge
                     // when using a Flashlight." Game.PlaceFlashlight consumes the waiver while it
-                    // works out what the placement costs, so no Charge changes hands at all.
-                    SetRoundModifier(FlashlightChargeWaiverPrefix + inv.DefId, 1);
+                    // works out what the placement costs, so no Charge changes hands at all. A
+                    // marker, not a round modifier: spending the Supply after this turn's
+                    // placement must still pay for the NEXT one (playtest 2026-08-31).
+                    AddMarker(inv, FlashlightChargeWaiverMarker);
                     Log("item", $"{inv.DefId} spent a Spare Batteries Supply: their next Flashlight placement costs 1 less Charge");
                     break;
 
@@ -1221,7 +1223,7 @@ namespace StiflingDark.Engine.Core
                     // Foul Spell Bag: "your Flashlight may never drop below 1 Charge."
                     if (HasMarker(inv, "flashlight-min-charge") &&
                         inv.Charge - (1 + Math.Max(0, RoundModifier(FlashlightChargeSurchargeKey))) < 1 &&
-                        !HasRoundModifier(FlashlightChargeWaiverPrefix + inv.DefId))
+                        !HasMarker(inv, FlashlightChargeWaiverMarker))
                     {
                         blockers.Add("Foul Spell Bag: your Flashlight may never drop below 1 Charge");
                     }

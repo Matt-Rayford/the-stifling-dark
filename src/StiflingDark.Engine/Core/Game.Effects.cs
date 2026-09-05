@@ -171,10 +171,10 @@ namespace StiflingDark.Engine.Core
         /// turn, so Spare Tools' "you may not take another Involved Action this turn" applies.</summary>
         public const string InvolvedActionUsedPrefix = "involved-action-used:";
 
-        /// <summary>Prefix + Investigator def id: 1 Charge of their next Flashlight placement
-        /// is paid from somewhere else (Spare Batteries' Supply token). Consumed by
-        /// Game.PlaceFlashlight.</summary>
-        public const string FlashlightChargeWaiverPrefix = "flashlight-charge-waiver:";
+        /// <summary>Per-Investigator marker (see Game.ItemEffects' "marker:" entries): 1 Charge
+        /// of their next Flashlight placement is paid from somewhere else (Spare Batteries'
+        /// Supply token). Outlives the round; consumed by Game.PlaceFlashlight.</summary>
+        public const string FlashlightChargeWaiverMarker = "flashlight-charge-waiver";
 
         /// <summary>Set once any Investigator has finished a turn this round holding more
         /// Charge or Stamina than they started it with (the Cult's Burning Heart end

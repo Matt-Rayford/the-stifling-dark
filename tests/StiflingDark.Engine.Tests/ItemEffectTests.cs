@@ -82,6 +82,33 @@ namespace StiflingDark.Engine.Tests
             Assert.Single(game.State.Flashlights);
         }
 
+        /// <summary>Playtest 2026-08-31: the Supply was spent after that turn's placement and
+        /// the next round's placement still charged full price — the waiver must outlive
+        /// the round.</summary>
+        [Fact]
+        public void Spare_Batteries_spent_late_still_pays_for_next_rounds_placement()
+        {
+            var game = NewSawmillGame();
+            var aira = Aira(game);
+            aira.Items.Add("spare-batteries");
+            aira.Charge = 2;
+
+            game.BeginInvestigatorTurn("aira");
+            game.UseItem("spare-batteries");
+            game.EndTurnWithoutFinalAction();
+            foreach (string inv in new[] { "lucy-belle", "mitchell", "vincent" })
+            {
+                game.BeginInvestigatorTurn(inv);
+                game.EndTurnWithoutFinalAction();
+            }
+            game.AdversaryEndTurn();
+            int chargeAtTurnStart = aira.Charge;
+            game.BeginInvestigatorTurn("aira");
+            game.PlaceFlashlight(0.0);
+
+            Assert.Equal(chargeAtTurnStart, aira.Charge);
+        }
+
         [Fact]
         public void Spare_Batteries_covers_only_the_next_placement()
         {

@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using StiflingDark.Engine.Core;
@@ -97,6 +98,36 @@ namespace StiflingDark.Unity
                 return "";
             }
             return card.Supply.Value < 0 ? " ∞" : " x" + card.Supply.Value;
+        }
+
+        /// <summary>
+        /// Supply uses still on the card, read from the engine's "supply:&lt;id&gt;:&lt;used&gt;"
+        /// counter kept alongside the real cards in the Items list. " ∞" for unlimited,
+        /// "" for cards without Supply.
+        /// </summary>
+        public string SupplyRemaining(string id, IEnumerable<string> items)
+        {
+            var card = CardOrNull(id);
+            if (card == null || card.Supply == null)
+            {
+                return "";
+            }
+            if (card.Supply.Value < 0)
+            {
+                return " ∞";
+            }
+            int used = 0;
+            string prefix = "supply:" + id + ":";
+            foreach (string entry in items ?? Enumerable.Empty<string>())
+            {
+                if (entry.StartsWith(prefix, StringComparison.Ordinal) &&
+                    int.TryParse(entry.Substring(prefix.Length), out int n))
+                {
+                    used = n;
+                }
+            }
+            int left = Math.Max(0, card.Supply.Value - used);
+            return " (" + left + " of " + card.Supply.Value + " left)";
         }
 
         public static string Adversary(string id)

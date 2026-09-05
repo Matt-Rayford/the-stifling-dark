@@ -87,6 +87,17 @@ public sealed class BotTable : IAnomalySink
         // so they are answered here rather than on the Adversary's turn — by then the round's
         // damage would be done, and at the end of it the offer expires unused.
         bool answeredEventChoice = _botAdversary && _adversary.AnswerEventChoices();
+        // The engine holds the game while the team owes its Escape card: an all-bot team
+        // picks now; a table with a human Investigator waits for their command.
+        if (_game.EscapeChoicePending)
+        {
+            if (!_wholeTeamIsBots)
+            {
+                return answeredEventChoice;
+            }
+            _team.MaybeSelectEscapeCard();
+            NotifyEscapeSelection();
+        }
         var state = _game.State;
         switch (state.Phase)
         {
