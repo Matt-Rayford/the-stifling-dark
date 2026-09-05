@@ -376,6 +376,31 @@ namespace StiflingDark.Engine.Tests
             Assert.Contains("S", lucy.EvidenceCarried);
         }
 
+        /// <summary>Designer ruling (2026-08-31): a Spirit may not turn Evidence in, and
+        /// acquires nothing new from the board — its holdings only leave via a living
+        /// Investigator Trading with it.</summary>
+        [Fact]
+        public void Spirits_may_not_turn_in_or_pick_up_anything()
+        {
+            var game = NewGame();
+            var spirit = BecomeSpirit(game, "aira", "apparition");
+            spirit.Space = "K-3"; // a Computer, so only the Spirit rule can refuse the turn-in
+            spirit.EvidenceCarried.Add("S");
+            game.State.Evidence["L"].Revealed = true;
+            game.State.Evidence["L"].Space = "K-3";
+            var poi = game.State.PoiTokens.First();
+            poi.Revealed = true;
+            poi.TokenSpace = "K-3";
+
+            game.BeginInvestigatorTurn("aira");
+            Assert.Throws<InvalidOperationException>(() => game.TurnInEvidence(
+                new List<(string, string, string?, string?)> { ("S", "general-item", null, null) }));
+            Assert.Throws<InvalidOperationException>(() => game.PickUpEvidence());
+            Assert.Throws<InvalidOperationException>(() => game.PickUpPoiToken());
+            Assert.Contains("S", spirit.EvidenceCarried);
+            Assert.True(game.State.Evidence.ContainsKey("L"));
+        }
+
         // ---------- Ability economy ----------
 
         [Fact]

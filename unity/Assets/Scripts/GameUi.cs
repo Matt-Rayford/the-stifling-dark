@@ -39,7 +39,17 @@ namespace StiflingDark.Unity
         private readonly RectTransform _actionsBody;
         private readonly RectTransform _logBody;
         private readonly RectTransform _actionBar;
-        private readonly TMP_Text _hint;
+        private readonly TokenActionMenu _tokenMenu;
+        private readonly HandView _hand;
+        private readonly TokenArt _art;
+        private readonly CardPreview _eventPreview = new CardPreview();
+
+        // The round-start Event reveal, and the resting card's hover-to-enlarge.
+        private string _eventShownKey;
+        private bool _eventBaselineSet;
+        private float _eventHoverTime;
+        private bool _eventPreviewShown;
+        private readonly TurnBanner _turnBanner;
 
         private int _renderedRevision = -1;
         private int _renderedLogCount = -1;
@@ -47,6 +57,31 @@ namespace StiflingDark.Unity
         /// <summary>Mitchell just confirmed his own placement: open the Sweep aim as soon as
         /// the update carrying the new Flashlight arrives.</summary>
         private bool _offerSweepWhenPlaced;
+
+        /// <summary>An outside click just closed the figure menu; the same click's release
+        /// still fires SpaceClicked, which must not reopen it.</summary>
+        private bool _menuClosedByThisClick;
+
+        /// <summary>Dwell over the own figure opens the menu (see MaybeOpenMenuByHover).</summary>
+        private const float FigureHoverOpenSeconds = 0.5f;
+        private float _figureHoverTime;
+        /// <summary>False from the moment the menu is open until the pointer leaves the
+        /// figure, so closing it under the cursor doesn't pop it right back open.</summary>
+        private bool _figureHoverArmed = true;
+
+        // Hovered-move path preview + the auto-walk a click on it starts (see
+        // UpdatePathPreview / ContinueWalk).
+        private string _pathSignature;
+        private List<string> _previewPath = new List<string>();
+        private readonly List<string> _walkQueue = new List<string>();
+        /// <summary>Where the figure stood when the pending step was sent; anywhere else
+        /// than there or the step's target means something derailed the walk.</summary>
+        private string _walkFrom;
+        /// <summary>A step was sent and its confirming update hasn't landed yet.</summary>
+        private bool _walkInFlight;
+        /// <summary>Pace between steps, so a long walk reads as walking, not teleporting.</summary>
+        private const float WalkStepSeconds = 0.25f;
+        private float _walkNextStepTime;
 
         // A command that needs spaces picked off the board.
         private int _pickCount;
@@ -58,13 +93,14 @@ namespace StiflingDark.Unity
         public Action LeaveRequested;
 
         public GameUi(Transform canvas, IGameSession session, BoardModel board,
-            BoardView boardView, Describe describe, Prompt prompt)
+            BoardView boardView, TokenArt art, Describe describe, Prompt prompt)
         {
             _session = session;
             _board = board;
             _boardView = boardView;
             _describe = describe;
             _prompt = prompt;
+            _art = art;
 
             _root = UiKit.CreateGroup(canvas, "GameUi");
             UiKit.Anchor(_root, Vector2.zero, Vector2.one);
@@ -91,43 +127,53 @@ namespace StiflingDark.Unity
             // ---- left: roster + adversary
             var left = UiKit.CreatePanel(_root, "Left", UiKit.PanelColor);
             UiKit.Anchor(left, new Vector2(0, 0), new Vector2(0, 1),
-                new Vector2(0, 150), new Vector2(360, -78));
+                new Vector2(0, 0), new Vector2(360, -78));
             _rosterBody = UiKit.CreateScrollList(left, 6f);
 
             // ---- right: actions above, log below
             var right = UiKit.CreatePanel(_root, "Right", UiKit.PanelColor);
             UiKit.Anchor(right, new Vector2(1, 0), new Vector2(1, 1),
-                new Vector2(-430, 150), new Vector2(0, -78));
+                new Vector2(-430, 0), new Vector2(0, -78));
             var actionsHost = UiKit.CreateGroup(right, "ActionsHost");
             UiKit.Anchor(actionsHost, new Vector2(0, 0.42f), new Vector2(1, 1),
                 new Vector2(4, 4), new Vector2(-4, -4));
             _actionsBody = UiKit.CreateScrollList(actionsHost, 3f);
 
-            var logLabel = UiKit.CreateText(right, "EVENT LOG", 13, TextAnchor.MiddleLeft, UiKit.MutedColor);
+            var logLabel = UiKit.CreateText(right, "EVENT LOG", 16, TextAnchor.MiddleLeft,
+                UiKit.TitleColor);
+            logLabel.font = UiKit.MenuFont;
             UiKit.Anchor((RectTransform)logLabel.transform, new Vector2(0, 0.42f), new Vector2(1, 0.42f),
-                new Vector2(10, -22), new Vector2(-10, 0));
+                new Vector2(10, -24), new Vector2(-10, 0));
             var logHost = UiKit.CreateGroup(right, "LogHost");
             UiKit.Anchor(logHost, Vector2.zero, new Vector2(1, 0.42f),
                 new Vector2(4, 4), new Vector2(-4, -24));
             _logBody = UiKit.CreateScrollList(logHost, 1f);
 
-            // ---- bottom action bar
-            var bottom = UiKit.CreatePanel(_root, "Bottom", UiKit.PanelColor);
-            UiKit.Anchor(bottom, Vector2.zero, new Vector2(1, 0), Vector2.zero, new Vector2(0, 150));
-            _hint = UiKit.CreateText(bottom, "", 16, TextAnchor.MiddleLeft, UiKit.AccentColor);
-            UiKit.Anchor((RectTransform)_hint.transform, new Vector2(0, 1), new Vector2(1, 1),
-                new Vector2(16, -30), new Vector2(-16, -4));
-            _actionBar = UiKit.CreateGroup(bottom, "Actions");
-            UiKit.Anchor(_actionBar, Vector2.zero, new Vector2(1, 1),
-                new Vector2(10, 8), new Vector2(-10, -32));
+            // ---- bottom: no band any more — the map runs to the screen's bottom edge. The
+            // Adversary's action bar floats over it between the side columns (Investigators
+            // act through the figure menu instead).
+            _actionBar = UiKit.CreateGroup(_root, "Actions");
+            UiKit.Anchor(_actionBar, Vector2.zero, new Vector2(1, 0),
+                new Vector2(368, 8), new Vector2(-438, 62));
+
+            _hand = new HandView(_root, art, describe);
+            _hand.UseRequested = UseItemFromHand;
+            _tokenMenu = new TokenActionMenu(_root, boardView);
+            // Above everything of the HUD's — only the Prompt canvas (order 200) outranks it.
+            _turnBanner = new TurnBanner(_root);
 
             _boardView.SpaceClicked += OnSpaceClicked;
+            // A refused step (surcharge, blocker, stale path) must stop an auto-walk cold.
+            _session.ErrorReceived += OnSessionError;
         }
+
+        private void OnSessionError(string message) => StopWalk();
 
         /// <summary>Tear the HUD down — used when a reconnect replaces the session.</summary>
         public void Destroy()
         {
             _boardView.SpaceClicked -= OnSpaceClicked;
+            _session.ErrorReceived -= OnSessionError;
             UnityEngine.Object.Destroy(_root.gameObject);
         }
 
@@ -138,6 +184,8 @@ namespace StiflingDark.Unity
             if (!active)
             {
                 _prompt.Hide();
+                _turnBanner.Hide();
+                _tokenMenu.Close();
             }
         }
 
@@ -149,16 +197,44 @@ namespace StiflingDark.Unity
             {
                 return;
             }
+            // Any press outside the menu's buttons closes it — before the board sees the
+            // click, so the release cannot both close and act on the space underneath.
+            if (_tokenMenu.IsOpen && Input.GetMouseButtonDown(0) && !_tokenMenu.ContainsPointer())
+            {
+                _tokenMenu.Close();
+                _menuClosedByThisClick = true;
+            }
             _boardView.Tick();
+            _tokenMenu.Tick();
+            MaybeOpenMenuByHover();
+            UpdateEventCardHover();
+            ContinueWalk();
+            UpdatePathPreview();
             if (_session.Revision != _renderedRevision || _session.Log.Count != _renderedLogCount)
             {
                 _renderedRevision = _session.Revision;
                 _renderedLogCount = _session.Log.Count;
                 Render();
             }
-            if (_pickCount > 0 && Input.GetKeyDown(KeyCode.Escape))
+            if (Input.GetKeyDown(KeyCode.Escape))
             {
-                CancelPick();
+                if (_pickCount > 0)
+                {
+                    CancelPick();
+                }
+                else if (_tokenMenu.IsOpen)
+                {
+                    _tokenMenu.Close();
+                }
+                else if (_walkQueue.Count > 0)
+                {
+                    StopWalk();
+                }
+            }
+            if (Input.GetMouseButtonUp(0))
+            {
+                // Runs after the board's Tick fired SpaceClicked for this release.
+                _menuClosedByThisClick = false;
             }
         }
 
@@ -204,8 +280,42 @@ namespace StiflingDark.Unity
             RenderActions(view);
             RenderMoveTargets(view);
             _boardView.Render(view, MyInvestigatorId);
+            MaybeRevealEvent(view);
+            FollowBotAction(view);
+            // The hand covers the map's bottom edge, so it stands down whenever the map
+            // underneath belongs to the mouse (aiming a beam, picking spaces).
+            _hand.Render(AmAdversary ? null : Me, _boardView.Aiming || _pickCount > 0);
+            RefreshTokenMenu(view);
             MaybeShowModal(view);
+            MaybeShowTurnBanner(view);
             OfferSweepIfJustPlaced(view);
+        }
+
+        /// <summary>
+        /// Between Investigator turns the old BEGIN TURN bar button is a full-screen banner
+        /// instead. It appears only when pressing it would actually work: the phase is open,
+        /// nobody is mid-turn, this seat's Investigator still has a turn, and the server says
+        /// the table is waiting on this seat. Runs after <see cref="MaybeShowModal"/> so a
+        /// between-turns Prompt (Spirit adoption, Escape selection) gets the screen first.
+        /// </summary>
+        private void MaybeShowTurnBanner(PlayerView view)
+        {
+            var me = AmAdversary ? null : Me;
+            bool waiting = me != null
+                && view.Phase == GamePhase.InvestigatorTurns
+                && view.ActiveInvestigator == null
+                && !me.TurnTakenThisRound
+                && !me.Escaped
+                && _session.YourTurn
+                && !view.PendingWindowChoice;
+            if (!waiting || _prompt.Open)
+            {
+                _turnBanner.Hide();
+                return;
+            }
+            string investigatorId = me.DefId;
+            _turnBanner.Show("turn:" + view.Round + ":" + investigatorId,
+                () => Send(new BeginInvestigatorTurnCommand { InvestigatorId = investigatorId }));
         }
 
         /// <summary>
@@ -267,15 +377,6 @@ namespace StiflingDark.Unity
                     "   Evidence turned in " + view.Objective.EvidenceTurnedIn + "/" +
                     view.Objective.EvidenceRequired;
             }
-
-            _hint.text = _pickCount > 0
-                ? _pickPrompt
-                : _boardView.Aiming
-                    ? "Move the mouse around your figure to aim — the lit spaces are the real " +
-                      "Bright set, computed here with the engine's own beam solver."
-                    : MyTurnActive
-                        ? "Click a highlighted space to Move.  Scroll to zoom, right-drag to pan."
-                        : "Scroll to zoom, right-drag to pan, hover a space to inspect it.";
 
             if (view.Phase == GamePhase.GameOver)
             {
@@ -455,7 +556,7 @@ namespace StiflingDark.Unity
             layout.childControlHeight = true;
             layout.childForceExpandHeight = false;
 
-            Line(card, "OBJECTIVE", 14, UiKit.MutedColor);
+            SectionHeader(card, "OBJECTIVE");
             Line(card, "Evidence turned in " + objective.EvidenceTurnedIn + "/" +
                 objective.EvidenceRequired +
                 (objective.SelectedEscapeCard != null
@@ -542,8 +643,6 @@ namespace StiflingDark.Unity
         {
             UiKit.Clear(_actionBar);
             UiKit.Clear(_actionsBody);
-            var bar = UiKit.CreateRow(_actionBar, "Bar", 8f, 40f);
-            UiKit.Anchor(bar, Vector2.zero, Vector2.one);
 
             if (view.Phase == GamePhase.GameOver)
             {
@@ -554,13 +653,20 @@ namespace StiflingDark.Unity
             }
             if (AmAdversary)
             {
+                var bar = UiKit.CreateRow(_actionBar, "Bar", 8f, 40f);
+                bar.GetComponent<HorizontalLayoutGroup>().childAlignment = TextAnchor.MiddleCenter;
+                UiKit.Anchor(bar, Vector2.zero, Vector2.one);
                 AdversaryUi.Render(this, bar, view);
                 return;
             }
-            RenderInvestigatorActions(view, bar);
+            RenderInvestigatorActions(view);
         }
 
-        private void RenderInvestigatorActions(PlayerView view, RectTransform bar)
+        /// <summary>
+        /// The side panel. The turn's own actions are NOT here any more — they live in the
+        /// menu that opens on the Investigator's figure (<see cref="RenderTokenActions"/>).
+        /// </summary>
+        private void RenderInvestigatorActions(PlayerView view)
         {
             var me = Me;
             if (me == null)
@@ -573,16 +679,10 @@ namespace StiflingDark.Unity
 
             bool between = view.Phase == GamePhase.InvestigatorTurns && view.ActiveInvestigator == null;
             bool active = MyTurnActive;
-            bool blockedByWindow = view.PendingWindowChoice;
 
             if (between)
             {
-                UiKit.CreateButton(bar, "BEGIN TURN — " + _describe.ShortInvestigator(me.DefId), 18,
-                    () => Send(new BeginInvestigatorTurnCommand { InvestigatorId = me.DefId }),
-                    !me.TurnTakenThisRound && _session.YourTurn,
-                    me.TurnTakenThisRound
-                        ? "This Investigator has already taken a turn this round."
-                        : "The game is not waiting on your seat.");
+                // Beginning your own turn is the YOUR TURN banner's job (MaybeShowTurnBanner).
                 // Turn order inside a round is the team's to choose, and the engine tracks the
                 // ACTIVE Investigator rather than which seat asked — so this genuinely drives
                 // another seat's Investigator, bots included. Handy when a bot wedges; label it
@@ -601,89 +701,303 @@ namespace StiflingDark.Unity
                 }
             }
 
-            // ---- core actions. Rest and Charge have no buttons: they happen on their own at
-            // end of turn (Rest unless you Sprinted, Charge unless you placed the Flashlight,
-            // neither after an Involved Action).
-            UiKit.CreateButton(bar, "SPRINT", 17,
-                () => Send(new SprintCommand()),
+            // ---- context panel
+            RenderInteracts(view, me, active);
+            RenderItemsAndAbilities(view, me, active);
+        }
+
+        /// <summary>Close the figure menu when its Investigator is gone or moved; otherwise
+        /// rebuild its rows so the enabled states track the view.</summary>
+        private void RefreshTokenMenu(PlayerView view)
+        {
+            if (!_tokenMenu.IsOpen)
+            {
+                return;
+            }
+            var me = AmAdversary ? null : Me;
+            if (me == null || me.Space != _tokenMenu.Space)
+            {
+                _tokenMenu.Close();
+                return;
+            }
+            RenderTokenActions(view);
+        }
+
+        /// <summary>
+        /// The figure menu's rows: the turn's direct actions plus the Involved-Action
+        /// interacts that apply where the Investigator stands. Involved is a TYPE of action
+        /// (turn in Evidence, flip a switch…), never a button of its own — so there is no
+        /// generic INVOLVED here. Rest and Charge stay buttonless too: they happen on their
+        /// own at end of turn.
+        /// </summary>
+        private void RenderTokenActions(PlayerView view)
+        {
+            var content = _tokenMenu.Content;
+            UiKit.Clear(content);
+            var me = Me;
+            if (me == null)
+            {
+                _tokenMenu.Close();
+                return;
+            }
+            bool active = MyTurnActive;
+            bool blockedByWindow = view.PendingWindowChoice;
+
+            void Row(string label, Action run, bool enabled, string tooltip = null)
+            {
+                UiKit.CreateButton(content, label, 16, () =>
+                {
+                    _tokenMenu.Close();
+                    run();
+                }, enabled, tooltip);
+            }
+
+            Row("Sprint", () => Send(new SprintCommand()),
                 active && !me.SprintedOrRested && !blockedByWindow,
                 me.SprintedOrRested ? "Already Sprinted this turn." : "Not your active turn.");
-
-            // ---- final actions
-            UiKit.CreateButton(bar, "PLACE FLASHLIGHT", 17,
-                BeginFlashlightAim,
+            Row("Place Flashlight", BeginFlashlightAim,
                 active && me.FinalAction == FinalActionKind.None && me.Charge > 0 && !blockedByWindow,
                 me.Charge <= 0
                     ? "No Charge left (a placement costs 1, more with a surcharge in force)."
                     : me.FinalAction != FinalActionKind.None
                         ? "Final Action already taken."
                         : "Not your active turn.");
-            // Mitchell's Sweep lives in the main bar, not the abilities fold: it is legal the
-            // whole round (his turn already ended when the 1st cone went down), and it should
-            // read as the natural 2nd half of placing.
+            // Mitchell's Sweep is legal the whole round (his turn already ended when the 1st
+            // cone went down), so it should read as the natural 2nd half of placing.
             if (me.DefId == "mitchell")
             {
                 var sweepPlacement = view.Flashlights.FirstOrDefault(f => f.InvestigatorId == "mitchell");
                 if (sweepPlacement != null)
                 {
                     bool alreadySwept = view.RoundModifiers.ContainsKey(Game.SweepUsedPrefix + "mitchell");
-                    UiKit.CreateButton(bar, "SWEEP", 17,
-                        () => BeginSweepAim(sweepPlacement.Space),
+                    Row("Sweep", () => BeginSweepAim(sweepPlacement.Space),
                         !alreadySwept && !blockedByWindow,
                         alreadySwept
                             ? "Sweep may only be used once per Flashlight."
                             : "Move the Flashlight to a 2nd position (replaces the 1st).");
                 }
             }
-            UiKit.CreateButton(bar, "INVOLVED", 17,
-                () => Send(new TakeInvolvedActionCommand()),
-                active && me.FinalAction == FinalActionKind.None && !blockedByWindow,
-                "Generic Involved Action — ends the turn with no Stamina gain and no Charge.");
-            UiKit.CreateButton(bar, "END TURN", 17,
-                () => Send(new EndTurnCommand()), active && !blockedByWindow,
+
+            // ---- Involved-Action interacts, shown only where they apply (the engine rules)
+            var mySpace = _board.SpaceOrNull(me.Space);
+            if (mySpace != null && mySpace.Kind == SpaceKind.LightSwitch)
+            {
+                // A zone lights up once: after burning out it is Faltering for good, and a
+                // dead button that says so beats a click whose refusal hides in the log.
+                bool zoneSpent = mySpace.Zone != null &&
+                    (view.FalteringZones.Contains(mySpace.Zone) ||
+                     view.Overlay.BrightZones.Contains(mySpace.Zone));
+                Row("Turn on light", () => Send(new ActivateLightSwitchCommand()),
+                    active && !zoneSpent,
+                    !zoneSpent
+                        ? "Not your active turn."
+                        : view.Overlay.BrightZones.Contains(mySpace.Zone ?? "")
+                            ? "The lights here are already on."
+                            : "These lights burned out (Faltering) — they cannot be turned on again.");
+            }
+            // Spirits acquire nothing new — no pickup rows (ruling 2026-08-31).
+            bool canPickUp = me.SpiritId == null;
+            if (canPickUp && view.Evidence.Any(e => e.Space == me.Space))
+            {
+                Row("Pickup evidence", () => Send(new PickUpEvidenceCommand()), active);
+            }
+            if (canPickUp && view.MedicalItemSpaces.Contains(me.Space))
+            {
+                Row("Pickup medical item", () => Send(new PickUpMedicalItemCommand()), active);
+            }
+            // A discovered POI token is an item stash: 2 General Items, or the Cursed Item on
+            // the purple front.
+            foreach (var poi in canPickUp
+                ? view.PoiTokens.Where(p => p.TokenSpace == me.Space && !p.Collected)
+                : Enumerable.Empty<PlayerView.PoiInfo>())
+            {
+                string label = poi.CursedFront == true
+                    ? "Pickup Cursed Item"
+                    : poi.CursedFront == false ? "Pickup 2 items" : "Pickup item stash";
+                Row(label, () => Send(new PickUpPoiTokenCommand()), active);
+            }
+            var overlay = BoardModel.OverlayFrom(view);
+            foreach (string doorSpace in _board.InteractRange(me.Space, overlay)
+                .Where(s => _board.SpaceOrNull(s)?.Kind == SpaceKind.Door))
+            {
+                var state = view.Overlay.DoorStates.TryGetValue(doorSpace, out var known)
+                    ? known : DoorState.Open;
+                string door = doorSpace;
+                if (state == DoorState.Open)
+                {
+                    Row("Close door " + door, () => Send(new LockDoorCommand { DoorSpace = door }),
+                        active);
+                }
+                else if (state == DoorState.Locked)
+                {
+                    Row("Open door " + door, () => Send(new OpenDoorCommand { DoorSpace = door }),
+                        active);
+                }
+            }
+            // Turn-in only where the scenario's feature stands (Computer at the Sawmill,
+            // Ticket Booth at the park) and never for a Spirit (ruling: a Spirit's Evidence
+            // only leaves via a living Investigator Trading with it) — the engine refuses
+            // both, so no button.
+            var turnInKind = view.ScenarioId == "amusement-park"
+                ? SpaceKind.TicketBooth
+                : SpaceKind.Computer;
+            if (me.EvidenceCarried.Count > 0 && me.SpiritId == null && mySpace != null &&
+                mySpace.Kind == turnInKind)
+            {
+                Row("Turn " + me.EvidenceCarried.Count + " in evidence",
+                    () => ShowEvidenceTurnIn(me), active);
+            }
+            RenderObjectiveRows(view, me, active, Row);
+
+            Row("End Turn", () => Send(new EndTurnCommand()), active && !blockedByWindow,
                 "Ends the turn. Rest (+1 Stamina if you did not Sprint) and Charge (+1 if you " +
                 "did not place the Flashlight) happen on their own.");
+        }
 
-            // ---- context panel
-            RenderInteracts(view, me, active);
-            RenderItemsAndAbilities(view, me, active);
+        /// <summary>The Escape card's flow per card id — mirrors the 'objective' field in
+        /// game-data/cards/escape-cards.json, which the engine's CardDef does not carry.</summary>
+        private static readonly Dictionary<string, string> EscapeFlow = new Dictionary<string, string>
+        {
+            ["north-gate"] = "gate", ["south-gate"] = "gate",
+            ["garage"] = "truck", ["sawmill"] = "truck",
+            ["tunnel-of-love"] = "tunnel", ["mirror-maze"] = "tunnel",
+            ["the-zipper"] = "flare", ["ferris-wheel"] = "flare",
+        };
+
+        /// <summary>Landmark tokens that stay printed on the board; never offered as pickups.</summary>
+        private static readonly HashSet<string> LandmarkTokens = new HashSet<string>
+        {
+            "saw", "locked-escape", "truck", "escape", "grave-actual", "grave-decoy", "altar",
+        };
+
+        /// <summary>
+        /// Objective actions, shown only where their printed preconditions hold — the token
+        /// stood on, the token carried, the selected Escape card's flow. Replaces the old
+        /// always-visible OBJECTIVE ACTIONS wall; the engine still rules on legality.
+        /// </summary>
+        private void RenderObjectiveRows(PlayerView view, PlayerView.InvestigatorPanel me,
+            bool active, Action<string, Action, bool, string> row)
+        {
+            var objective = view.Objective;
+            bool OnToken(string name) =>
+                objective.Tokens.TryGetValue(name, out var space) && space == me.Space;
+            bool Carrying(string name) =>
+                objective.TokenCarriers.TryGetValue(name, out var who) && who == me.DefId;
+            void Add(string label, Action run) => row(label, run, active, null);
+
+            string card = objective.SelectedEscapeCard ?? "";
+            EscapeFlow.TryGetValue(card, out string flow);
+
+            if (OnToken("saw") && Carrying("lockbox"))
+            {
+                Add("Open the Lockbox",
+                    () => Send(new OpenLockboxCommand { PushYourLuck = false }));
+                Add("Open the Lockbox — push your luck",
+                    () => Send(new OpenLockboxCommand { PushYourLuck = true }));
+            }
+            if (OnToken("locked-escape"))
+            {
+                switch (flow)
+                {
+                    case "gate":
+                        Add("Power the Gate", () => Send(new PowerTheGateCommand()));
+                        Add("Escape through the Gate", () => Send(new EscapeThroughGateCommand()));
+                        break;
+                    case "tunnel":
+                        Add("Open the Service Tunnel", () => Send(new OpenServiceTunnelCommand()));
+                        Add("Escape through the Tunnel", () => Send(new EscapeThroughTunnelCommand()));
+                        break;
+                    case "flare":
+                        Add("Fire the Flare Gun", () => Send(new FireFlareGunCommand()));
+                        break;
+                }
+            }
+            if (flow == "truck")
+            {
+                if (OnToken("truck"))
+                {
+                    Add("Start the Truck…", () => PickSpaces(1, "Click the Truck's escape space",
+                        picked => Send(new StartTruckCommand { EscapeSpace = picked[0] })));
+                    foreach (var carried in objective.TokenCarriers
+                        .Where(c => c.Value == me.DefId && !LandmarkTokens.Contains(c.Key)))
+                    {
+                        string part = carried.Key;
+                        Add("Install " + part,
+                            () => Send(new InstallPartCommand { PartToken = part }));
+                    }
+                }
+                if (OnToken("escape"))
+                {
+                    Add("Escape at the Truck exit", () => Send(new EscapeAtTruckExitCommand()));
+                }
+            }
+            if (flow == "flare" && (objective.EscapeOpen || objective.EscapeReadyRound != null))
+            {
+                Add("Escape by Helicopter", () => Send(new EscapeByHelicopterCommand()));
+            }
+            switch (card)
+            {
+                case "the-grave":
+                    Add("Dig up the Grave", () => Send(new DigUpGraveCommand()));
+                    Add("Use the Hook…", () => PickSpaces(1, "Click the space the Hook targets",
+                        picked => Send(new UseTheHookCommand { ChosenSpace = picked[0] })));
+                    if (me.Items != null && me.Items.Contains("frayed-ropes"))
+                    {
+                        Add("Use the Frayed Ropes", () => Send(new UseFrayedRopesCommand()));
+                    }
+                    break;
+                case "the-altar":
+                    if (Carrying("ritual-knife"))
+                    {
+                        Add("Use the Ritual Knife",
+                            () => Send(new UseRitualKnifeCommand { FlipFaceDownWound = false }));
+                        Add("Use the Ritual Knife — flip a face-down Wound",
+                            () => Send(new UseRitualKnifeCommand { FlipFaceDownWound = true }));
+                    }
+                    Add("Cut the Rope Circle", () => Send(new CutRopeCircleCommand()));
+                    break;
+                case "the-eggs":
+                    Add("Destroy the Egg Sac", () => Send(new DestroyEggSacCommand()));
+                    Add("Banish the Horror", () => Send(new BanishTheHorrorCommand()));
+                    break;
+            }
+
+            // Carryable Objective tokens on this space, with the pickup verb their flow uses.
+            foreach (var token in objective.Tokens
+                .Where(t => t.Value == me.Space && !LandmarkTokens.Contains(t.Key)))
+            {
+                string name = token.Key;
+                Add("Pick up " + name, () =>
+                {
+                    if (name == "ritual-knife" || name == "rope-circle")
+                    {
+                        Send(new PickUpBanishTokenCommand { TokenName = name });
+                    }
+                    else if (name.Contains("part") || name.Contains("ride"))
+                    {
+                        Send(new PickUpRidePartsCommand { Token = name });
+                    }
+                    else
+                    {
+                        Send(new PickUpObjectiveTokenCommand { TokenName = name });
+                    }
+                });
+            }
+            foreach (var carried in objective.TokenCarriers.Where(c => c.Value == me.DefId))
+            {
+                string name = carried.Key;
+                Add("Drop " + name,
+                    () => Send(new DropObjectiveTokenCommand { TokenName = name }));
+            }
         }
 
         private void RenderInteracts(PlayerView view, PlayerView.InvestigatorPanel me, bool active)
         {
+            // Pickups, doors, the light switch and Evidence turn-in moved to the figure menu
+            // (RenderTokenActions); what remains here is trading and the placeable rewards,
+            // header-free — the buttons say what they are.
             var overlay = BoardModel.OverlayFrom(view);
             var range = _board.InteractRange(me.Space, overlay);
-            Header("INTERACT  ·  " + me.Space + " and adjacent");
-
-            var space = _board.SpaceOrNull(me.Space);
-            if (space != null && space.Kind == SpaceKind.LightSwitch)
-            {
-                CommandButton("Flip the Light Switch here", new ActivateLightSwitchCommand(), active);
-            }
-            foreach (var evidence in view.Evidence.Where(e => e.Space == me.Space))
-            {
-                CommandButton("Pick up " + _board.ZoneName(evidence.Zone) + " Evidence",
-                    new PickUpEvidenceCommand(), active);
-            }
-            if (view.MedicalItemSpaces.Contains(me.Space))
-            {
-                CommandButton("Pick up the Medical Item", new PickUpMedicalItemCommand(), active);
-            }
-            foreach (var poi in view.PoiTokens.Where(p => p.TokenSpace == me.Space && !p.Collected))
-            {
-                CommandButton("Pick up the Point of Interest token", new PickUpPoiTokenCommand(), active);
-            }
-            foreach (string doorSpace in range.Where(s =>
-                _board.SpaceOrNull(s)?.Kind == SpaceKind.Door))
-            {
-                var state = view.Overlay.DoorStates.TryGetValue(doorSpace, out var s)
-                    ? s : DoorState.Open;
-                string label = " (" + Describe.Door(state) + ")";
-                CommandButton("Lock door " + doorSpace + label,
-                    new LockDoorCommand { DoorSpace = doorSpace }, active);
-                CommandButton("Open door " + doorSpace + label,
-                    new OpenDoorCommand { DoorSpace = doorSpace }, active);
-            }
 
             // Trading, with whoever is in range.
             foreach (var other in view.Investigators.Where(i =>
@@ -748,68 +1062,14 @@ namespace StiflingDark.Unity
                         })), active);
             }
 
-            // Evidence turn-in is an Involved Action, so it lives here but ends the turn.
-            if (me.EvidenceCarried.Count > 0)
+            // Persistent major Events keep a text line here — the board-side card only
+            // shows the round's own draw.
+            foreach (string persistent in view.PersistentMajorEvents
+                .Where(id => id != view.CurrentEvent))
             {
-                ActionButton("TURN IN EVIDENCE…", () => ShowEvidenceTurnIn(me), active);
-            }
-
-            RenderObjectiveActions(view, me, active);
-        }
-
-        /// <summary>
-        /// Every objective interact the protocol has, offered whenever the Investigator is
-        /// active. Which are legal depends on the scenario, the Escape card, tokens carried and
-        /// the space stood on — all of it engine-side — so these are deliberately unfiltered
-        /// and the engine's refusal is the answer.
-        /// </summary>
-        private void RenderObjectiveActions(PlayerView view, PlayerView.InvestigatorPanel me,
-            bool active)
-        {
-            Header("OBJECTIVE ACTIONS  (the engine rules on these)");
-            CommandButton("Open the Lockbox", new OpenLockboxCommand { PushYourLuck = false }, active);
-            CommandButton("Open the Lockbox — push your luck",
-                new OpenLockboxCommand { PushYourLuck = true }, active);
-            CommandButton("Power the Gate", new PowerTheGateCommand(), active);
-            CommandButton("Escape through the Gate", new EscapeThroughGateCommand(), active);
-            ActionButton("Start the Truck…", () => PickSpaces(1, "Click the Truck's escape space",
-                picked => Send(new StartTruckCommand { EscapeSpace = picked[0] })), active);
-            CommandButton("Escape at the Truck exit", new EscapeAtTruckExitCommand(), active);
-            CommandButton("Fire the Flare Gun", new FireFlareGunCommand(), active);
-            CommandButton("Escape by Helicopter", new EscapeByHelicopterCommand(), active);
-            CommandButton("Open the Service Tunnel", new OpenServiceTunnelCommand(), active);
-            CommandButton("Escape through the Tunnel", new EscapeThroughTunnelCommand(), active);
-            CommandButton("Dig up the Grave", new DigUpGraveCommand(), active);
-            ActionButton("Use the Hook…", () => PickSpaces(1, "Click the space the Hook targets",
-                picked => Send(new UseTheHookCommand { ChosenSpace = picked[0] })), active);
-            CommandButton("Use the Frayed Ropes", new UseFrayedRopesCommand(), active);
-            CommandButton("Destroy the Egg Sac", new DestroyEggSacCommand(), active);
-            CommandButton("Banish the Horror", new BanishTheHorrorCommand(), active);
-            CommandButton("Use the Ritual Knife", new UseRitualKnifeCommand { FlipFaceDownWound = false },
-                active);
-            CommandButton("Use the Ritual Knife — flip a face-down Wound",
-                new UseRitualKnifeCommand { FlipFaceDownWound = true }, active);
-            CommandButton("Cut the Rope Circle", new CutRopeCircleCommand(), active);
-
-            foreach (var token in view.Objective.Tokens)
-            {
-                var captured = token;
-                CommandButton("Pick up " + captured.Key,
-                    new PickUpObjectiveTokenCommand { TokenName = captured.Key }, active);
-                CommandButton("Install " + captured.Key,
-                    new InstallPartCommand { PartToken = captured.Key }, active);
-                CommandButton("Pick up ride parts: " + captured.Key,
-                    new PickUpRidePartsCommand { Token = captured.Key }, active);
-                CommandButton("Pick up Banish token " + captured.Key,
-                    new PickUpBanishTokenCommand { TokenName = captured.Key }, active);
-            }
-            foreach (var carried in view.Objective.TokenCarriers.Where(c => c.Value == me.DefId))
-            {
-                var captured = carried;
-                CommandButton("Drop " + captured.Key,
-                    new DropObjectiveTokenCommand { TokenName = captured.Key }, active);
-                CommandButton("Install " + captured.Key,
-                    new InstallPartCommand { PartToken = captured.Key }, active);
+                Line(_actionsBody, _describe.Card(persistent) + "  (persists)", 15,
+                    UiKit.AccentColor);
+                Line(_actionsBody, _describe.CardText(persistent), 14, UiKit.MutedColor);
             }
         }
 
@@ -817,19 +1077,20 @@ namespace StiflingDark.Unity
             bool active)
         {
             Header("ITEMS");
-            if (me.Items == null || me.Items.Count == 0)
+            // Supply counters and standing markers share the Items list with the cards
+            // ("supply:…", "marker:…"); they are bookkeeping, not cards.
+            var cards = (me.Items ?? new List<string>()).Where(id => !id.Contains(":")).ToList();
+            if (cards.Count == 0)
             {
                 Note("(none)");
             }
             else
             {
-                foreach (string item in me.Items)
+                foreach (string item in cards)
                 {
                     string cardId = item;
-                    ActionButton("Use " + _describe.Card(cardId) + _describe.SupplySuffix(cardId), () =>
-                        AskArgs("Use " + _describe.Card(cardId), _describe.CardText(cardId),
-                            args => Send(new UseItemCommand { CardId = cardId, Args = args })),
-                        active);
+                    ActionButton("Use " + _describe.Card(cardId) + _describe.SupplyRemaining(cardId, me.Items),
+                        () => UseItemFromHand(cardId), active);
                 }
             }
             ActionButton("Resolve Painkillers…", () =>
@@ -893,45 +1154,64 @@ namespace StiflingDark.Unity
             }
         }
 
+        /// <summary>
+        /// ONE Involved Action turns in EVERYTHING carried, all rewards collected (designer
+        /// 2026-08-31 — the old picker sent one token and ended the turn). The wizard walks
+        /// the carried tokens: each picks its reward (arguments included), and the single
+        /// command with the whole list goes out at the end. Cancelling anywhere abandons
+        /// the lot — nothing is sent, the turn is untouched.
+        /// </summary>
         private void ShowEvidenceTurnIn(PlayerView.InvestigatorPanel me)
         {
-            // One token at a time keeps the picker honest: the command takes a list, but a
-            // reward with an argument needs its own question.
-            var options = new List<PromptOption>();
-            foreach (string zone in me.EvidenceCarried)
+            CollectTurnIns(me.EvidenceCarried.ToList(), new List<EvidenceTurnIn>());
+        }
+
+        private void CollectTurnIns(List<string> remaining, List<EvidenceTurnIn> chosen)
+        {
+            if (remaining.Count == 0)
             {
-                string carried = zone;
-                foreach (var reward in Describe.EvidenceRewards)
-                {
-                    var captured = reward;
-                    options.Add(new PromptOption(
-                        _board.ZoneName(carried) + " Evidence  →  " + captured.Label,
-                        () => TurnIn(carried, captured)));
-                }
+                Send(new TurnInEvidenceCommand { TurnIns = chosen });
+                return;
             }
-            _prompt.Show("turnin:" + me.EvidenceCarried.Count, "Turn in Evidence",
-                "This is an Involved Action: it ends your turn. Standing on the scenario's " +
-                "turn-in feature is required (Computer at the Sawmill, Ticket Booth at the park).",
+            string zone = remaining[0];
+            var rest = remaining.Skip(1).ToList();
+            var options = new List<PromptOption>();
+            foreach (var reward in Describe.EvidenceRewards)
+            {
+                var captured = reward;
+                options.Add(new PromptOption(captured.Label, () =>
+                    ChooseRewardArg(captured, arg =>
+                    {
+                        chosen.Add(new EvidenceTurnIn
+                        {
+                            Zone = zone,
+                            Reward = captured.Reward,
+                            Arg = arg,
+                        });
+                        CollectTurnIns(rest, chosen);
+                    })));
+            }
+            // The reward menu is identical no matter whose Zone the token came from, so the
+            // steps are numbered plainly and the zones are consumed behind the scenes.
+            int step = chosen.Count + 1;
+            int total = chosen.Count + remaining.Count;
+            _prompt.Show("turnin:" + zone + ":" + step,
+                "Turn in Evidence — reward " + step + " of " + total,
+                "One Involved Action turns in everything you carry; pick a reward for each " +
+                "token. Turning in ends your turn.",
                 options, () => { });
         }
 
-        private void TurnIn(string zone, (string Reward, string Label, Describe.RewardArg Arg) reward)
+        private void ChooseRewardArg(
+            (string Reward, string Label, Describe.RewardArg Arg) reward, Action<string> done)
         {
-            void Post(string arg) => Send(new TurnInEvidenceCommand
-            {
-                TurnIns = new List<EvidenceTurnIn>
-                {
-                    new EvidenceTurnIn { Zone = zone, Reward = reward.Reward, Arg = arg },
-                },
-            });
-
             switch (reward.Arg)
             {
                 case Describe.RewardArg.PoiSpace:
                 {
                     var options = View.PoiTokens
                         .Select(p => new PromptOption("Point of Interest at " + p.PoiSpace,
-                            () => Post(p.PoiSpace)))
+                            () => done(p.PoiSpace)))
                         .ToList();
                     _prompt.Show("reward-poi", "Reveal which Point of Interest?", null, options,
                         () => { });
@@ -940,7 +1220,7 @@ namespace StiflingDark.Unity
                 case Describe.RewardArg.MirrorColor:
                 {
                     var options = new[] { "red", "green", "blue" }
-                        .Select(c => new PromptOption(c, () => Post(c))).ToList();
+                        .Select(c => new PromptOption(c, () => done(c))).ToList();
                     _prompt.Show("reward-mirror", "Which Mirror Maze color is open?", null, options,
                         () => { });
                     break;
@@ -949,14 +1229,14 @@ namespace StiflingDark.Unity
                 {
                     var options = View.Investigators
                         .Select(i => new PromptOption(_describe.Investigator(i.DefId),
-                            () => Post(i.DefId)))
+                            () => done(i.DefId)))
                         .ToList();
                     _prompt.Show("reward-inv", "Give the Major Ability token to whom?", null, options,
                         () => { });
                     break;
                 }
                 default:
-                    Post(null);
+                    done(null);
                     break;
             }
         }
@@ -1015,7 +1295,10 @@ namespace StiflingDark.Unity
                 return;
             }
 
-            if (view.PendingEventChoices.Count > 0 && !AmAdversary)
+            // These are the ADVERSARY's choices (Fallen Tree, Flare-Up, Roll Vortex, Fire
+            // Tornado): only a human holding that seat is ever asked. A bot Adversary answers
+            // them itself, and an Investigator seat must never see this modal.
+            if (view.PendingEventChoices.Count > 0 && AmAdversary)
             {
                 var options = view.PendingEventChoices
                     .Select(id => new PromptOption("Answer " + _describe.Card(id),
@@ -1036,6 +1319,218 @@ namespace StiflingDark.Unity
             {
                 _prompt.Hide();
             }
+        }
+
+        // ------------------------------------------------------ playing Item cards
+
+        /// <summary>
+        /// Play a card from the hand (or the side panel). Most Items take no choices at all
+        /// and are simply used; the ones that name a space, a Wound, or a teammate get the
+        /// matching picker. Only a handful of genuinely open-ended cards still fall back to
+        /// the free-form argument sheet (designer note 2026-08-31: "I would just use it").
+        /// </summary>
+        private void UseItemFromHand(string cardId)
+        {
+            var me = Me;
+            if (me == null || !MyTurnActive)
+            {
+                return;
+            }
+            void Use(params string[] args) =>
+                Send(new UseItemCommand { CardId = cardId, Args = args.ToList() });
+            void PickOne(string prompt) => PickSpaces(1, prompt, s => Use(s[0]));
+            void PickTwo(string prompt) => PickSpaces(2, prompt, s => Use(s[0], s[1]));
+            string name = _describe.Card(cardId);
+
+            switch (cardId)
+            {
+                case "glowstick":
+                    PickOne("Click a space within 4 for the Glowstick");
+                    break;
+                case "firecrackers":
+                    PickOne("Click a space within 3 — every Adversary figure moves 2 toward it");
+                    break;
+                case "stray-mutt":
+                    PickOne("Click a space within 3 for the Stray Mutt token");
+                    break;
+                case "lantern":
+                case "lantern-mi":
+                    PickOne("Click an adjacent space for the Lantern");
+                    break;
+                case "security-bar":
+                    PickOne("Click an adjacent Door space for the Security Bar");
+                    break;
+                case "blueprints":
+                    PickOne("Click a Point of Interest space — hidden tokens within 2 are revealed");
+                    break;
+                case "kerosene":
+                    PickTwo("Click 2 spaces adjacent to you and to each other");
+                    break;
+                case "phantom-amulet":
+                    PickTwo("Click the 2 spaces the Secret Passage joins");
+                    break;
+                case "medkit":
+                    ChoosePatientAndWound(name, me, (patient, wound) =>
+                    {
+                        if (wound == null) Use(patient); else Use(patient, wound);
+                    });
+                    break;
+                case "tourniquet":
+                    ChooseOwnWound(name, me, required: true, wound => Use(wound));
+                    break;
+                case "leather-jacket":
+                    ChooseOwnWound(name, me, required: false, wound =>
+                    {
+                        if (wound == null) Use(); else Use(wound);
+                    });
+                    break;
+                case "makeshift-iv":
+                    ChooseTeammate(name, me, adjacentOnly: true, other =>
+                        _prompt.Show("iv:" + other, name,
+                            "Take a face-up Wound from " + _describe.Investigator(other) +
+                            ", or give them one of yours?",
+                            new List<PromptOption>
+                            {
+                                new PromptOption("Take theirs", () => Use(other, "take")),
+                                new PromptOption("Give mine", () => Use(other, "give")),
+                            }, () => { }));
+                    break;
+                case "cursed-poppet":
+                case "foul-spell-bag":
+                case "hexed-mirror":
+                case "lorgnette":
+                case "whistle":
+                    ChooseTeammate(name, me, adjacentOnly: false, other => Use(other));
+                    break;
+                case "whiskey":
+                    _prompt.Show("whiskey", name,
+                        "On a 3 or 4 the drink restores one point — which track?",
+                        new List<PromptOption>
+                        {
+                            new PromptOption("Stamina", () => Use()),
+                            new PromptOption("Charge", () => Use("charge")),
+                        }, () => { });
+                    break;
+                case "journal":
+                {
+                    var options = new List<PromptOption>();
+                    foreach (var reward in Describe.EvidenceRewards)
+                    {
+                        var captured = reward;
+                        options.Add(new PromptOption(captured.Label, () =>
+                            ChooseRewardArg(captured, arg =>
+                            {
+                                if (arg == null) Use(captured.Reward); else Use(captured.Reward, arg);
+                            })));
+                    }
+                    _prompt.Show("journal", name, "Gain one Evidence reward.", options, () => { });
+                    break;
+                }
+                case "emergency-flare":
+                case "tripod":
+                case "two-way-radio":
+                case "crystal-amulet":
+                case "summoning-stones":
+                    // Open-ended choices (an aim angle, a borrowed Ability's own arguments, a
+                    // reordered deck, two cards): the free-form sheet is still the honest tool.
+                    AskArgs("Use " + name, _describe.CardText(cardId),
+                        args => Send(new UseItemCommand { CardId = cardId, Args = args }));
+                    break;
+                default:
+                    Use();
+                    break;
+            }
+        }
+
+        /// <summary>Medkit: yourself or an adjacent teammate, then which face-up Wound if
+        /// there is more than one to choose from.</summary>
+        private void ChoosePatientAndWound(string title, PlayerView.InvestigatorPanel me,
+            Action<string, string> done)
+        {
+            var overlay = BoardModel.OverlayFrom(View);
+            var reach = new HashSet<string>(_board.InteractRange(me.Space, overlay));
+            var patients = View.Investigators
+                .Where(i => reach.Contains(i.Space) && i.Wounds.Any(w => w.FaceUp && w.CardId != null))
+                .ToList();
+            if (patients.Count == 0)
+            {
+                _prompt.Show("medkit-none", title, "Nobody in reach has a face-up Wound to treat.",
+                    new List<PromptOption> { new PromptOption("OK", () => { }) }, () => { });
+                return;
+            }
+            void PickWound(PlayerView.InvestigatorPanel patient)
+            {
+                var wounds = patient.Wounds.Where(w => w.FaceUp && w.CardId != null).ToList();
+                if (wounds.Count == 1)
+                {
+                    done(patient.DefId, wounds[0].CardId);
+                    return;
+                }
+                var options = wounds.Select(w => new PromptOption(_describe.Card(w.CardId),
+                    () => done(patient.DefId, w.CardId), _describe.CardText(w.CardId))).ToList();
+                _prompt.Show("medkit-wound:" + patient.DefId, title,
+                    "Which of " + _describe.Investigator(patient.DefId) + "'s Wounds?", options, () => { });
+            }
+            if (patients.Count == 1)
+            {
+                PickWound(patients[0]);
+                return;
+            }
+            var who = patients.Select(p => new PromptOption(
+                _describe.Investigator(p.DefId) + (p.DefId == me.DefId ? " (you)" : ""),
+                () => PickWound(p))).ToList();
+            _prompt.Show("medkit-who", title, "Treat whom?", who, () => { });
+        }
+
+        /// <summary>One of your own face-up Wounds; optional cards offer "none".</summary>
+        private void ChooseOwnWound(string title, PlayerView.InvestigatorPanel me, bool required,
+            Action<string> done)
+        {
+            var wounds = me.Wounds.Where(w => w.FaceUp && w.CardId != null).ToList();
+            if (wounds.Count == 0)
+            {
+                if (required)
+                {
+                    _prompt.Show("wound-none", title, "You have no face-up Wound for this.",
+                        new List<PromptOption> { new PromptOption("OK", () => { }) }, () => { });
+                }
+                else
+                {
+                    done(null);
+                }
+                return;
+            }
+            var options = wounds.Select(w => new PromptOption(_describe.Card(w.CardId),
+                () => done(w.CardId), _describe.CardText(w.CardId))).ToList();
+            if (!required)
+            {
+                options.Add(new PromptOption("No Wound", () => done(null)));
+            }
+            _prompt.Show("wound-pick:" + title, title, "Which Wound?", options, () => { });
+        }
+
+        /// <summary>Another living Investigator — adjacent only when the card says so.</summary>
+        private void ChooseTeammate(string title, PlayerView.InvestigatorPanel me, bool adjacentOnly,
+            Action<string> done)
+        {
+            var overlay = BoardModel.OverlayFrom(View);
+            var reach = adjacentOnly
+                ? new HashSet<string>(_board.InteractRange(me.Space, overlay))
+                : null;
+            var others = View.Investigators
+                .Where(i => i.DefId != me.DefId && !i.Dead && !i.Escaped &&
+                            (reach == null || reach.Contains(i.Space)))
+                .ToList();
+            if (others.Count == 0)
+            {
+                _prompt.Show("teammate-none", title,
+                    adjacentOnly ? "No teammate is adjacent." : "No other Investigator is in play.",
+                    new List<PromptOption> { new PromptOption("OK", () => { }) }, () => { });
+                return;
+            }
+            var options = others.Select(o => new PromptOption(_describe.Investigator(o.DefId),
+                () => done(o.DefId))).ToList();
+            _prompt.Show("teammate:" + title, title, "Choose an Investigator", options, () => { });
         }
 
         private void AskArgs(string title, string body, Action<List<string>> submit)
@@ -1096,24 +1591,302 @@ namespace StiflingDark.Unity
                     costs[step.Key] = step.Value.Cost;
                 }
             }
-            else if (MyTurnActive)
+            // Investigator turns get no adjacent-space rings any more: the hovered-path
+            // preview (UpdatePathPreview) shows where a click will take you instead. The
+            // human Adversary keeps them — no path preview on that side yet.
+            _boardView.SetMoveTargets(costs);
+        }
+
+        // ------------------------------------------------------- hovered-move path
+
+        /// <summary>
+        /// Hovering a space while movement is available highlights the shortest walk there
+        /// in blue — or, past the MP budget, the affordable prefix toward the mouse.
+        /// Clicking then walks the highlighted path (see OnSpaceClicked/ContinueWalk).
+        /// Recomputed only when the hover, position, MP or game state actually changed.
+        /// </summary>
+        private void UpdatePathPreview()
+        {
+            var me = AmAdversary ? null : Me;
+            string hovered = _boardView.HoveredSpace;
+            bool eligible = me != null && MyTurnActive && !me.MovementLocked &&
+                me.MpRemaining > 0 && !_boardView.Aiming && _pickCount == 0 &&
+                _walkQueue.Count == 0 && hovered != null && hovered != me.Space;
+            string signature = eligible
+                ? hovered + "|" + me.Space + "|" + me.MpRemaining + "|" + _session.Revision
+                : "";
+            if (signature == _pathSignature)
             {
-                var me = Me;
-                if (me != null && !me.MovementLocked && me.MpRemaining > 0)
+                return;
+            }
+            _pathSignature = signature;
+            _previewPath = eligible ? PathToward(hovered, me) : new List<string>();
+            _boardView.SetPathPreview(_previewPath);
+        }
+
+        /// <summary>
+        /// Preview-only surcharge on a Window step: the route prefers a slightly longer
+        /// walk around, but a Window still previews (and walks) when it is genuinely
+        /// shorter or the only way — the walk then pauses at the crossing for the
+        /// Wound-or-Stamina prompt, which stays a manual, deliberate choice.
+        /// </summary>
+        private const int WindowPreviewSurcharge = 4;
+
+        /// <summary>
+        /// Dijkstra over legal steps (light-based costs included) from the figure to
+        /// <paramref name="target"/>, cut down to what the remaining MP affords. Routes
+        /// prefer to avoid Windows (see <see cref="WindowPreviewSurcharge"/>) but never
+        /// blank out because of one: the blue path shows across the frame, and the
+        /// auto-walk stops there for the crossing choice (ContinueWalk bails on
+        /// PendingWindowChoice). Empty when no route exists at all.
+        /// </summary>
+        private List<string> PathToward(string target, PlayerView.InvestigatorPanel me)
+        {
+            var overlay = BoardModel.OverlayFrom(View);
+            var kind = me.Dead && me.SpiritId != null
+                ? FigureKind.Spirit
+                : FigureKind.Investigator;
+            // prio orders the search (with the Window surcharge); mp is the honest MP spend
+            // used to trim the path to what this turn affords.
+            var prio = new Dictionary<string, int> { [me.Space] = 0 };
+            var mp = new Dictionary<string, int> { [me.Space] = 0 };
+            var prev = new Dictionary<string, string>();
+            var open = new List<string> { me.Space };
+            var settled = new HashSet<string>();
+            while (open.Count > 0)
+            {
+                // Linear min extraction: the board is ~350 spaces and this runs only when
+                // the hover actually changes.
+                string current = open[0];
+                foreach (string candidate in open)
                 {
-                    var kind = me.Dead && me.SpiritId != null
-                        ? FigureKind.Spirit
-                        : FigureKind.Investigator;
-                    foreach (var step in _board.StepsFrom(me.Space, kind, overlay))
+                    if (prio[candidate] < prio[current])
                     {
-                        if (step.Value.Cost <= me.MpRemaining)
+                        current = candidate;
+                    }
+                }
+                open.Remove(current);
+                if (!settled.Add(current))
+                {
+                    continue;
+                }
+                if (current == target)
+                {
+                    break;
+                }
+                foreach (var step in _board.StepsFrom(current, kind, overlay))
+                {
+                    int surcharge = step.Value.CrossesWindow ? WindowPreviewSurcharge : 0;
+                    int cost = prio[current] + step.Value.Cost + surcharge;
+                    if (!prio.TryGetValue(step.Key, out int known) || cost < known)
+                    {
+                        prio[step.Key] = cost;
+                        mp[step.Key] = mp[current] + step.Value.Cost;
+                        prev[step.Key] = current;
+                        if (!settled.Contains(step.Key))
                         {
-                            costs[step.Key] = step.Value.Cost;
+                            open.Add(step.Key);
                         }
                     }
                 }
             }
-            _boardView.SetMoveTargets(costs);
+            if (!prev.ContainsKey(target))
+            {
+                return new List<string>();
+            }
+            var full = new List<string>();
+            for (string space = target; space != me.Space; space = prev[space])
+            {
+                full.Add(space);
+            }
+            full.Reverse();
+            var affordable = full.Where(space => mp[space] <= me.MpRemaining).ToList();
+            return affordable;
+        }
+
+        /// <summary>
+        /// A freshly drawn Event gets dealt to the table: full card over a darkened beat,
+        /// then slid to its resting spot beside the board (see <see cref="EventReveal"/>).
+        /// The first view after joining sets the baseline silently — replaying the reveal
+        /// of a round already in progress would be noise.
+        /// </summary>
+        private void MaybeRevealEvent(PlayerView view)
+        {
+            string key = view.Round + ":" + view.CurrentEvent;
+            if (!_eventBaselineSet)
+            {
+                _eventBaselineSet = true;
+                _eventShownKey = key;
+                return;
+            }
+            if (string.IsNullOrEmpty(view.CurrentEvent) || key == _eventShownKey)
+            {
+                return;
+            }
+            _eventShownKey = key;
+            EventReveal.Play(_art.EventCard(view.CurrentEvent), _boardView.EventCardScreenSpot);
+        }
+
+        /// <summary>Hovering the resting Event card enlarges it like a hand card: a short
+        /// dwell, or Alt/Cmd for instant.</summary>
+        private void UpdateEventCardHover()
+        {
+            bool overUi = UnityEngine.EventSystems.EventSystem.current != null &&
+                UnityEngine.EventSystems.EventSystem.current.IsPointerOverGameObject();
+            bool over = !overUi && !_boardView.Aiming && _pickCount == 0 &&
+                _boardView.EventCardUnderMouse();
+            if (!over)
+            {
+                _eventHoverTime = 0f;
+                if (_eventPreviewShown)
+                {
+                    _eventPreview.Hide();
+                    _eventPreviewShown = false;
+                }
+                return;
+            }
+            bool modifier = Input.GetKey(KeyCode.LeftAlt) || Input.GetKey(KeyCode.RightAlt) ||
+                Input.GetKey(KeyCode.LeftCommand) || Input.GetKey(KeyCode.RightCommand);
+            _eventHoverTime += Time.deltaTime;
+            if (!_eventPreviewShown && (modifier || _eventHoverTime >= 0.75f))
+            {
+                _eventPreview.Show(_boardView.EventCardSprite);
+                _eventPreviewShown = true;
+            }
+        }
+
+        /// <summary>
+        /// Keep the camera on whoever is acting when that someone is a bot, so their turn is
+        /// watched rather than discovered from the log. Manual camera input overrides the
+        /// glide (BoardView cancels it), and a hidden Adversary has no position to follow.
+        /// </summary>
+        private void FollowBotAction(PlayerView view)
+        {
+            string space = null;
+            if (view.Phase == GamePhase.InvestigatorTurns && view.ActiveInvestigator != null &&
+                view.ActiveInvestigator != MyInvestigatorId &&
+                _session.Room.Seats.Any(s => s.Fill == SeatFill.Bot &&
+                    s.InvestigatorId == view.ActiveInvestigator))
+            {
+                space = view.Investigators
+                    .FirstOrDefault(i => i.DefId == view.ActiveInvestigator)?.Space;
+            }
+            else if (view.Phase == GamePhase.AdversaryTurn && !AmAdversary &&
+                _session.Room.Seats.Any(s => s.Fill == SeatFill.Bot &&
+                    s.Role == SeatRole.Adversary))
+            {
+                space = view.Adversary?.Space;
+            }
+            if (!string.IsNullOrEmpty(space))
+            {
+                _boardView.GlideCameraTo(space);
+            }
+        }
+
+        /// <summary>Clicking a previewed path queues its steps; each confirmed arrival
+        /// schedules the next one a beat later (<see cref="WalkStepSeconds"/>), so the walk
+        /// reads as movement. Anything unexpected — a refusal, a window choice, a water
+        /// float, the turn ending — abandons the rest.</summary>
+        private void ContinueWalk()
+        {
+            if (_walkQueue.Count == 0)
+            {
+                return;
+            }
+            var me = AmAdversary ? null : Me;
+            if (me == null || !MyTurnActive || View == null || View.PendingWindowChoice)
+            {
+                StopWalk();
+                return;
+            }
+            if (_walkInFlight)
+            {
+                if (me.Space == _walkQueue[0])
+                {
+                    // Arrived: take a beat before the next step — or, at the destination,
+                    // offer the actions right where you now stand.
+                    _walkQueue.RemoveAt(0);
+                    _walkFrom = me.Space;
+                    _walkInFlight = false;
+                    if (_walkQueue.Count == 0)
+                    {
+                        OpenMenuAtFigure(me);
+                    }
+                    else
+                    {
+                        _walkNextStepTime = Time.time + WalkStepSeconds;
+                    }
+                }
+                else if (me.Space != _walkFrom)
+                {
+                    StopWalk(); // derailed (a float, a forced move)
+                }
+                return;
+            }
+            if (me.Space != _walkFrom)
+            {
+                StopWalk();
+                return;
+            }
+            if (Time.time >= _walkNextStepTime)
+            {
+                _walkInFlight = true;
+                Send(new MoveStepCommand { To = _walkQueue[0] });
+            }
+        }
+
+        private void StopWalk()
+        {
+            _walkQueue.Clear();
+            _walkInFlight = false;
+        }
+
+        /// <summary>The figure menu, opened for the player rather than by them — a finished
+        /// walk offers the actions where they now stand. Stands down when something else
+        /// already owns the screen or the mouse.</summary>
+        private void OpenMenuAtFigure(PlayerView.InvestigatorPanel me)
+        {
+            if (_tokenMenu.IsOpen || _boardView.Aiming || _pickCount > 0 || _prompt.Open ||
+                !MyTurnActive)
+            {
+                return;
+            }
+            _tokenMenu.OpenAt(me.Space);
+            RenderTokenActions(View);
+        }
+
+        /// <summary>
+        /// Resting the pointer on your own figure for half a second opens the action menu,
+        /// clicking not required. Re-arms only after the pointer leaves the figure, so
+        /// closing the menu under the cursor doesn't pop it straight back open.
+        /// </summary>
+        private void MaybeOpenMenuByHover()
+        {
+            var me = AmAdversary ? null : Me;
+            bool overFigure = me != null && !_boardView.Aiming && _pickCount == 0 &&
+                _boardView.HoveredSpace == me.Space;
+            if (!overFigure)
+            {
+                _figureHoverArmed = true;
+                _figureHoverTime = 0f;
+                return;
+            }
+            if (_tokenMenu.IsOpen)
+            {
+                _figureHoverArmed = false;
+                _figureHoverTime = 0f;
+                return;
+            }
+            if (!_figureHoverArmed)
+            {
+                return;
+            }
+            _figureHoverTime += Time.deltaTime;
+            if (_figureHoverTime >= FigureHoverOpenSeconds)
+            {
+                _tokenMenu.OpenAt(me.Space);
+                RenderTokenActions(View);
+            }
         }
 
         private void OnSpaceClicked(string spaceId)
@@ -1140,16 +1913,47 @@ namespace StiflingDark.Unity
                 Send(new AdversaryMoveStepCommand { To = spaceId });
                 return;
             }
-            if (MyTurnActive)
+            var me = Me;
+            if (!AmAdversary && me != null && spaceId == me.Space)
             {
-                Send(new MoveStepCommand { To = spaceId });
+                // Your own token: no move to make here — this click is the action menu's.
+                if (_tokenMenu.IsOpen)
+                {
+                    _tokenMenu.Close();
+                }
+                else if (!_menuClosedByThisClick)
+                {
+                    _tokenMenu.OpenAt(spaceId);
+                    RenderTokenActions(View);
+                }
+                return;
             }
+            _tokenMenu.Close();
+            if (!MyTurnActive)
+            {
+                return;
+            }
+            if (_previewPath.Count > 0)
+            {
+                // Walk the highlighted path — as far as the MP budget's prefix reaches.
+                // ContinueWalk sends the first step on the next tick and paces the rest.
+                StopWalk();
+                _walkQueue.AddRange(_previewPath);
+                _previewPath = new List<string>();
+                _pathSignature = null;
+                _boardView.SetPathPreview(null);
+                _walkFrom = me.Space;
+                _walkNextStepTime = 0f;
+                return;
+            }
+            Send(new MoveStepCommand { To = spaceId });
         }
 
         /// <summary>Collect n board clicks, then hand them to <paramref name="done"/>.</summary>
         public void PickSpaces(int count, string prompt, Action<List<string>> done)
         {
             _prompt.Hide();
+            _tokenMenu.Close();
             _picked.Clear();
             _pickCount = count;
             _pickPrompt = prompt + " (Esc cancels)";
@@ -1237,10 +2041,18 @@ namespace StiflingDark.Unity
                 tooltip ?? "Only available on your own active turn.");
         }
 
-        public void Header(string title)
+        public void Header(string title) => SectionHeader(_actionsBody, title);
+
+        /// <summary>
+        /// A section heading, in the main menu's own heading style (StiflingDarkApp.Menu's
+        /// Head): sage green, the Cenotaph display font, one size up from body text. The amber
+        /// accent stays with the things that demand attention — the banner, the hint line —
+        /// rather than every label above a list.
+        /// </summary>
+        private static void SectionHeader(Transform parent, string title)
         {
-            var text = UiKit.CreateText(_actionsBody, title, 13, TextAnchor.MiddleLeft,
-                UiKit.AccentColor);
+            var text = UiKit.CreateText(parent, title, 16, TextAnchor.MiddleLeft, UiKit.TitleColor);
+            text.font = UiKit.MenuFont;
             var element = text.gameObject.AddComponent<LayoutElement>();
             element.minHeight = 26;
             element.flexibleHeight = 0;

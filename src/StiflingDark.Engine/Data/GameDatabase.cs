@@ -88,6 +88,15 @@ namespace StiflingDark.Engine.Data
             {
                 def.OutlinePolygon.Add(new[] { p[0]!.Value<double>(), p[1]!.Value<double>() });
             }
+            if (j["sightLinePaths"]?["paths"] is JArray paths)
+            {
+                foreach (var line in paths)
+                {
+                    def.SightLinePaths.Add(((JArray)line)
+                        .Select(p => new[] { p[0]!.Value<double>(), p[1]!.Value<double>() })
+                        .ToList());
+                }
+            }
             return def;
         }
 

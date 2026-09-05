@@ -18,6 +18,7 @@ namespace UnityEngine
         public float x, y;
         public Vector2(float x, float y) { this.x = x; this.y = y; }
         public static Vector2 zero => new Vector2(0, 0);
+        public static Vector2 Lerp(Vector2 a, Vector2 b, float t) => a;
         public static Vector2 one => new Vector2(1, 1);
         public float magnitude => 0f;
         public static Vector2 operator +(Vector2 a, Vector2 b) => a;
@@ -34,7 +35,9 @@ namespace UnityEngine
         public static Vector3 zero => new Vector3(0, 0, 0);
         public static Vector3 one => new Vector3(1, 1, 1);
         public float magnitude => 0f;
+        public float sqrMagnitude => 0f;
         public static float Distance(Vector3 a, Vector3 b) => 0f;
+        public static Vector3 Lerp(Vector3 a, Vector3 b, float t) => a;
         public static Vector3 operator +(Vector3 a, Vector3 b) => a;
         public static Vector3 operator -(Vector3 a, Vector3 b) => a;
         public static Vector3 operator *(Vector3 a, float b) => a;
@@ -77,12 +80,16 @@ namespace UnityEngine
     public struct Rect
     {
         public Rect(float x, float y, float width, float height) { }
+        public float x => 0f;
+        public float y => 0f;
         public float xMin => 0f;
         public float xMax => 0f;
         public float yMin => 0f;
         public float yMax => 0f;
         public float width => 0f;
         public float height => 0f;
+        public Vector2 size => Vector2.zero;
+        public bool Contains(Vector2 point) => false;
     }
 
     public struct Bounds
@@ -112,6 +119,7 @@ namespace UnityEngine
         public static float InverseLerp(float a, float b, float value) => a;
         public static float Pow(float a, float b) => a;
         public static float Sqrt(float a) => a;
+        public static float Exp(float power) => power;
         public static float SmoothStep(float a, float b, float t) => a;
         public static float Cos(float a) => a;
         public static float Sin(float a) => a;
@@ -190,6 +198,7 @@ namespace UnityEngine
     {
         public Texture2D texture => null;
         public Bounds bounds => default;
+        public Rect rect => default;
         public static Sprite Create(Texture2D texture, Rect rect, Vector2 pivot) => null;
         public static Sprite Create(Texture2D texture, Rect rect, Vector2 pivot,
             float pixelsPerUnit) => null;
@@ -223,6 +232,15 @@ namespace UnityEngine
         public static T Load<T>(string path) where T : Object => null;
     }
 
+    public sealed class Shader : Object { }
+
+    public sealed class Material : Object
+    {
+        public Material(Shader shader) { }
+        public void SetFloat(string name, float value) { }
+        public void SetVector(string name, Vector4 value) { }
+    }
+
     public class GameObject : Object
     {
         public GameObject() { }
@@ -242,6 +260,7 @@ namespace UnityEngine
         public Transform transform => null;
         public GameObject gameObject => null;
         public T GetComponent<T>() where T : Component, new() => new T();
+        public T GetComponentInParent<T>() where T : Component, new() => new T();
         public T AddComponent<T>() where T : Component, new() => new T();
     }
 
@@ -256,6 +275,8 @@ namespace UnityEngine
         public int childCount => 0;
         public Transform GetChild(int index) => null;
         public void SetParent(Transform parent, bool worldPositionStays) { }
+        public void SetAsLastSibling() { }
+        public void SetSiblingIndex(int index) { }
     }
 
     public class RectTransform : Transform
@@ -315,6 +336,7 @@ namespace UnityEngine
         public float nearClipPlane { get; set; }
         public float farClipPlane { get; set; }
         public Vector3 ScreenToWorldPoint(Vector3 position) => position;
+        public Vector3 WorldToScreenPoint(Vector3 position) => position;
     }
 
     public static class Input
@@ -338,6 +360,7 @@ namespace UnityEngine
     {
         public static float time => 0f;
         public static float deltaTime => 0f;
+        public static float unscaledDeltaTime => 0f;
     }
 
     public static class Debug
@@ -416,6 +439,7 @@ namespace UnityEngine.UI
     {
         public Color color { get; set; }
         public bool raycastTarget { get; set; }
+        public Material material { get; set; }
     }
 
     public class MaskableGraphic : Graphic { }
@@ -516,6 +540,9 @@ namespace UnityEngine.UI
 
     public sealed class ScrollRect : UnityEngine.EventSystems.UIBehaviour
     {
+        public enum MovementType { Unrestricted, Elastic, Clamped }
+        public MovementType movementType { get; set; }
+        public bool inertia { get; set; }
         public bool horizontal { get; set; }
         public bool vertical { get; set; }
         public float scrollSensitivity { get; set; }

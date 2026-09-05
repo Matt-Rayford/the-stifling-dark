@@ -128,6 +128,23 @@ if [ -f game-assets/player-boards/investigator-backs.pdf ] && command -v pdftopp
   # Sharp minification: pre-baked Lanczos mip pyramids (see tools/make_mips.py).
   python3 tools/make_mips.py "$BOARDS" || echo "  !! mip packing failed (pip install pillow?)"
 fi
+# Investigator player-board FRONTS (the in-play side: stamina/charge tracks, ability
+# summaries, wound slots) for the in-game player board panel. Same alphabetical page
+# order as the backs; 11-12 are the excluded promos.
+FRONT_BOARDS="$STREAMING/player-board-fronts"
+if [ -f game-assets/player-boards/investigator-fronts.pdf ] && command -v pdftoppm >/dev/null; then
+  mkdir -p "$FRONT_BOARDS"
+  page=1
+  for id in aira asher brielle dylan ibraheem lucy-belle mada marci mitchell vincent; do
+    out="$FRONT_BOARDS/$id.png"
+    if [ ! -f "$out" ] || [ "${FORCE_TEXTURES:-0}" = "1" ]; then
+      pdftoppm -png -f $page -l $page -scale-to 1400 -singlefile \
+        game-assets/player-boards/investigator-fronts.pdf "${out%.png}"
+    fi
+    page=$((page+1))
+  done
+  python3 tools/make_mips.py "$FRONT_BOARDS" || echo "  !! mip packing failed (pip install pillow?)"
+fi
 # Adversary board FRONTS (the rules side) for the solo-setup picker. Page 3 is Mor'gonnod's
 # corporeal flip, not a pickable adversary. (The PDF's filename typo is in game-assets.)
 ADV_BOARDS="$STREAMING/adversary-boards"
@@ -144,6 +161,72 @@ if [ -f "game-assets/player-boards/adersary-fronts.pdf" ] && command -v pdftoppm
   render_adversary 2 cult-of-hunlow
   render_adversary 4 insatiable-horror
   python3 tools/make_mips.py "$ADV_BOARDS" || echo "  !! mip packing failed (pip install pillow?)"
+fi
+
+echo "== item cards =="
+# Item card faces for the in-game hand, one PNG per card id. The print PDFs hold a few
+# cards the digital port does not use and are not perfectly alphabetical, so pages are
+# matched by NAME: pdftotext reads each page's title and it is slugified into the card
+# id. Ids in game-data with no matching page are reported (the client shows a text
+# fallback card for those).
+if command -v pdftoppm >/dev/null && command -v pdftotext >/dev/null; then
+  python3 - <<'CARDS_EOF'
+import json, os, re, subprocess
+
+out_root = 'unity/Assets/StreamingAssets/cards'
+force = os.environ.get('FORCE_TEXTURES', '0') == '1'
+
+def slug(name):
+    # Apostrophes vanish rather than hyphenate: "Rabbit's Foot" -> rabbits-foot.
+    name = re.sub(r"[’']", '', name.lower())
+    return re.sub(r'-+', '-', re.sub(r'[^a-z0-9]+', '-', name)).strip('-')
+
+known = set()
+for deck in ['general-items', 'cursed-items', 'objective-items', 'medical-items', 'events']:
+    path = os.path.join('game-data/cards', deck + '.json')
+    if os.path.exists(path):
+        known |= {c['id'] for c in json.load(open(path))['cards']}
+
+found = set()
+for deck in ['general-items', 'cursed-items', 'objective-items', 'events']:
+    pdf = os.path.join('game-assets/cards', deck + '.pdf')
+    if not os.path.exists(pdf):
+        print('  !! %s missing (game-assets/ is gitignored)' % pdf)
+        continue
+    info = subprocess.run(['pdfinfo', pdf], capture_output=True, text=True).stdout
+    pages = int(next(l.split()[1] for l in info.splitlines() if l.startswith('Pages:')))
+    out_dir = os.path.join(out_root, deck)
+    os.makedirs(out_dir, exist_ok=True)
+    rendered = 0
+    for page in range(1, pages + 1):
+        text = subprocess.run(['pdftotext', '-f', str(page), '-l', str(page), pdf, '-'],
+                              capture_output=True, text=True).stdout
+        lines = [l.strip() for l in text.splitlines() if l.strip()]
+        card_id = slug(lines[0]) if lines else ''
+        if not card_id:
+            continue
+        found.add(card_id)
+        out = os.path.join(out_dir, card_id + '.png')
+        if os.path.exists(out) and not force:
+            continue
+        subprocess.run(['pdftoppm', '-png', '-f', str(page), '-l', str(page),
+                        '-scale-to', '800', '-singlefile', pdf, out[:-4]], check=True)
+        rendered += 1
+    print('  %s: %d pages, %d newly rendered' % (deck, pages, rendered))
+
+# "-mi" ids are same-named duplicate entries (alternate icon); the client falls back
+# to the base card's art for them.
+missing = sorted(i for i in known
+                 if i not in found and not (i.endswith('-mi') and i[:-3] in found))
+if missing:
+    print('  !! no card art matched for: ' + ', '.join(missing))
+CARDS_EOF
+  for deck in general-items cursed-items objective-items events; do
+    [ -d "$STREAMING/cards/$deck" ] && \
+      python3 tools/make_mips.py "$STREAMING/cards/$deck" || true
+  done
+else
+  echo "  !! pdftoppm/pdftotext not found (brew install poppler) — no card art"
 fi
 
 echo "== client config =="

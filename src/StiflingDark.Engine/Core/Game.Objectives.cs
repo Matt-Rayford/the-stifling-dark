@@ -181,6 +181,17 @@ namespace StiflingDark.Engine.Core
             return choices;
         }
 
+        /// <summary>
+        /// The Evidence gate is met but no Escape card is chosen yet. Designer ruling
+        /// (2026-08-31): play STOPS here — no further turns, and the round does not advance to
+        /// the Adversary — until the team commits, so the objective tokens are on the board
+        /// before anyone acts again.
+        /// </summary>
+        public bool EscapeChoicePending =>
+            State.Objective.SelectedEscapeCard == null &&
+            Db.Config.ByInvestigatorCount.TryGetValue(State.Investigators.Count, out var rules) &&
+            State.Objective.EvidenceTurnedIn >= rules.EvidenceRequiredForObjective;
+
         /// <summary>Commit to one Escape card and run its setup (token placement, incl. its D6 roll).</summary>
         public void SelectEscapeCard(string cardId)
         {
@@ -215,6 +226,7 @@ namespace StiflingDark.Engine.Core
                 // own token placement, so commit the selection and stop here.
                 State.Objective.SelectedEscapeCard = cardId;
                 Log("objective", $"selected the Banish card '{cardId}'");
+                AdvanceToAdversaryTurnIfRoundComplete();
                 return;
             }
             if (setup.Owner != State.ScenarioId)
@@ -234,6 +246,7 @@ namespace StiflingDark.Engine.Core
             {
                 PlaceObjectiveToken(kv.Key, kv.Value);
             }
+            AdvanceToAdversaryTurnIfRoundComplete();
         }
 
         // ---------- Carrying Objective tokens ----------

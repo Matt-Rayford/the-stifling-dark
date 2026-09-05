@@ -524,6 +524,8 @@ namespace StiflingDark.Engine.Tests
         {
             var game = NewGame(new[] { "vincent", "aira" });
             var vincent = Inv(game, "vincent");
+            // The short-handed team's starting Items would satisfy the precondition under test.
+            vincent.Items.Clear();
             game.BeginInvestigatorTurn("vincent");
             Assert.Throws<InvalidOperationException>(() => game.UseMajorAbility());
             Assert.Equal(1, vincent.MajorAbilityTokens); // a refused Ability costs nothing

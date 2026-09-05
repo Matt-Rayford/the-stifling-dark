@@ -22,6 +22,11 @@ namespace StiflingDark.Unity
         /// the table moves at — fast enough to keep playing, slow enough to read the log.</summary>
         private const float BotStepSeconds = 0.6f;
 
+        /// <summary>Seconds between replayed bot ACTIONS: a bot turn is snapshotted after
+        /// every engine-accepted action and shown to the human at this pace, so their moves
+        /// glide space by space instead of the turn appearing all at once.</summary>
+        private const float BotReplaySeconds = 0.4f;
+
         private const string RoomCode = "SOLO";
 
         private readonly Game _game;
@@ -38,6 +43,9 @@ namespace StiflingDark.Unity
         private int _logCursor;
         private int _anomaliesLogged;
         private float _nextBotStepTime;
+
+        /// <summary>Per-action snapshots of the bot turn in progress, oldest first.</summary>
+        private readonly Queue<PlayerView> _botReplay = new Queue<PlayerView>();
 
         public RoomState Room { get; } = new RoomState { Code = RoomCode, Started = true };
         public PlayerView View { get; private set; }
@@ -76,6 +84,9 @@ namespace StiflingDark.Unity
                 MedicalItemSpaces = medicalPool
                     .Take(db.Config.ByInvestigatorCount[roster.Count].MedicalItemsOnBoard)
                     .ToList(),
+                // Short-handed starting Items all go to the human's Investigator; on an
+                // Adversary run the all-bot team defaults to its first seat.
+                StartingItemsInvestigatorId = yourRole == SeatRole.Adversary ? null : roster[0],
             });
 
             _teamIsAllBots = yourRole == SeatRole.Adversary;
@@ -89,6 +100,7 @@ namespace StiflingDark.Unity
                     .Select(s => s.InvestigatorId),
                 Room.Seats.Any(s => s.Fill == SeatFill.Bot && s.Role == SeatRole.Adversary),
                 startSpaces.Values);
+            _bots.AfterAction = () => _botReplay.Enqueue(BuildView());
 
             Refresh();
         }
@@ -215,6 +227,19 @@ namespace StiflingDark.Unity
 
         public void Pump()
         {
+            // A bot turn in progress is replayed one snapshot at a time before any new bot
+            // work happens, so the human watches every action land instead of a whole turn
+            // appearing at once.
+            if (_botReplay.Count > 0)
+            {
+                if (UnityEngine.Time.time < _nextBotStepTime)
+                {
+                    return;
+                }
+                _nextBotStepTime = UnityEngine.Time.time + BotReplaySeconds;
+                Publish(_botReplay.Dequeue());
+                return;
+            }
             if (_game.State.Phase == GamePhase.GameOver ||
                 UnityEngine.Time.time < _nextBotStepTime)
             {
@@ -235,7 +260,10 @@ namespace StiflingDark.Unity
             LogNewBotAnomalies();
             if (changed)
             {
-                Refresh();
+                // The final state closes the replay; anything the turn snapshotted plays
+                // out first at BotReplaySeconds.
+                _botReplay.Enqueue(BuildView());
+                _nextBotStepTime = 0f;
             }
         }
 
@@ -264,30 +292,41 @@ namespace StiflingDark.Unity
 
         // -------------------------------------------------------------- updates
 
+        private PlayerView BuildView() =>
+            _game.ViewFor(_viewRole, _myInvestigatorId, _escapeChoices);
+
+        /// <summary>A human action jumps straight to the present: any bot-turn snapshots
+        /// still queued for replay are behind it now and would render backwards.</summary>
         private void Refresh()
         {
-            var view = _game.ViewFor(_viewRole, _myInvestigatorId, _escapeChoices);
+            _botReplay.Clear();
+            Publish(BuildView());
+        }
+
+        private void Publish(PlayerView view)
+        {
             View = view;
             for (int i = _logCursor; i < view.Log.Count; i++)
             {
                 _log.Add(view.Log[i]);
             }
             _logCursor = view.Log.Count;
-            ActingSeats = ComputeActingSeats();
+            ActingSeats = ComputeActingSeats(view);
             YourTurn = ActingSeats.Contains(Room.YourSeat);
             Revision++;
             GameUpdated?.Invoke();
         }
 
         /// <summary>
-        /// Seats the game is waiting on right now. During Investigator turns that is the seat
-        /// whose turn is open, or — between turns — every Investigator who has not gone yet,
-        /// because turn order inside the round is the team's to choose.
+        /// Seats the game is waiting on in this VIEW — the view rather than live state, so a
+        /// replayed bot-turn snapshot doesn't flip YourTurn on before the replay finishes.
+        /// During Investigator turns that is the seat whose turn is open, or — between turns
+        /// — every Investigator who has not gone yet, because turn order inside the round is
+        /// the team's to choose.
         /// </summary>
-        private List<int> ComputeActingSeats()
+        private List<int> ComputeActingSeats(PlayerView view)
         {
-            var state = _game.State;
-            switch (state.Phase)
+            switch (view.Phase)
             {
                 case GamePhase.AdversarySetup:
                 case GamePhase.AdversaryTurn:
@@ -295,13 +334,13 @@ namespace StiflingDark.Unity
                         .Select(s => s.Seat).ToList();
 
                 case GamePhase.InvestigatorTurns:
-                    if (state.ActiveInvestigator != null)
+                    if (view.ActiveInvestigator != null)
                     {
                         return Room.Seats
-                            .Where(s => s.InvestigatorId == state.ActiveInvestigator)
+                            .Where(s => s.InvestigatorId == view.ActiveInvestigator)
                             .Select(s => s.Seat).ToList();
                     }
-                    var pending = state.Investigators
+                    var pending = view.Investigators
                         .Where(i => !i.TurnTakenThisRound && !i.Escaped &&
                                     (!i.Dead || i.SpiritId != null))
                         .Select(i => i.DefId).ToList();

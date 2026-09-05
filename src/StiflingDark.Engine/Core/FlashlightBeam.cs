@@ -23,10 +23,11 @@ namespace StiflingDark.Engine.Core
     /// <summary>
     /// The Small Flashlight beam: computes which spaces become Bright for a placement at
     /// any continuous angle around the Investigator's figure. A space is Bright when its
-    /// circle is entirely covered by the beam shape AND an unobstructed sight line
-    /// connects it to the Investigator. The physical template's printed sight lines are
-    /// modeled as a straight ray to the space (the digital interpretation agreed with the
-    /// designer: the visual template is not shown; only the resulting Bright set matters).
+    /// circle is entirely covered by the beam shape AND one of the template's 7 PRINTED
+    /// sight lines connects it to the Investigator without crossing an Obstacle — exactly
+    /// the physical rule (designer ruling 2026-08-27; the earlier straight-ray stand-in
+    /// missed spaces a printed line reaches through a door gap). When the def carries no
+    /// sight-line data, the straight ray to the space's centre is the fallback.
     /// </summary>
     public sealed class FlashlightBeam
     {
@@ -36,6 +37,7 @@ namespace StiflingDark.Engine.Core
         private readonly double _originY;
         private readonly double _templateLengthPx;
         private readonly double _lengthInPitches;
+        private readonly List<List<double[]>> _sightLines;
 
         public FlashlightBeam(FlashlightDef def)
         {
@@ -50,6 +52,7 @@ namespace StiflingDark.Engine.Core
             _originY = def.OriginY;
             _templateLengthPx = def.ImageHeight;
             _lengthInPitches = def.LengthInSpacePitches;
+            _sightLines = def.SightLinePaths;
         }
 
         /// <summary>
@@ -57,8 +60,12 @@ namespace StiflingDark.Engine.Core
         /// at <paramref name="angleRadians"/> (board coordinates, y-down; 0 = +x). The
         /// Investigator's own space is always included.
         /// </summary>
+        /// <param name="sightLineLimit">Use only the first N printed lines — the data orders
+        /// them centre vertical, side verticals, then the angled fans, so 1 = the single
+        /// centre line and 3 = all three verticals. Null = the whole template.</param>
         public HashSet<string> ComputeBright(
-            MapGraph graph, string atSpace, double angleRadians, ILineOfSightBlocker blocker)
+            MapGraph graph, string atSpace, double angleRadians, ILineOfSightBlocker blocker,
+            int? sightLineLimit = null)
         {
             var origin = graph.Space(atSpace);
             double pitch = graph.Def.SpacePitch;
@@ -83,12 +90,91 @@ namespace StiflingDark.Engine.Core
                     continue;
                 }
                 if (CircleFullyInBeam(space.X, space.Y, radius, origin.X, origin.Y, fx, fy, rx, ry, scale) &&
-                    !blocker.Blocks(origin.X, origin.Y, space.X, space.Y))
+                    HasSight(space.X, space.Y, radius, origin.X, origin.Y, fx, fy, rx, ry, scale,
+                        blocker, sightLineLimit))
                 {
                     bright.Add(space.Id);
                 }
             }
             return bright;
+        }
+
+        /// <summary>
+        /// Does the Investigator see this space? With sight-line data: one of the 7 printed
+        /// lines passes through the space's circle, and the WHOLE walk from the line's base
+        /// at the notch — up a vertical, around its branch point for the angled ones — to
+        /// where it exits the circle is unobstructed. Grazing the near rim before a wall is
+        /// not enough: the line must make it through the space (designer: "if one of those
+        /// lines hits a grey-bordered wall, it should not see the space"). Without data:
+        /// the straight ray to the space's centre.
+        /// </summary>
+        private bool HasSight(
+            double cx, double cy, double radius,
+            double ox, double oy, double fx, double fy, double rx, double ry, double scale,
+            ILineOfSightBlocker blocker, int? sightLineLimit)
+        {
+            if (_sightLines.Count == 0)
+            {
+                return !blocker.Blocks(ox, oy, cx, cy);
+            }
+            int lineCount = Math.Min(_sightLines.Count, sightLineLimit ?? _sightLines.Count);
+
+            // The space's centre in template pixels, and its radius there.
+            double dx = cx - ox, dy = cy - oy;
+            double tx = _originX + (dx * rx + dy * ry) / scale;
+            double ty = _originY - (dx * fx + dy * fy) / scale;
+            double radiusT = radius / scale;
+
+            (double X, double Y) ToBoard(double px, double py) => (
+                ox + (fx * (_originY - py) + rx * (px - _originX)) * scale,
+                oy + (fy * (_originY - py) + ry * (px - _originX)) * scale);
+
+            for (int line = 0; line < lineCount; line++)
+            {
+                var path = _sightLines[line];
+                for (int i = 1; i < path.Count; i++)
+                {
+                    double x1 = path[i - 1][0], y1 = path[i - 1][1];
+                    double x2 = path[i][0], y2 = path[i][1];
+                    double sx = x2 - x1, sy = y2 - y1;
+                    double lengthSq = sx * sx + sy * sy;
+                    if (lengthSq <= 0)
+                    {
+                        continue;
+                    }
+                    double t = ((tx - x1) * sx + (ty - y1) * sy) / lengthSq;
+                    double clamped = Math.Max(0, Math.Min(1, t));
+                    double nx = x1 + sx * clamped, ny = y1 + sy * clamped;
+                    double distSq = (nx - tx) * (nx - tx) + (ny - ty) * (ny - ty);
+                    if (distSq > radiusT * radiusT)
+                    {
+                        continue; // this leg misses the space entirely
+                    }
+                    double halfChord = Math.Sqrt(Math.Max(0, radiusT * radiusT - distSq));
+                    double tExit = Math.Max(0, Math.Min(1, t + halfChord / Math.Sqrt(lengthSq)));
+                    double ex = x1 + sx * tExit, ey = y1 + sy * tExit;
+
+                    // Walk the path from its base: every earlier leg in full, then this leg
+                    // up to the exit point.
+                    bool clear = true;
+                    for (int j = 1; j < i && clear; j++)
+                    {
+                        var a = ToBoard(path[j - 1][0], path[j - 1][1]);
+                        var b = ToBoard(path[j][0], path[j][1]);
+                        clear = !blocker.Blocks(a.X, a.Y, b.X, b.Y);
+                    }
+                    if (clear)
+                    {
+                        var start = ToBoard(x1, y1);
+                        var exit = ToBoard(ex, ey);
+                        if (!blocker.Blocks(start.X, start.Y, exit.X, exit.Y))
+                        {
+                            return true;
+                        }
+                    }
+                }
+            }
+            return false;
         }
 
         private bool CircleFullyInBeam(

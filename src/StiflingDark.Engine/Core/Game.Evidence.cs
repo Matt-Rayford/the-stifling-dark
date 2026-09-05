@@ -17,6 +17,9 @@ namespace StiflingDark.Engine.Core
         {
             var inv = ActiveInv();
             RequireNoPendingWindow();
+            // Designer ruling (2026-08-31): a Spirit may not turn in Evidence — its holdings
+            // only leave via a living Investigator Trading with it.
+            RequireNotSpirit(inv, "turn in Evidence (Trade it to a living Investigator instead)");
             RequireActionAllowed(inv, ActionInvolved);
             RequireNoFinalAction(inv);
 

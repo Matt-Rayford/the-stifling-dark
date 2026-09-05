@@ -1029,6 +1029,7 @@ namespace StiflingDark.Engine.Core
                 if (figure.Alive && !figure.Revealed && spaces.Contains(figure.Space))
                 {
                     figure.Revealed = true;
+                    DropShadowToken(figure.Id);
                     Log("reveal", $"{figure.Id} at {figure.Space} ({reason})");
                     OnAdversaryRevealed(figure.Id);
                 }

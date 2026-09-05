@@ -15,6 +15,11 @@ namespace StiflingDark.Engine.Core
         /// <summary>Where the Medical Item tokens begin (count validated against config).</summary>
         public List<string> MedicalItemSpaces { get; set; } = new List<string>();
         public bool UseMiniExpansionCards { get; set; }
+        /// <summary>
+        /// Who holds the short-handed team's starting Items (see GrantStartingItems).
+        /// Null: the first Investigator in setup order.
+        /// </summary>
+        public string? StartingItemsInvestigatorId { get; set; }
     }
 
     /// <summary>
@@ -45,7 +50,8 @@ namespace StiflingDark.Engine.Core
             var mask = db.LosMask(state.ScenarioId);
             if (mask != null)
             {
-                _losBlocker = mask;
+                // Closed doors re-wall their strip live (the raster keeps door spaces clear).
+                _losBlocker = new DoorAwareLosBlocker(mask, Graph, () => State.Overlay.DoorStates);
             }
         }
 
@@ -125,7 +131,32 @@ namespace StiflingDark.Engine.Core
             var game = new Game(db, state);
             game.BuildDecks(setup.UseMiniExpansionCards);
             game.Log("setup", $"{count} investigators vs {setup.AdversaryId} at {setup.ScenarioId}");
+            game.GrantStartingItems(setup);
             return game;
+        }
+
+        /// <summary>
+        /// Short-handed compensation (designer ruling 2026-08): a 3-Investigator team starts
+        /// with 2 General Items, a 2-Investigator team with 4, a full team with none. All of
+        /// them go to ONE Investigator — with bots at the table that is the human's seat,
+        /// wired through <see cref="GameSetup.StartingItemsInvestigatorId"/>. Distribution
+        /// may become a team choice later.
+        /// </summary>
+        private void GrantStartingItems(GameSetup setup)
+        {
+            int count = State.Investigators.Count switch { 2 => 4, 3 => 2, _ => 0 };
+            if (count == 0)
+            {
+                return;
+            }
+            var holder = setup.StartingItemsInvestigatorId != null
+                ? Investigator(setup.StartingItemsInvestigatorId)
+                : State.Investigators[0];
+            for (int i = 0; i < count; i++)
+            {
+                holder.Items.Add(Draw(State.GeneralItemDeck, "general item"));
+            }
+            Log("setup", $"{holder.DefId} starts with {count} Items (short-handed team)");
         }
 
         private void BuildDecks(bool useMiniExpansion)
@@ -260,6 +291,10 @@ namespace StiflingDark.Engine.Core
             if (State.ActiveInvestigator != null)
             {
                 throw new InvalidOperationException($"{State.ActiveInvestigator} has not finished their turn.");
+            }
+            if (EscapeChoicePending)
+            {
+                throw new InvalidOperationException("Enough Evidence is in: choose the team's Escape card before any further turn.");
             }
             var inv = Investigator(invId);
             // A dead Investigator whose player took a Spirit card keeps taking turns (4 MP plus
@@ -414,6 +449,9 @@ namespace StiflingDark.Engine.Core
         {
             var inv = ActiveInv();
             RequireNoPendingWindow();
+            // Designer ruling (2026-08-31): Spirits keep what they died holding but acquire
+            // nothing new — their inventory only moves by giving it away in a Trade.
+            RequireNotSpirit(inv, "pick up Evidence");
             string? zone = State.Evidence
                 .Where(kv => kv.Value.Space == inv.Space && kv.Value.Revealed)
                 .Select(kv => kv.Key)
@@ -518,6 +556,7 @@ namespace StiflingDark.Engine.Core
         {
             var inv = ActiveInv();
             RequireNoPendingWindow();
+            RequireNotSpirit(inv, "pick up Point of Interest tokens");
             RequireActionAllowed(inv, ActionPickUpPoi);
             var token = State.PoiTokens.FirstOrDefault(p => p.TokenSpace == inv.Space && p.Revealed && !p.Collected)
                 ?? throw new InvalidOperationException("No revealed POI token here.");
@@ -631,8 +670,7 @@ namespace StiflingDark.Engine.Core
         /// </summary>
         private void PayFlashlightCharge(InvestigatorState inv)
         {
-            string waiverKey = FlashlightChargeWaiverPrefix + inv.DefId;
-            bool waived = HasRoundModifier(waiverKey);
+            bool waived = HasMarker(inv, FlashlightChargeWaiverMarker);
             int cost = 1 + Math.Max(0, EventRoundModifier(FlashlightChargeSurchargeKey)) - (waived ? 1 : 0);
             // Validate before spending anything, the waiver included: a refused placement must
             // leave the Investigator exactly as they were.
@@ -643,15 +681,20 @@ namespace StiflingDark.Engine.Core
             }
             if (waived)
             {
-                ClearRoundModifier(waiverKey);
+                RemoveMarker(inv, FlashlightChargeWaiverMarker);
                 Log("flashlight", $"{inv.DefId} pays 1 less Charge for this placement");
             }
             inv.Charge -= cost;
         }
 
         /// <summary>The Bright set a flashlight would produce — call freely for the mouse preview.</summary>
-        public HashSet<string> PreviewFlashlight(string invId, double angleRadians) =>
-            _beam.ComputeBright(Graph, Investigator(invId).Space, angleRadians, _losBlocker);
+        /// <summary><paramref name="sightLineLimit"/> restricts LOS to the template's first
+        /// N printed lines (ordered centre vertical, side verticals, then the angled fans) —
+        /// how Hazy and the tunnel-vision Wounds narrow the beam.</summary>
+        public HashSet<string> PreviewFlashlight(string invId, double angleRadians,
+            int? sightLineLimit = null) =>
+            _beam.ComputeBright(Graph, Investigator(invId).Space, angleRadians, _losBlocker,
+                sightLineLimit);
 
         /// <summary>Generic Involved Action final: ends the turn with no Stamina gain. Specific
         /// Involved Actions (evidence turn-in, objectives) build on this as they are implemented.</summary>
@@ -743,13 +786,33 @@ namespace StiflingDark.Engine.Core
             NoteTurnResourceGains(inv);
             inv.TurnTakenThisRound = true;
             State.ActiveInvestigator = null;
-            // Spirits still take a turn every round, so a dead Investigator only stops holding
-            // the phase open once their player has declined (or lost) a Spirit card.
-            if (State.Investigators.All(i => i.TurnTakenThisRound || i.Escaped || (i.Dead && !IsSpirit(i))))
+            AdvanceToAdversaryTurnIfRoundComplete();
+        }
+
+        /// <summary>
+        /// Hand the round to the Adversary once every Investigator has acted. Spirits still
+        /// take a turn every round, so a dead Investigator only stops holding the phase open
+        /// once their player has declined (or lost) a Spirit card. Held while the team owes
+        /// an Escape card choice (see <see cref="EscapeChoicePending"/>); SelectEscapeCard
+        /// calls back in to release it.
+        /// </summary>
+        private void AdvanceToAdversaryTurnIfRoundComplete()
+        {
+            if (State.Phase != GamePhase.InvestigatorTurns || State.ActiveInvestigator != null)
             {
-                State.Phase = GamePhase.AdversaryTurn;
-                State.Adversary.NoiseTokens.Clear();
+                return;
             }
+            if (!State.Investigators.All(i => i.TurnTakenThisRound || i.Escaped || (i.Dead && !IsSpirit(i))))
+            {
+                return;
+            }
+            if (EscapeChoicePending)
+            {
+                Log("objective", "enough Evidence is in: the round waits for the team's Escape card");
+                return;
+            }
+            State.Phase = GamePhase.AdversaryTurn;
+            State.Adversary.NoiseTokens.Clear();
         }
 
         /// <summary>
@@ -1201,6 +1264,7 @@ namespace StiflingDark.Engine.Core
                 if (figure.Alive && !figure.Revealed && brightSet.Contains(figure.Space))
                 {
                     figure.Revealed = true;
+                    DropShadowToken(figure.Id);
                     Log("reveal", $"{figure.Id} at {figure.Space} (caught in the light)");
                     OnAdversaryRevealed(figure.Id);
                 }
@@ -1223,11 +1287,35 @@ namespace StiflingDark.Engine.Core
             }
         }
 
+        /// <summary>
+        /// A figure standing in plain sight has no Shadow token — on the table the standee
+        /// replaces it — so every reveal path drops the revealed figure's token. Without this
+        /// the board shows one marker per figure PLUS a stale face-down Shadow token for the
+        /// same figure. ("frayed", the Butcher's Frayed Ropes decoy, belongs to no figure and
+        /// is deliberately left alone.)
+        /// </summary>
+        private void DropShadowToken(string figureKey) => State.Adversary.ShadowTokens.Remove(figureKey);
+
+        /// <summary>Turn-start Shadow token: on the figure's space while it is Hidden, gone once
+        /// its standee is on the board.</summary>
+        private void RefreshShadowToken(string figureKey, string space, bool hidden)
+        {
+            if (hidden)
+            {
+                State.Adversary.ShadowTokens[figureKey] = space;
+            }
+            else
+            {
+                DropShadowToken(figureKey);
+            }
+        }
+
         private void RevealAdversary(string reason)
         {
             if (!State.Adversary.Revealed)
             {
                 State.Adversary.Revealed = true;
+                DropShadowToken("main");
                 // Designer-confirmed: being Revealed during their own turn locks the Attack
                 // for the rest of the round, same as beginning the turn Revealed. This is
                 // the tactical point of flashlights: a beam across an approach lane both

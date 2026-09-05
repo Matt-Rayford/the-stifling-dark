@@ -38,8 +38,11 @@ namespace StiflingDark.Engine.Core
         /// Place the Cultists and the Altar (Adversary setup, after <see cref="PlaceAdversary"/>
         /// has put Mor'gonnod down). Cultist count matches the Investigator count; every
         /// Cultist must be adjacent to at least 1 other, forming a single group, and
-        /// Mor'gonnod must be adjacent to one of them. The Altar goes on a General space of
-        /// any Zone.
+        /// Mor'gonnod must be adjacent to one of them. The whole Cult — Mor'gonnod included —
+        /// starts inside ONE building Zone (designer: "the Cultists must start completely
+        /// within one of the building zones, and thus cannot start on a non-letter based
+        /// position"), so every start space must be a lettered, zoned one and they must all
+        /// share the same Zone. The Altar goes on a General space of any Zone.
         /// </summary>
         public void SetupCultists(List<string> spaces, string altarSpace)
         {
@@ -73,6 +76,7 @@ namespace StiflingDark.Engine.Core
             {
                 throw new InvalidOperationException($"Mor'gonnod ({adv.Space}) must start adjacent to one of the Cultists.");
             }
+            RequireOneBuildingZone(spaces, adv.Space);
             RequireSpace(altarSpace);
             var altar = Graph.Space(altarSpace);
             if (altar.Kind != SpaceKind.Normal || altar.Zone == null)
@@ -113,10 +117,12 @@ namespace StiflingDark.Engine.Core
             bool corporeal = IsCorporeal();
             if (!corporeal)
             {
-                adv.ShadowTokens["main"] = adv.Space;
+                // Hidden figures are on the board as their Shadow token; a Revealed one is
+                // there as its own standee and must not carry a token as well.
+                RefreshShadowToken("main", adv.Space, hidden: !adv.Revealed);
                 foreach (var cultist in adv.Figures.Where(f => f.Alive))
                 {
-                    adv.ShadowTokens[cultist.Id] = cultist.Space;
+                    RefreshShadowToken(cultist.Id, cultist.Space, hidden: !cultist.Revealed);
                 }
             }
 
@@ -182,6 +188,7 @@ namespace StiflingDark.Engine.Core
             if (!cultist.Revealed && IsBright(to))
             {
                 cultist.Revealed = true;
+                DropShadowToken(cultist.Id);
                 Log("reveal", $"Cultist {cultist.Id} at {to} (moved onto a Bright space)");
             }
             // A Cultist already standing on a space that a Flashlight or Light Switch later
@@ -1028,6 +1035,33 @@ namespace StiflingDark.Engine.Core
             {
                 throw new InvalidOperationException(
                     $"The {what} must form a single group, each adjacent to at least 1 other ({string.Join(", ", remaining)} stand apart).");
+            }
+        }
+
+        /// <summary>
+        /// The Cult starts completely inside one building Zone: every start space carries a
+        /// Zone letter (the outdoor numbered spaces carry none) and they all name the same one.
+        /// Mor'gonnod is part of the group for this, so his space is checked alongside the
+        /// Cultists' — the whole Cult begins in a single building.
+        /// </summary>
+        private void RequireOneBuildingZone(List<string> cultistSpaces, string morgonnodSpace)
+        {
+            var outdoors = cultistSpaces.Concat(new[] { morgonnodSpace })
+                .Where(space => Graph.Space(space).Zone == null).ToList();
+            if (outdoors.Count > 0)
+            {
+                throw new InvalidOperationException(
+                    "The Cult starts inside a building Zone; " +
+                    $"{string.Join(", ", outdoors)} {(outdoors.Count == 1 ? "is" : "are")} not in one.");
+            }
+            var zones = cultistSpaces.Concat(new[] { morgonnodSpace })
+                .Select(space => Graph.Space(space).Zone!)
+                .Distinct().OrderBy(zone => zone, StringComparer.Ordinal).ToList();
+            if (zones.Count > 1)
+            {
+                throw new InvalidOperationException(
+                    "The whole Cult, Mor'gonnod included, starts within ONE building Zone " +
+                    $"(this group spans {string.Join(", ", zones)}).");
             }
         }
 

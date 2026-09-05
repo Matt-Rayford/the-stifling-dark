@@ -31,6 +31,16 @@ public sealed class Actor
     /// <summary>Set by probe mode to print every refused action with the engine's own message.</summary>
     public Action<string, string>? TraceRefusals { get; set; }
 
+    /// <summary>
+    /// Invoked after every action the engine ACCEPTED. The offline client snapshots the
+    /// game after each one, so a bot's whole turn can be replayed to the human step by
+    /// step instead of appearing all at once. Null (the arena) costs nothing.
+    /// </summary>
+    public Action? AfterAction { get; set; }
+
+    /// <summary>Probe: the label of every action the engine ACCEPTED, in order.</summary>
+    public Action<string>? TraceActions { get; set; }
+
     /// <summary>Probe: an InvalidOperationException just means "not legal right now".</summary>
     public bool Try(string label, Action action)
     {
@@ -38,6 +48,8 @@ public sealed class Actor
         {
             action();
             Actions++;
+            TraceActions?.Invoke(label);
+            AfterAction?.Invoke();
             return true;
         }
         catch (InvalidOperationException e)
@@ -70,6 +82,8 @@ public sealed class Actor
         {
             action();
             Actions++;
+            TraceActions?.Invoke(label);
+            AfterAction?.Invoke();
             return null;
         }
         catch (InvalidOperationException e)
@@ -90,6 +104,7 @@ public sealed class Actor
         {
             action();
             Actions++;
+            TraceActions?.Invoke(label);
         }
         catch (Exception e)
         {

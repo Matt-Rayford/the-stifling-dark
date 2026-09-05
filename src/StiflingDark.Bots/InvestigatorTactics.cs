@@ -422,8 +422,9 @@ public sealed partial class InvestigatorTeam
         }
         // Batching only pays when the gate is bigger than the party: if the team already holds
         // enough tokens between them, everybody cashing in their own is strictly faster than
-        // funnelling them through one runner.
-        if (Alive.Sum(i => i.EvidenceCarried.Count) >= needed)
+        // funnelling them through one runner. Spirits count — they carry and turn in too.
+        if (S.Investigators.Where(i => (!i.Dead || i.SpiritId != null) && !i.Escaped)
+                .Sum(i => i.EvidenceCarried.Count) >= needed)
         {
             return true;
         }
@@ -437,8 +438,17 @@ public sealed partial class InvestigatorTeam
         {
             return true;
         }
-        // Anything else still worth collecting before the trip?
         var costs = CostFrom(inv.Space, inv);
+        int nearestFeature = _turnInSpaces.Select(f => Nav.Hops(costs, f))
+            .DefaultIfEmpty(int.MaxValue).Min();
+        // A feature practically underfoot is banked in passing: the trip costs nothing and
+        // every token in hand at a wipe is a token lost (measured 2026-08-31: 103 of 514
+        // revealed tokens per 120 games died in carriers' hands).
+        if (nearestFeature <= 3)
+        {
+            return true;
+        }
+        // Anything else still worth collecting before the trip?
         var loose = S.Evidence.Where(kv => kv.Value.Revealed).Select(kv => kv.Value.Space).ToList();
         var switches = _g.Graph.Def.Spaces
             .Where(sp => sp.Kind == SpaceKind.LightSwitch && sp.Zone != null &&
@@ -447,14 +457,13 @@ public sealed partial class InvestigatorTeam
             .Select(sp => sp.Id);
         int nearestMore = loose.Concat(switches).Select(sp => Nav.Hops(costs, sp))
             .DefaultIfEmpty(int.MaxValue).Min();
-        int nearestFeature = _turnInSpaces.Select(f => Nav.Hops(costs, f))
-            .DefaultIfEmpty(int.MaxValue).Min();
         if (nearestMore == int.MaxValue)
         {
             return true;
         }
-        // Only detour for another token while the detour stays cheaper than a second whole trip.
-        return nearestMore > nearestFeature + 10;
+        // Only detour for another token while the detour stays cheaper than a second whole
+        // trip — how much cheaper depends on how hard the clock is pressing (per Adversary).
+        return nearestMore > nearestFeature + _playbook.TurnInDetourSlack;
     }
 
     /// <summary>
@@ -468,9 +477,10 @@ public sealed partial class InvestigatorTeam
         {
             return null;
         }
-        // A face-up Ergophobia bars the Involved Action for good: whatever this Investigator is
-        // carrying has to change hands or it never gets turned in.
-        bool mustPass = !CanTakeInvolved(inv);
+        // A face-up Ergophobia bars the Involved Action for good, and a Spirit may never turn
+        // in at all (designer ruling 2026-08-31): whatever this Investigator is carrying has
+        // to change hands or it never gets turned in.
+        bool mustPass = !CanTakeInvolved(inv) || IsSpirit(inv);
         if (!mustPass && (_runner == null || _runner == inv.DefId))
         {
             return null;
@@ -523,7 +533,10 @@ public sealed partial class InvestigatorTeam
     /// </summary>
     private Plan? ScreenPlan(InvestigatorState inv)
     {
-        if (IsSpirit(inv) || inv.Wounds.Count > 1 || _threatLevel == 0)
+        // A carrier never screens: their death loses the Evidence too, and the batch belongs
+        // at a Computer, not between the Adversary and a casualty.
+        if (IsSpirit(inv) || inv.Wounds.Count > 1 || _threatLevel == 0 ||
+            inv.EvidenceCarried.Count > 0)
         {
             return null;
         }

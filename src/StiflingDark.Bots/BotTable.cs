@@ -28,6 +28,35 @@ public sealed class BotTable : IAnomalySink
     /// memory only: a room is not the place to fail a game over a bot's confusion.</summary>
     public List<string> Anomalies { get; } = new();
 
+    /// <summary>Fires after every engine-accepted bot action (see <see cref="Actor.AfterAction"/>):
+    /// the offline client snapshots each one so bot turns replay visibly, step by step.</summary>
+    public Action? AfterAction
+    {
+        get => _actor.AfterAction;
+        set => _actor.AfterAction = value;
+    }
+
+    /// <summary>Probe hook: dumps each Investigator's chosen plan (see InvestigatorTeam.Trace).</summary>
+    public Action<string>? TraceInvestigators
+    {
+        get => _team.Trace;
+        set => _team.Trace = value;
+    }
+
+    /// <summary>Probe hook: every engine refusal the bots shrugged off (label, message).</summary>
+    public Action<string, string>? TraceRefusals
+    {
+        get => _actor.TraceRefusals;
+        set => _actor.TraceRefusals = value;
+    }
+
+    /// <summary>Probe hook: the label of every engine-accepted bot action, in order.</summary>
+    public Action<string>? TraceActions
+    {
+        get => _actor.TraceActions;
+        set => _actor.TraceActions = value;
+    }
+
     public BotTable(Game game, ulong seed, IEnumerable<string> botInvestigatorIds,
         bool botAdversary, IEnumerable<string> startSpaces)
     {
@@ -54,30 +83,45 @@ public sealed class BotTable : IAnomalySink
     public bool TryStep()
     {
         NotifyEscapeSelection();
+        // Event choices belong to the Adversary and are armed during the INVESTIGATORS' phase,
+        // so they are answered here rather than on the Adversary's turn — by then the round's
+        // damage would be done, and at the end of it the offer expires unused.
+        bool answeredEventChoice = _botAdversary && _adversary.AnswerEventChoices();
+        // The engine holds the game while the team owes its Escape card: an all-bot team
+        // picks now; a table with a human Investigator waits for their command.
+        if (_game.EscapeChoicePending)
+        {
+            if (!_wholeTeamIsBots)
+            {
+                return answeredEventChoice;
+            }
+            _team.MaybeSelectEscapeCard();
+            NotifyEscapeSelection();
+        }
         var state = _game.State;
         switch (state.Phase)
         {
             case GamePhase.AdversarySetup:
                 if (!_botAdversary)
                 {
-                    return false;
+                    return answeredEventChoice;
                 }
                 AdversarySetup.Run(_game, _rng, _startSpaces);
                 return true;
 
             case GamePhase.InvestigatorTurns:
-                return TryInvestigatorStep(state);
+                return TryInvestigatorStep(state) || answeredEventChoice;
 
             case GamePhase.AdversaryTurn:
                 if (!_botAdversary)
                 {
-                    return false;
+                    return answeredEventChoice;
                 }
                 _adversary.TakeTurn();
                 return true;
 
             default:
-                return false;
+                return answeredEventChoice;
         }
     }
 

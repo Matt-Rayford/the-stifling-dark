@@ -570,6 +570,10 @@ public sealed class Room
             InvestigatorStartSpaces = startSpaces,
             MedicalItemSpaces = medical,
             UseMiniExpansionCards = _setup.UseMiniExpansionCards,
+            // Short-handed starting Items all go to the first human Investigator seat
+            // (an all-bot team defaults to its first seat).
+            StartingItemsInvestigatorId = InvestigatorSeats()
+                .FirstOrDefault(s => !s.IsBot)?.InvestigatorId,
         });
     }
 

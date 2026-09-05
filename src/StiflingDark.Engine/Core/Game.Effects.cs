@@ -171,10 +171,10 @@ namespace StiflingDark.Engine.Core
         /// turn, so Spare Tools' "you may not take another Involved Action this turn" applies.</summary>
         public const string InvolvedActionUsedPrefix = "involved-action-used:";
 
-        /// <summary>Prefix + Investigator def id: 1 Charge of their next Flashlight placement
-        /// is paid from somewhere else (Spare Batteries' Supply token). Consumed by
-        /// Game.PlaceFlashlight.</summary>
-        public const string FlashlightChargeWaiverPrefix = "flashlight-charge-waiver:";
+        /// <summary>Per-Investigator marker (see Game.ItemEffects' "marker:" entries): 1 Charge
+        /// of their next Flashlight placement is paid from somewhere else (Spare Batteries'
+        /// Supply token). Outlives the round; consumed by Game.PlaceFlashlight.</summary>
+        public const string FlashlightChargeWaiverMarker = "flashlight-charge-waiver";
 
         /// <summary>Set once any Investigator has finished a turn this round holding more
         /// Charge or Stamina than they started it with (the Cult's Burning Heart end
@@ -315,31 +315,16 @@ namespace StiflingDark.Engine.Core
         }
 
         /// <summary>
-        /// Keep only the Bright spaces covered by the flashlight template's central sight
-        /// lines. "Center line" is the digital reading of the printed template's middle sight
-        /// line: the ray from <paramref name="fromSpace"/> along <paramref name="angleRadians"/>,
-        /// keeping the spaces whose circle that ray passes through. <paramref name="lines"/>
-        /// widens the corridor to that many parallel sight lines (1 = the middle line only,
-        /// 3 = the middle line plus one to either side). The Investigator's own space always
-        /// stays lit. Returns how many spaces were dropped.
+        /// Keep only the Bright spaces the template's first <paramref name="lines"/> printed
+        /// sight lines reach (1 = the centre vertical, 3 = all three verticals) — the real
+        /// template geometry, not the old straight-ray corridor. The Investigator's own
+        /// space always stays lit. Returns how many spaces were dropped.
         /// </summary>
-        private int TrimBrightToCenterLines(string fromSpace, double angleRadians, HashSet<string> bright, int lines)
+        private int TrimBrightToSightLines(InvestigatorState inv, double angleRadians,
+            HashSet<string> bright, int lines)
         {
-            var origin = Graph.Space(fromSpace);
-            double fx = Math.Cos(angleRadians);
-            double fy = Math.Sin(angleRadians);
-            double halfWidth = Graph.Def.SpaceRadius * lines;
-            return bright.RemoveWhere(id =>
-            {
-                if (id == fromSpace)
-                {
-                    return false;
-                }
-                var space = Graph.Space(id);
-                double dx = space.X - origin.X;
-                double dy = space.Y - origin.Y;
-                return dx * fx + dy * fy < 0 || Math.Abs(dx * -fy + dy * fx) > halfWidth;
-            });
+            var allowed = PreviewFlashlight(inv.DefId, angleRadians, lines);
+            return bright.RemoveWhere(id => id != inv.Space && !allowed.Contains(id));
         }
 
         // ---------- Wound face-up plumbing ----------

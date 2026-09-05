@@ -44,6 +44,14 @@ public abstract class AdversaryBot
 
     public abstract void TakeTurn();
 
+    /// <summary>
+    /// Answer any Event card waiting on the Adversary (see <see cref="AdversaryEventChoices"/>).
+    /// Those choices are armed at the start of the round and expire at the end of it, so the
+    /// caller pumps this during the Investigators' phase rather than at the Adversary turn.
+    /// True when at least one was resolved.
+    /// </summary>
+    public virtual bool AnswerEventChoices() => AdversaryEventChoices.AnswerPending(G, Act);
+
     /// <summary>Adversary-side setup an Escape card demands the moment it is chosen.</summary>
     public virtual void OnEscapeCardSelected(string cardId)
     {
@@ -104,42 +112,111 @@ public abstract class AdversaryBot
             .FirstOrDefault();
     }
 
-    /// <summary>Greedy descent toward a space for the main figure.</summary>
+    /// <summary>Greedy descent toward a space for the main figure. Distances are recomputed
+    /// each pass because breaking a door mid-walk re-opens paths; a blocked or finished
+    /// walk spends the turn's Break Door where it helps (see <see cref="BreakDoorNear"/>).</summary>
     protected void MoveMainToward(string target, int stopAt, bool avoidBright)
     {
-        var dist = Nav.From(G, target);
         for (int guard = 0; guard < 40; guard++)
         {
-            if (S.Phase != GamePhase.AdversaryTurn || Adv.MpRemaining <= 0)
+            if (S.Phase != GamePhase.AdversaryTurn)
             {
                 return;
             }
+            var dist = Nav.From(G, target);
             int here = Nav.Hops(dist, Adv.Space);
-            if (here == int.MaxValue || here <= stopAt)
+            if (here != int.MaxValue && here <= stopAt)
             {
+                // Arrived: any Locked/Damaged door beside the figure is a free parting hit.
+                BreakDoorNear(Adv.Space, Adv.Revealed, BreakMainDoor);
                 return;
             }
-            var options = Nav.Neighbors(G, Adv.Space)
-                .Where(n => Nav.Hops(dist, n) < here)
-                .Where(n => !avoidBright || !IsBright(n))
-                .OrderBy(n => Nav.Hops(dist, n))
-                .ThenBy(n => n, StringComparer.Ordinal)
-                .ToList();
-            bool moved = false;
-            foreach (string next in options)
+            bool advanced = false;
+            if (here != int.MaxValue && Adv.MpRemaining > 0)
             {
-                string to = next;
-                if (Act.Try("adv-move", () => G.AdversaryMoveStep(to)))
+                var options = Nav.Neighbors(G, Adv.Space)
+                    .Where(n => Nav.Hops(dist, n) < here)
+                    .Where(n => !avoidBright || !IsBright(n))
+                    .OrderBy(n => Nav.Hops(dist, n))
+                    .ThenBy(n => n, StringComparer.Ordinal)
+                    .ToList();
+                foreach (string next in options)
                 {
-                    moved = true;
-                    break;
+                    string to = next;
+                    if (Act.Try("adv-move", () => G.AdversaryMoveStep(to)))
+                    {
+                        advanced = true;
+                        break;
+                    }
                 }
             }
-            if (!moved)
+            if (!advanced && !BreakDoorNear(Adv.Space, Adv.Revealed, BreakMainDoor))
             {
                 return;
             }
         }
+    }
+
+    private bool BreakMainDoor(string door) =>
+        Act.Try("adv-break-door", () => G.AdversaryBreakDoor(door));
+
+    /// <summary>An Investigator within this many pitches makes noise moot: they are close
+    /// enough that the fight is coming regardless.</summary>
+    private const double DoorStealthPitches = 5;
+
+    /// <summary>
+    /// Break Door — the counter to the Investigators' free door-locking (designer tactic,
+    /// 2026-08-31): a Locked door beside <paramref name="from"/> goes Damaged, a Damaged
+    /// one Destroyed; once per turn, a slot shared with the Cultists. A HIDDEN figure with
+    /// nobody within <see cref="DoorStealthPitches"/> holds off — the break is public and
+    /// would broadcast a position nobody was watching. Damaged doors first: one more hit
+    /// actually opens those. True when a door broke, so a stuck walk can re-path.
+    /// </summary>
+    protected bool BreakDoorNear(string from, bool revealed, Func<string, bool> breakDoor)
+    {
+        if (S.Phase != GamePhase.AdversaryTurn || Adv.ActionsUsed.Contains("breakDoor"))
+        {
+            return false;
+        }
+        if (!revealed && !TargetsNear(from, DoorStealthPitches))
+        {
+            return false;
+        }
+        var doors = G.Graph.Def.Edges
+            .Where(e => e.A == from || e.B == from)
+            .Select(e => e.A == from ? e.B : e.A)
+            .Where(d =>
+            {
+                var state = S.Overlay.DoorState(d);
+                return state == DoorState.Locked || state == DoorState.Damaged;
+            })
+            .OrderBy(d => S.Overlay.DoorState(d) == DoorState.Damaged ? 0 : 1)
+            .ThenBy(d => d, StringComparer.Ordinal)
+            .ToList();
+        foreach (string door in doors)
+        {
+            string captured = door;
+            if (breakDoor(captured))
+            {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /// <summary>Straight-line nearness — movement distances would call an Investigator
+    /// standing right behind the very door "unreachable", which is exactly backwards for
+    /// deciding whether anyone is around to hear it break.</summary>
+    private bool TargetsNear(string space, double pitches)
+    {
+        var from = G.Graph.Space(space);
+        double reach = G.Graph.Def.SpacePitch * pitches;
+        return Targets.Any(t =>
+        {
+            var at = G.Graph.Space(t.Space);
+            double dx = at.X - from.X, dy = at.Y - from.Y;
+            return dx * dx + dy * dy <= reach * reach;
+        });
     }
 
     protected bool Active(string cardId) => Adv.ActiveAbilities.Contains(cardId);
@@ -665,38 +742,47 @@ public sealed class CultBot : AdversaryBot
 
     private void MoveCultistToward(AdversaryFigure cultist, string goal, int stopAt)
     {
-        var dist = Nav.From(G, goal);
         for (int guard = 0; guard < 30; guard++)
         {
             if (S.Phase != GamePhase.AdversaryTurn || Counter("cmp:" + cultist.Id) <= 0)
             {
                 return;
             }
+            // Recomputed each pass: a broken door re-opens paths mid-walk.
+            var dist = Nav.From(G, goal);
             int here = Nav.Hops(dist, cultist.Space);
-            if (here == int.MaxValue || here <= stopAt)
+            if (here != int.MaxValue && here <= stopAt)
             {
                 return;
             }
-            var options = Nav.Neighbors(G, cultist.Space)
-                .Where(n => Nav.Hops(dist, n) < here)
-                .Where(n => !IsBright(n) || cultist.Revealed)
-                .OrderBy(n => Nav.Hops(dist, n))
-                .ThenBy(n => n, StringComparer.Ordinal)
-                .ToList();
-            bool moved = false;
-            foreach (string next in options)
+            bool advanced = false;
+            if (here != int.MaxValue)
             {
-                string id = cultist.Id;
-                string to = next;
-                if (Act.Try("cultist-move", () => G.CultistMoveStep(id, to)))
+                var options = Nav.Neighbors(G, cultist.Space)
+                    .Where(n => Nav.Hops(dist, n) < here)
+                    .Where(n => !IsBright(n) || cultist.Revealed)
+                    .OrderBy(n => Nav.Hops(dist, n))
+                    .ThenBy(n => n, StringComparer.Ordinal)
+                    .ToList();
+                foreach (string next in options)
                 {
-                    moved = true;
-                    break;
+                    string id = cultist.Id;
+                    string to = next;
+                    if (Act.Try("cultist-move", () => G.CultistMoveStep(id, to)))
+                    {
+                        advanced = true;
+                        break;
+                    }
                 }
             }
-            if (!moved)
+            if (!advanced)
             {
-                return;
+                string breaker = cultist.Id;
+                if (!BreakDoorNear(cultist.Space, cultist.Revealed,
+                        d => Act.Try("cultist-break-door", () => G.CultistBreakDoor(breaker, d))))
+                {
+                    return;
+                }
             }
         }
     }
@@ -808,6 +894,9 @@ public sealed class PassiveBot : AdversaryBot
     }
 
     public override void OnEscapeCardSelected(string cardId) => _placer.OnEscapeCardSelected(cardId);
+
+    /// <summary>Passive means passive: the Event's offer is declined by letting it expire.</summary>
+    public override bool AnswerEventChoices() => false;
 
     public override void TakeTurn()
     {

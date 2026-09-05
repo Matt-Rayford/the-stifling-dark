@@ -160,6 +160,62 @@ namespace StiflingDark.Engine.Tests
             Assert.Equal(adv.Space, adv.ShadowTokens["main"]);
         }
 
+        // ---------- Stalking vs the light (playtest report: a Shadow token appeared on a
+        // space the reporter believed a Flashlight beam had lit) ----------
+
+        [Fact]
+        public void Placing_a_flashlight_over_the_hidden_butcher_reveals_him_immediately()
+        {
+            var game = NewButcherGame("rend", new List<string> { "disturbed-presence", "escalating-terror" });
+            var aira = Inv(game, "aira");
+            aira.Charge = 3;
+            var beam = game.PreviewFlashlight("aira", 0.0);
+            Assert.NotEmpty(beam);
+            game.State.Adversary.Space = beam.First();
+
+            game.BeginInvestigatorTurn("aira");
+            game.PlaceFlashlight(0.0);
+
+            Assert.True(game.State.Adversary.Revealed);
+        }
+
+        [Fact]
+        public void Butcher_who_walks_into_a_standing_beam_is_revealed_and_cannot_stalk()
+        {
+            var game = NewButcherGame("rend", new List<string> { "disturbed-presence", "escalating-terror" });
+            var aira = Inv(game, "aira");
+            aira.Charge = 3;
+            game.BeginInvestigatorTurn("aira");
+            game.PlaceFlashlight(0.0);
+
+            // A lit space with a dark neighbour, so the step INTO the light is unambiguous.
+            var beam = game.State.Flashlights.Single().BrightSpaces.ToHashSet();
+            string lit = null, darkNeighbour = null;
+            foreach (string candidate in beam)
+            {
+                darkNeighbour = game.Graph.DistancesFrom(candidate, 1, game.State.Overlay).Keys
+                    .FirstOrDefault(n => n != candidate && !beam.Contains(n) &&
+                        game.Graph.TryStep(FigureKind.Adversary, n, candidate, game.State.Overlay) != null);
+                if (darkNeighbour != null)
+                {
+                    lit = candidate;
+                    break;
+                }
+            }
+            Assert.NotNull(lit);
+            Assert.NotNull(darkNeighbour);
+
+            FinishInvestigatorTurns(game);
+            var adv = game.State.Adversary;
+            adv.Space = darkNeighbour!;
+            Assert.False(adv.Revealed);
+            game.AdversaryMoveStep(lit);
+
+            Assert.True(adv.Revealed);
+            aira.Space = lit; // in range and in sight — only Revealed stands in the way
+            Assert.Throws<InvalidOperationException>(() => game.ButcherStalk(new List<string> { "aira" }));
+        }
+
         [Fact]
         public void Restalking_the_following_round_converts_chill_into_a_stalk()
         {

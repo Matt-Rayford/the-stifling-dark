@@ -115,6 +115,7 @@ public sealed class GameRun : IAnomalySink
                 int roundBefore = game.State.Round;
                 team.BeginRound();
                 SelectObjectiveIfDue(team, adversary);
+                adversary.AnswerEventChoices();
 
                 int turns = 0;
                 while (game.State.Phase == GamePhase.InvestigatorTurns)
@@ -134,6 +135,9 @@ public sealed class GameRun : IAnomalySink
                         throw new ArenaAbort("decided-game-kept-playing");
                     }
                     SelectObjectiveIfDue(team, adversary);
+                    // Fire Tornado arms its Zone choice at the first Investigator turn of the
+                    // round, not at the draw, so the Adversary is asked again after every turn.
+                    adversary.AnswerEventChoices();
                     if (++turns > game.State.Investigators.Count * 3)
                     {
                         Anomaly("investigator-phase-loop",

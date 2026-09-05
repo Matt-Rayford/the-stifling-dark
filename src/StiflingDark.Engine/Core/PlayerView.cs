@@ -276,6 +276,9 @@ namespace StiflingDark.Engine.Core
             public int EvidenceRequired { get; set; }
             public List<string> OncePerGameRewardsUsed { get; set; } = new List<string>();
             public string? SelectedEscapeCard { get; set; }
+            /// <summary>Enough Evidence is in and the team owes its Escape card choice: no
+            /// further turn begins and the round holds until it is made.</summary>
+            public bool EscapeChoicePending { get; set; }
             /// <summary>Token name -> space. Tokens the rules keep on the mini-map until they
             /// are Revealed (the actual Grave, the Altar) are omitted for Investigators.</summary>
             public Dictionary<string, string> Tokens { get; set; } = new Dictionary<string, string>();
@@ -707,6 +710,7 @@ namespace StiflingDark.Engine.Core
                 EvidenceRequired = required,
                 OncePerGameRewardsUsed = objective.OncePerGameRewardsUsed.ToList(),
                 SelectedEscapeCard = objective.SelectedEscapeCard,
+                EscapeChoicePending = EscapeChoicePending,
                 Tokens = tokens,
                 TokenCarriers = new Dictionary<string, string>(objective.TokenCarriers),
                 Supplies = objective.Supplies,

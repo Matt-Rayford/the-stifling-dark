@@ -354,5 +354,48 @@ namespace StiflingDark.Engine.Tests
             Assert.Equal("T-2", aira.Space);
             Assert.True(aira.WaterFloatUsedThisTurn);
         }
+
+        // ---------- short-handed starting Items ----------
+
+        private static Game NewShortHandedGame(int investigators, string holder = null)
+        {
+            var starts = new Dictionary<string, string>
+            {
+                ["aira"] = "285", ["lucy-belle"] = "286", ["mitchell"] = "305", ["vincent"] = "307",
+            };
+            return Game.NewGame(TestData.Db, new GameSetup
+            {
+                ScenarioId = "sawmill",
+                Seed = 99,
+                AdversaryId = "butcher",
+                InvestigatorStartSpaces = starts.Take(investigators)
+                    .ToDictionary(p => p.Key, p => p.Value),
+                MedicalItemSpaces = new List<string> { "24", "208" }
+                    .Take(TestData.Db.Config.ByInvestigatorCount[investigators].MedicalItemsOnBoard)
+                    .ToList(),
+                StartingItemsInvestigatorId = holder,
+            });
+        }
+
+        [Theory]
+        [InlineData(2, 4)]
+        [InlineData(3, 2)]
+        [InlineData(4, 0)]
+        public void Short_handed_teams_start_with_compensation_items(int investigators, int items)
+        {
+            var game = NewShortHandedGame(investigators);
+            Assert.Equal(items, game.State.Investigators.Sum(i => i.Items.Count));
+            // All on one Investigator — the setup's first when no holder was named.
+            Assert.Equal(items, game.State.Investigators[0].Items.Count);
+        }
+
+        [Fact]
+        public void Starting_items_go_to_the_named_investigator()
+        {
+            var game = NewShortHandedGame(3, holder: "mitchell");
+            var mitchell = game.State.Investigators.First(i => i.DefId == "mitchell");
+            Assert.Equal(2, mitchell.Items.Count);
+            Assert.Equal(2, game.State.Investigators.Sum(i => i.Items.Count));
+        }
     }
 }

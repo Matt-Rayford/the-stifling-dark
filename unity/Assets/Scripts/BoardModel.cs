@@ -41,8 +41,12 @@ namespace StiflingDark.Unity
             Map = db.Map(mapId);
             Graph = new MapGraph(Map);
             _beam = new FlashlightBeam(db.Flashlight);
-            // Same mask the server's Game uses; without it the preview would light through walls.
-            _blocker = (ILineOfSightBlocker)db.LosMask(mapId) ?? NoLineOfSightBlocker.None;
+            // Same mask the server's Game uses; without it the preview would light through
+            // walls. Closed doors re-wall their strip live (see UpdateDoorStates).
+            var mask = db.LosMask(mapId);
+            _blocker = mask == null
+                ? NoLineOfSightBlocker.None
+                : (ILineOfSightBlocker)new DoorAwareLosBlocker(mask, Graph, () => _doorStates);
 
             double width = 0, height = 0;
             try
@@ -70,6 +74,12 @@ namespace StiflingDark.Unity
         /// <summary>True when the raster line-of-sight mask was found; the preview needs it.</summary>
         public bool HasLosMask => !(_blocker is NoLineOfSightBlocker);
 
+        private Dictionary<string, DoorState> _doorStates = new Dictionary<string, DoorState>();
+
+        /// <summary>Keep the preview's door blocking in step with the latest view.</summary>
+        public void UpdateDoorStates(Dictionary<string, DoorState> states) =>
+            _doorStates = states ?? new Dictionary<string, DoorState>();
+
         /// <summary>
         /// Map-JSON pixels -> texture pixels. The two boards were rendered at different full
         /// resolutions from square pages, so this is per-map: 4096/7092 = 0.5776 (Sawmill),
@@ -84,8 +94,9 @@ namespace StiflingDark.Unity
         /// (Misty, Hazy, Downpour, Tunnel Vision) are applied server-side afterwards, so a
         /// preview can be generous in those rounds.
         /// </summary>
-        public HashSet<string> PreviewBright(string atSpace, double angleRadians) =>
-            _beam.ComputeBright(Graph, atSpace, angleRadians, _blocker);
+        public HashSet<string> PreviewBright(string atSpace, double angleRadians,
+            int? sightLineLimit = null) =>
+            _beam.ComputeBright(Graph, atSpace, angleRadians, _blocker, sightLineLimit);
 
         /// <summary>
         /// Turns a mouse offset from the aiming Investigator's figure, in WORLD units (client

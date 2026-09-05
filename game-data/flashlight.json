@@ -211,6 +211,97 @@
    ]
   }
  },
+ "sightLinePaths": {
+  "_note": "The 7 printed sight lines as POLYLINES in template pixels (y-down), matching the printed art: 3 full-length parallel verticals, and 4 angled lines that BRANCH off the outer verticals partway up (bottom anchors are where their fitted slopes through the sampledRows points meet x=343/536) and fan to the beam edge. Each angled path includes its vertical run from the base, because that is the physical trace from the Investigator: obstruction anywhere along the walk blocks the line. Engine LOS: a space connects when some path passes through its circle with everything from the base to the exit point clear (designer rulings 2026-08-27/31).",
+  "paths": [
+   [
+    [
+     440.0,
+     1500.0
+    ],
+    [
+     440.0,
+     0.0
+    ]
+   ],
+   [
+    [
+     343.0,
+     1500.0
+    ],
+    [
+     343.0,
+     0.0
+    ]
+   ],
+   [
+    [
+     536.0,
+     1500.0
+    ],
+    [
+     536.0,
+     0.0
+    ]
+   ],
+   [
+    [
+     343.0,
+     1500.0
+    ],
+    [
+     343.0,
+     1245.0
+    ],
+    [
+     50.0,
+     230.0
+    ]
+   ],
+   [
+    [
+     343.0,
+     1500.0
+    ],
+    [
+     343.0,
+     1065.0
+    ],
+    [
+     164.5,
+     100.0
+    ]
+   ],
+   [
+    [
+     536.0,
+     1500.0
+    ],
+    [
+     536.0,
+     1075.0
+    ],
+    [
+     716.5,
+     100.0
+    ]
+   ],
+   [
+    [
+     536.0,
+     1500.0
+    ],
+    [
+     536.0,
+     1245.0
+    ],
+    [
+     831.0,
+     230.0
+    ]
+   ]
+  ]
+ },
  "losRules": [
   "A space has line of sight only if (1) it is ENTIRELY covered by the template outline and (2) at least one printed sight line connects from the Investigator to the space without crossing an Obstacle.",
   "The Investigator's own space always has line of sight when the Flashlight is placed.",

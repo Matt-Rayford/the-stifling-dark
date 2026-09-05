@@ -87,6 +87,44 @@ namespace StiflingDark.Unity
             BoardBack("adversary-boards", adversaryId);
 
         /// <summary>
+        /// An Investigator's player-board FRONT — the landscape sheet with the printed Stamina
+        /// and Charge tracks, the Wound slots and their abilities. <see cref="WorldPlayerBoards"/>
+        /// measures its markers against this art, so the geometry there assumes this file.
+        /// </summary>
+        public Sprite PlayerBoardFront(string investigatorId) =>
+            BoardBack("player-board-fronts", investigatorId);
+
+        /// <summary>
+        /// An Item card's face for the hand, searched across the decks a carried card id can
+        /// come from. "-mi" ids are alternate-icon duplicates of a same-named card, so they
+        /// fall back to the base card's face.
+        /// </summary>
+        public Sprite ItemCard(string cardId)
+        {
+            if (string.IsNullOrEmpty(cardId))
+            {
+                return null;
+            }
+            foreach (string deck in ItemCardDecks)
+            {
+                var sprite = BoardBack(deck, cardId);
+                if (sprite != null)
+                {
+                    return sprite;
+                }
+            }
+            return cardId.EndsWith("-mi")
+                ? ItemCard(cardId.Substring(0, cardId.Length - "-mi".Length))
+                : null;
+        }
+
+        private static readonly string[] ItemCardDecks =
+            { "cards/general-items", "cards/cursed-items", "cards/objective-items" };
+
+        /// <summary>An Event card's face, for the board-side display and its reveal.</summary>
+        public Sprite EventCard(string cardId) => BoardBack("cards/events", cardId);
+
+        /// <summary>
         /// A landscape board sheet from one of the StreamingAssets board folders. No circle
         /// mask: unlike a face token this is a card, and it keeps its corners.
         /// </summary>
@@ -333,7 +371,13 @@ namespace StiflingDark.Unity
             return "investigator/faces/Cultist-1.png";
         }
 
-        public static string ShadowToken(string adversaryId, bool faceUp)
+        /// <summary>
+        /// Shadow-token art. <paramref name="tokenKey"/> is the key the engine filed the token
+        /// under in AdversaryState.ShadowTokens — "main" is the Adversary's own figure, which
+        /// for the Cult is Mor'gonnod and carries his own distinct token (physically he is
+        /// visibly not a Cultist even face-down); the Cultists are filed under their figure ids.
+        /// </summary>
+        public static string ShadowToken(string adversaryId, bool faceUp, string tokenKey = null)
         {
             switch (adversaryId)
             {
@@ -346,6 +390,12 @@ namespace StiflingDark.Unity
                         ? "adversary/horror/Horror-Face-Up-Shadow.png"
                         : "adversary/horror/Horror-Face-Down-Shadow.png";
                 case "cult-of-hunlow":
+                    if (tokenKey == "main")
+                    {
+                        return faceUp
+                            ? "adversary/cultists/Morgonnod-Face-Up-Shadow.png"
+                            : "adversary/cultists/Morgonnod-Face-Down-Shadow.png";
+                    }
                     return faceUp
                         ? "adversary/cultists/Cult-Face-Up-Shadow-X.png"
                         : "adversary/cultists/Cult-Face-Down-Shadow.png";
@@ -380,10 +430,12 @@ namespace StiflingDark.Unity
         public static string EvidenceToken(string scenarioId) =>
             scenarioId == "amusement-park" ? "amusement-park/Evidence.png" : "sawmill/Evidence.png";
 
-        public const string PoiBack = "general-items/Point-of-Interest-Back.png";
+        public const string PoiBack = "other/Point-of-Interest-Back.png";
         public const string ItemFront = "general-items/Generic-Item-Front.png";
         public const string CursedFront = "cursed-items/Generic-Cursed-Item-Front.png";
-        public const string MedicalBack = "general-items/Medical-Item-Back.png";
+        public const string MedicalBack = "other/Medical-Item-Back.png";
+        /// <summary>The Charge track's flashlight glyph, used by the floating Charge-loss cues.</summary>
+        public const string ChargeGlyph = "other/small-flashlight-transparent.png";
         public const string BrightMarker = "other/Bright.png";
         public const string DimMarker = "other/Dim.png";
         public const string FalteringMarker = "other/Faltering-Lights.png";
@@ -470,6 +522,26 @@ namespace StiflingDark.Unity
             {
                 return "sawmill/Truck.png";
             }
+            if (name.Contains("battery"))
+            {
+                return "sawmill/Car-Battery.png";
+            }
+            if (name.Contains("spark-plug"))
+            {
+                return "sawmill/Spark-Plug.png";
+            }
+            if (name.Contains("repair-kit"))
+            {
+                return "sawmill/Repair-Kit.png";
+            }
+            if (name.Contains("lockbox"))
+            {
+                return "sawmill/Lockbox.png";
+            }
+            if (name.Contains("angle-grinder"))
+            {
+                return "sawmill/Angle-Grinder.png";
+            }
             if (name.Contains("saw"))
             {
                 return "sawmill/Saw.png";
@@ -477,6 +549,18 @@ namespace StiflingDark.Unity
             if (name.Contains("duck"))
             {
                 return "amusement-park/Duck.png";
+            }
+            if (name.Contains("ammo"))
+            {
+                return "amusement-park/Ammo.png";
+            }
+            if (name.Contains("flare-gun"))
+            {
+                return "amusement-park/Flare-Gun.png";
+            }
+            if (name.Contains("ride-parts"))
+            {
+                return "amusement-park/Ride-Parts.png";
             }
             if (name.Contains("tunnel"))
             {
