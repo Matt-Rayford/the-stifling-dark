@@ -98,6 +98,20 @@ namespace StiflingDark.Engine.Tests
             Assert.Contains("O-10", bright);
         }
 
+        /// <summary>The planner asks about beams from spaces nobody stands on yet; that
+        /// preview must be the very same computation as the placement preview.</summary>
+        [Fact]
+        public void Preview_from_any_space_matches_the_investigators_own_preview()
+        {
+            var game = TestData.NewSawmillGame();
+            var inv = game.State.Investigators[0];
+            game.BeginInvestigatorTurn(inv.DefId);
+            var own = game.PreviewFlashlight(inv.DefId, 1.2);
+            var at = game.PreviewFlashlightAt(inv.Space, 1.2);
+            Assert.Equal(own.OrderBy(s => s), at.OrderBy(s => s));
+            Assert.Contains(inv.Space, at);
+        }
+
         /// <summary>Designer ruling (2026-08-31): a Locked (or Damaged) Door blocks sight
         /// across its whole strip like a wall — the exact beam that reaches O-10 through
         /// the OPEN door O-11 above goes dark once that door is Locked. Destroyed doors

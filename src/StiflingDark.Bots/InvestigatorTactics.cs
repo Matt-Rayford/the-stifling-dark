@@ -127,9 +127,9 @@ public sealed partial class InvestigatorTeam
     /// Reveals whatever walks in, and a Revealed Adversary may not Attack for the rest of the
     /// round — that is the whole trick.
     /// </summary>
-    private HashSet<string> Entrances(IEnumerable<InvestigatorState> group)
+    private HashSet<string> Entrances(IEnumerable<string> groupStands)
     {
-        var inside = group.Select(i => i.Space).ToHashSet();
+        var inside = groupStands.ToHashSet();
         var open = new HashSet<string>();
         foreach (string space in inside)
         {

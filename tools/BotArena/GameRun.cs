@@ -75,7 +75,11 @@ public sealed class GameRun : IAnomalySink
         record.InvestigatorCount = _matchup.InvestigatorCount;
 
         var act = new Actor(this);
-        var team = new InvestigatorTeam(game, act, rng, this);
+        var team = new InvestigatorTeam(game, act, rng, this)
+        {
+            // A/B baseline for the one-turn lookahead: TSD_PLANNER=off walks straight at errands.
+            TurnPlannerEnabled = Environment.GetEnvironmentVariable("TSD_PLANNER") != "off",
+        };
         var adversary = _passiveAdversary
             ? AdversaryBot.CreatePassive(game, act, rng, this)
             : AdversaryBot.Create(game, act, rng, this);

@@ -125,6 +125,7 @@ public sealed partial class InvestigatorTeam
         }
         RebuildDanger();
         _belief.Update();
+        RefreshExposure();
         RecordSweeps();
         AssignErrands();
     }
@@ -240,22 +241,20 @@ public sealed partial class InvestigatorTeam
         {
             _goal[invId] = plan.Space;
         }
-        Trace?.Invoke($"r{S.Round,2} {invId,-11} {plan?.Label ?? "idle",-22} -> {plan?.Space ?? "-",-6} " +
+        // The errand says where the team wants this figure eventually; the turn planner
+        // says where it should actually stop THIS turn (a token on the way, a safer or
+        // better-lit end space, the switch with movement to spare).
+        var turn = PlanTurn(inv, plan);
+        Trace?.Invoke($"r{S.Round,2} {invId,-11} {turn.Label,-22} -> {turn.Space,-6} " +
                       $"from {inv.Space,-6} mp={inv.MpRemaining} w={inv.Wounds.Count} st={inv.Stamina} " +
-                      $"ch={inv.Charge} danger={Danger(inv.Space)} threat={_threatLevel}");
-        if (plan != null)
+                      $"ch={inv.Charge} danger={Danger(inv.Space)} threat={_threatLevel}" +
+                      (plan != null && turn != plan ? $" (errand {plan.Label} -> {plan.Space})" : ""));
+        UseTravelItems(inv, turn);
+        MaybeSprint(inv, turn);
+        Travel(inv, turn);
+        if (Active(inv) && Arrived(inv, turn) && turn.Arrive != null)
         {
-            UseTravelItems(inv, plan);
-            MaybeSprint(inv, plan);
-            Travel(inv, plan);
-            if (Active(inv) && Arrived(inv, plan) && plan.Arrive != null)
-            {
-                _act.Try("arrive:" + plan.Label, () => plan.Arrive());
-            }
-        }
-        else
-        {
-            // Nothing to do and no Sprint means the end-of-turn auto-Rest recovers Stamina.
+            _act.Try("arrive:" + turn.Label, () => turn.Arrive());
         }
 
         if (Active(inv))
@@ -834,9 +833,12 @@ public sealed partial class InvestigatorTeam
     /// `avoid` excludes angles within a few degrees of an already-placed beam (Mitchell's
     /// Sweep re-aims the same Flashlight, so a near-duplicate would waste the second cone).
     /// </summary>
-    private (double Angle, double Score) BestFlashlightAngle(InvestigatorState inv, double? avoid)
+    /// <param name="at">Score the beam as if the Investigator stood here (the turn planner
+    /// asks about spaces it has not walked to yet); null means where they actually are.</param>
+    private (double Angle, double Score) BestFlashlightAngle(InvestigatorState inv, double? avoid,
+        string? at = null)
     {
-        var ctx = BuildBeamContext(inv);
+        var ctx = BuildBeamContext(inv, at ?? inv.Space);
         const int CoarseSteps = 24;
         const double CoarseStep = 2 * Math.PI / CoarseSteps;
         const double FineStep = Math.PI / 180;
@@ -899,6 +901,9 @@ public sealed partial class InvestigatorTeam
     /// per placement decision so the fine sweep's ~60 candidate angles share one BFS.</summary>
     private sealed class BeamContext
     {
+        /// <summary>Where the beam is scored from — the Investigator's space, or a space the
+        /// turn planner is only considering.</summary>
+        public string From = "";
         /// <summary>Spaces a hidden Evidence token could still be on: every one lit is
         /// either the token found or one fewer place to look (see InvestigatorErrands).</summary>
         public HashSet<string> Search = new();
@@ -928,33 +933,35 @@ public sealed partial class InvestigatorTeam
         public double PruneWeight;
     }
 
-    private BeamContext BuildBeamContext(InvestigatorState inv)
+    private BeamContext BuildBeamContext(InvestigatorState inv, string from)
     {
         var ctx = new BeamContext
         {
+            From = from,
             Search = S.Objective.SelectedEscapeCard == null ? EvidenceSearchSpaces() : new HashSet<string>(),
             // Finding tokens by light is the team's main engine before the Escape card;
             // under threat it still matters, just below the cover that keeps people alive.
             SearchWeight = _threatLevel > 0 ? _playbook.EvidenceSearchWeight / 2 : _playbook.EvidenceSearchWeight,
             MustLight = MustLightSpaces(),
             Threatened = _threatLevel > 0,
-            Near = Nav.From(_g, inv.Space, 3),
+            Near = Nav.From(_g, from, 3),
         };
 
         // The ring an Attack could come from: every space this Investigator or a close teammate
         // stands on, plus everything adjacent to it. A beam over that ring means anything walking
         // in is Revealed on arrival, and a Revealed Adversary may not Attack for the rest of the round.
         var buddies = Alive.Where(o => o == inv || Nav.Hops(ctx.Near, o.Space) <= 2).ToList();
-        foreach (var friend in buddies)
+        var stands = buddies.Select(o => o == inv ? from : o.Space).ToList();
+        foreach (string stand in stands)
         {
-            ctx.GuardRing.Add(friend.Space);
-            foreach (string neighbour in Nav.Neighbors(_g, friend.Space))
+            ctx.GuardRing.Add(stand);
+            foreach (string neighbour in Nav.Neighbors(_g, stand))
             {
                 // A Window approach is its own alarm — the Adversary cannot cross without
                 // leaving a Noise token — so the guard beam belongs on the SILENT ways in
                 // (designer note 2026-08-31: a beam watched a Window while the open alley
                 // went dark).
-                var edge = _g.Graph.Edge(friend.Space, neighbour);
+                var edge = _g.Graph.Edge(stand, neighbour);
                 bool noisyWindow = edge != null && edge.Type == EdgeType.Window &&
                                    !S.Overlay.OpenWindows.Contains(BoardOverlay.EdgeKey(edge.A, edge.B));
                 if (!noisyWindow)
@@ -966,7 +973,7 @@ public sealed partial class InvestigatorTeam
         ctx.Lanes = ctx.Near.Keys.Where(k => Danger(k) > 0).ToHashSet();
         // Turtling: after the Doors are Locked these are the only ways left in, so a beam over
         // them seals the huddle for the round.
-        ctx.Entrances = Entrances(buddies);
+        ctx.Entrances = Entrances(stands);
 
         // The corridor the Adversary would WALK from its last known position to this
         // Investigator (movement distances, so a Locked door genuinely forces the long way
@@ -993,7 +1000,7 @@ public sealed partial class InvestigatorTeam
             }
         }
 
-        var toInv = Nav.From(_g, inv.Space);
+        var toInv = Nav.From(_g, from);
         string? source = _threatSources
             .OrderBy(s => Nav.Hops(toInv, s)).ThenBy(s => s, StringComparer.Ordinal)
             .FirstOrDefault();
@@ -1023,7 +1030,7 @@ public sealed partial class InvestigatorTeam
             // Hazy: plan with the same three-verticals restriction the placement will get,
             // or the bot overvalues wide angles that will be trimmed to nothing.
             int? lineLimit = _g.RoundModifier(Game.FlashlightCenterLineOnlyKey) > 0 ? 3 : (int?)null;
-            bright = _g.PreviewFlashlight(inv.DefId, angle, lineLimit);
+            bright = _g.PreviewFlashlightAt(ctx.From, angle, lineLimit);
         }
         catch (InvalidOperationException)
         {

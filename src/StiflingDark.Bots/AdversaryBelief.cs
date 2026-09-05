@@ -60,7 +60,9 @@ public sealed class AdversaryBelief
 
     private bool IsHorror => S.Adversary.DefId == "insatiable-horror";
 
-    private int Budget => MovePerTurn.TryGetValue(S.Adversary.DefId, out int mp) ? mp : 9;
+    /// <summary>The most spaces the Adversary can cover in one turn (base MP plus the best
+    /// Sprint face) — the reach a planner should assume when weighing a space's exposure.</summary>
+    public int Budget => MovePerTurn.TryGetValue(S.Adversary.DefId, out int mp) ? mp : 9;
 
     /// <summary>"main" plus every living named figure (Cultists, Hatchlings...).</summary>
     private IEnumerable<(string Key, string Space, bool Revealed)> Figures()

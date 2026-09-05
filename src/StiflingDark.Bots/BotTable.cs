@@ -50,6 +50,13 @@ public sealed class BotTable : IAnomalySink
         set => _actor.TraceRefusals = value;
     }
 
+    /// <summary>Arena A/B: the Investigators' one-turn lookahead (InvestigatorTurnPlanner).</summary>
+    public bool TurnPlannerEnabled
+    {
+        get => _team.TurnPlannerEnabled;
+        set => _team.TurnPlannerEnabled = value;
+    }
+
     /// <summary>Probe hook: the label of every engine-accepted bot action, in order.</summary>
     public Action<string>? TraceActions
     {
