@@ -4,7 +4,7 @@ using StiflingDark.Engine.Core;
 namespace StiflingDark.Bots;
 
 /// <summary>
-/// Composition-aware play of the ten printed Investigator Abilities. The passive Minors need
+/// Composition-aware play of the printed Investigator Abilities (the base ten plus Kya and Winston). The passive Minors need
 /// nothing but a pathing/threshold that knows about them (Dylan's Dark shortcuts, Ibraheem's
 /// Footprint floor, Marci's Stamina track, Asher's ignored first Wound, Lucy's Sprint); the
 /// activated Minors are free and fire whenever they help; the Majors are one token each, so
@@ -74,7 +74,45 @@ public sealed partial class InvestigatorTeam
                     _act.Try("vincent-scout", () => _g.UseMinorAbility());
                 }
                 break;
+
+            case "kya":
+                TransferForKya(inv);
+                break;
         }
+    }
+
+    /// <summary>
+    /// Kya's swap forfeits the turn's free Rest and Charge, so it only pays when one track is
+    /// about to run dry while the other has plenty: Stamina back before the Wound icons bite,
+    /// or a Charge for a beam while something is hunting the team.
+    /// </summary>
+    private void TransferForKya(InvestigatorState inv)
+    {
+        string? gain = null;
+        if (inv.Stamina <= 1 && inv.Charge >= 2)
+        {
+            gain = Game.KyaGainStamina;
+        }
+        else if (inv.Charge == 0 && inv.Stamina >= 4 && _threatLevel > 0)
+        {
+            gain = Game.KyaGainCharge;
+        }
+        if (gain != null)
+        {
+            _act.Try("kya-transfer", () => _g.UseMinorAbility(null, new List<string> { gain }));
+        }
+    }
+
+    /// <summary>Winston's last Charge is worth keeping: Night Vision places the centre lines
+    /// of the beam for free, so that is how his final point of Charge becomes light.</summary>
+    private void PlaceFlashlightOrNightVision(InvestigatorState inv, double angle)
+    {
+        if (inv.DefId == "winston" && inv.Charge == 1)
+        {
+            _g.UseMinorAbility(null, new List<string> { angle.ToString("R", CultureInfo.InvariantCulture) });
+            return;
+        }
+        _g.PlaceFlashlight(angle);
     }
 
     /// <summary>Would this Investigator's plan this turn end in an Involved Action?</summary>
@@ -194,6 +232,15 @@ public sealed partial class InvestigatorTeam
             case "vincent":
                 return _threatLevel == 0 &&
                        inv.Items.Any(id => !id.Contains(':') && id != "fuse" && id != "the-hook" && id != "frayed-ropes");
+            case "kya":
+                // Dark becomes Dim for the round: every Dark step the team was going to pay 2
+                // for now costs 1, which is tempo for the objective run.
+                return endgame;
+            case "winston":
+                // A Campfire is a Bright space to stand in and a Stamina each turn for two rounds:
+                // a panic button when cornered, or a field hospital for a teammate running dry.
+                return cornered ||
+                       Alive.Any(o => o.Stamina <= 1 && Nav.From(_g, inv.Space, Game.CampfireRadius).ContainsKey(o.Space));
             default:
                 return false;
         }
@@ -256,10 +303,20 @@ public sealed partial class InvestigatorTeam
             }
             case "ibraheem":
                 return new List<string>(); // extends his Trade range to 5 for the round
+            case "winston":
+            {
+                // The adjacent space whose 2-space radius warms the most teammates.
+                string? spot = Nav.Neighbors(_g, inv.Space)
+                    .OrderByDescending(n => Alive.Count(o => Nav.From(_g, n, Game.CampfireRadius).ContainsKey(o.Space)))
+                    .ThenBy(n => n, StringComparer.Ordinal)
+                    .FirstOrDefault();
+                return spot == null ? null : new List<string> { spot };
+            }
             case "asher":
             case "brielle":
             case "mada":
             case "vincent":
+            case "kya":
                 return new List<string>();
             default:
                 return null;
@@ -406,6 +463,12 @@ public sealed partial class InvestigatorTeam
                 break;
             case "mitchell":
                 yield return new List<string> { inv.DefId };
+                break;
+            case "winston":
+                if (neighbours.Count > 0)
+                {
+                    yield return new List<string> { neighbours[0] };
+                }
                 break;
             case "aira":
             {

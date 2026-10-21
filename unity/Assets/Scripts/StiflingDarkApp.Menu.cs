@@ -270,9 +270,9 @@ namespace StiflingDark.Unity
                 Toast("game-data did not load — offline play needs it.");
                 return;
             }
-            if (_soloInvestigator.Length == 0 && _describe.BaseInvestigators.Count > 0)
+            if (_soloInvestigator.Length == 0 && _describe.PlayableInvestigators.Count > 0)
             {
-                _soloInvestigator = _describe.BaseInvestigators[0].Id;
+                _soloInvestigator = _describe.PlayableInvestigators[0].Id;
             }
             ShowMenuScreen(MenuScreen.Solo);
         }

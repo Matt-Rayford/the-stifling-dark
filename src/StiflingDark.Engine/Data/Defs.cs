@@ -92,7 +92,7 @@ namespace StiflingDark.Engine.Data
         public AbilityDef MajorAbility { get; set; } = new AbilityDef();
         public TrackDef StaminaTrack { get; set; } = new TrackDef();
         public TrackDef ChargeTrack { get; set; } = new TrackDef();
-        /// <summary>"base" or "promo". v1 uses base only.</summary>
+        /// <summary>"base" or "promo" — both playable (promo unlocked 2026-10-21).</summary>
         public string Set { get; set; } = "base";
     }
 

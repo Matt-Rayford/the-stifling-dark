@@ -32,7 +32,10 @@ public static class GameFactory
         string adversary = Pick(rng, Adversaries);
         int count = 2 + rng.Next(3);
 
-        var roster = db.Investigators.Where(i => i.Set == "base")
+        // Base and promo alike (promo unlocked 2026-10-21, which reshuffled every seed's roster);
+        // TSD_PROMO=off restores the base-only pool for A/B runs against older numbers.
+        bool promo = Environment.GetEnvironmentVariable("TSD_PROMO") != "off";
+        var roster = db.Investigators.Where(i => promo || i.Set == "base")
             .Select(i => i.Id).OrderBy(id => id, StringComparer.Ordinal).ToList();
         rng.Shuffle(roster);
         var chosen = roster.Take(count).ToList();

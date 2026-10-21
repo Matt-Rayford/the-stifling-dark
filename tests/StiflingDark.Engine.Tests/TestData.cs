@@ -12,12 +12,19 @@ namespace StiflingDark.Engine.Tests
 
         /// <summary>A fully set-up 3-Investigator Sawmill game against The Butcher, ready for
         /// the first Investigator turn — for tests that need a legal board, not a scenario.</summary>
-        public static Game NewSawmillGame(ulong seed = 5)
+        public static Game NewSawmillGame(ulong seed = 5) =>
+            NewSawmillGame(new[] { "aira", "lucy-belle", "mitchell" }, seed);
+
+        /// <summary>The Sawmill has exactly 4 Start spaces, so up to 4 Investigators are seated.</summary>
+        private static readonly string[] SawmillStartSpaces = { "285", "286", "305", "307" };
+
+        public static Game NewSawmillGame(IReadOnlyList<string> investigatorIds, ulong seed = 5)
         {
-            var starts = new Dictionary<string, string>
+            var starts = new Dictionary<string, string>();
+            for (int i = 0; i < investigatorIds.Count; i++)
             {
-                ["aira"] = "285", ["lucy-belle"] = "286", ["mitchell"] = "305",
-            };
+                starts[investigatorIds[i]] = SawmillStartSpaces[i];
+            }
             var game = Game.NewGame(Db, new GameSetup
             {
                 ScenarioId = "sawmill",
@@ -26,7 +33,7 @@ namespace StiflingDark.Engine.Tests
                 InvestigatorStartSpaces = starts,
                 MedicalItemSpaces = Db.Map("sawmill").Spaces
                     .Where(s => s.Kind == SpaceKind.MedicalItem)
-                    .Take(Db.Config.ByInvestigatorCount[3].MedicalItemsOnBoard)
+                    .Take(Db.Config.ByInvestigatorCount[investigatorIds.Count].MedicalItemsOnBoard)
                     .Select(s => s.Id).ToList(),
             });
             foreach (string zone in game.Graph.Def.Zones.Keys)

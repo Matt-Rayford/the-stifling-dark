@@ -713,7 +713,7 @@ namespace StiflingDark.Engine.Core
             {
                 // Designer ruling 2026-08-31: Hazy leaves the THREE centre verticals usable
                 // (the printed "single center line" reads as the centre section of the fan).
-                dropped += TrimBrightToSightLines(inv, angleRadians, bright, lines: 3);
+                dropped += TrimBrightToSightLines(inv, angleRadians, bright, CenterLineSightLines);
             }
             if (dropped > 0)
             {

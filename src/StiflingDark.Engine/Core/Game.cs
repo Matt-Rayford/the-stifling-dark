@@ -75,11 +75,7 @@ namespace StiflingDark.Engine.Core
             var startSpaces = map.Spaces.Where(s => s.Kind == SpaceKind.Start).Select(s => s.Id).ToHashSet();
             foreach (var (invId, space) in setup.InvestigatorStartSpaces.Select(kv => (kv.Key, kv.Value)))
             {
-                var def = db.Investigator(invId);
-                if (def.Set != "base")
-                {
-                    throw new InvalidOperationException($"'{invId}' is not part of the v1 roster.");
-                }
+                db.Investigator(invId); // validates the id
                 if (!startSpaces.Contains(space))
                 {
                     throw new InvalidOperationException($"'{space}' is not a Start space.");
@@ -626,15 +622,25 @@ namespace StiflingDark.Engine.Core
 
         // ---------- Final actions & end of turn ----------
 
-        public void PlaceFlashlight(double angleRadians)
+        public void PlaceFlashlight(double angleRadians) =>
+            PlaceFlashlightCore(ActiveInv(), angleRadians, nightVision: false);
+
+        /// <summary>
+        /// The one placement path. <paramref name="nightVision"/> is Winston's Minor: the
+        /// Charge is waived and the template is cut to its centre lines before any card trims it
+        /// further (Game.PromoAbilities.cs checks his "not at 0 Charge" clause first).
+        /// </summary>
+        private void PlaceFlashlightCore(InvestigatorState inv, double angleRadians, bool nightVision)
         {
-            var inv = ActiveInv();
             RequireNoPendingWindow();
             RequireActionAllowed(inv, ActionPlaceFlashlight);
             RequireNoFinalAction(inv);
-            PayFlashlightCharge(inv);
+            if (!nightVision)
+            {
+                PayFlashlightCharge(inv);
+            }
             inv.FinalAction = FinalActionKind.PlaceFlashlight;
-            var bright = PreviewFlashlight(inv.DefId, angleRadians);
+            var bright = PreviewFlashlight(inv.DefId, angleRadians, nightVision ? CenterLineSightLines : (int?)null);
             // Cards that shrink the beam (Misty's range, Hazy/Downpour/Tunnel Vision's center
             // lines) trim it here, before anything is lit or Revealed, so a space outside the
             // reduced beam never reveals what stands on it.
@@ -645,6 +651,7 @@ namespace StiflingDark.Engine.Core
                 Space = inv.Space,
                 AngleRadians = angleRadians,
                 BrightSpaces = bright.OrderBy(s => s).ToList(),
+                CenterLineOnly = nightVision,
             });
             State.Overlay.BrightSpaces.UnionWith(bright);
             Log("flashlight", $"{inv.DefId} lit {bright.Count} spaces");
@@ -756,7 +763,7 @@ namespace StiflingDark.Engine.Core
             // should stay the same") — those Wounds only bite on turns whose Sprint,
             // Flashlight, or Involved Action already forfeited the matching recovery.
             if (!IsSpirit(inv) && !inv.Dead && !inv.Escaped &&
-                inv.FinalAction != FinalActionKind.InvolvedAction)
+                inv.FinalAction != FinalActionKind.InvolvedAction && !RecoveryForfeited(inv))
             {
                 if (!inv.SprintedOrRested)
                 {
@@ -775,7 +782,7 @@ namespace StiflingDark.Engine.Core
                 // nothing below may touch TurnTakenThisRound or hand the phase to the Adversary.
                 return;
             }
-            if (inv.Rested && inv.FinalAction != FinalActionKind.InvolvedAction)
+            if (inv.Rested && inv.FinalAction != FinalActionKind.InvolvedAction && !RecoveryForfeited(inv))
             {
                 // Heavy Winds / Heavy Smoke / Tornado: no Stamina may be gained as part of a
                 // Final Action this round, Rest included.
@@ -1016,8 +1023,8 @@ namespace StiflingDark.Engine.Core
                 // branch below must never overwrite that Result, and no new round may begin.
                 return;
             }
-            State.Overlay.BrightSpaces.Clear();
             State.Flashlights.Clear();
+            RecomputeBrightSpaces(); // Flashlights are gone; a Campfire that survived OnRoundEnd keeps its light
             // Zone lights burn out to Faltering after their round.
             foreach (string zone in State.Overlay.BrightZones)
             {
@@ -1253,6 +1260,7 @@ namespace StiflingDark.Engine.Core
             {
                 State.Overlay.BrightSpaces.UnionWith(f.BrightSpaces);
             }
+            State.Overlay.BrightSpaces.UnionWith(BoardTokenSpaces(CampfireTokenPrefix));
         }
 
         private bool IsBright(string spaceId) => Graph.EffectiveLight(spaceId, State.Overlay) == LightLevel.Bright;

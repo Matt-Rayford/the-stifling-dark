@@ -470,6 +470,10 @@ namespace StiflingDark.Unity
             {
                 return "investigator/abilities/Can.png";
             }
+            if (name.StartsWith("campfire:", System.StringComparison.Ordinal))
+            {
+                return "investigator/abilities/Campfire.png";
+            }
             if (name.Contains("escape-artist"))
             {
                 return "investigator/abilities/Escape-Artist.png";

@@ -75,6 +75,11 @@ namespace StiflingDark.Unity
         private bool CenterLineOnly =>
             _view != null && _view.RoundModifiers.ContainsKey(Game.FlashlightCenterLineOnlyKey);
 
+        /// <summary>The beam being aimed is Winston's Night Vision: centre lines only.</summary>
+        private bool _aimCenterLineOnly;
+
+        private bool AimCenterLineOnly => CenterLineOnly || _aimCenterLineOnly;
+
         /// <summary>The template-x band the three vertical sight lines span, plus the line
         /// weight, for the physically-cut Hazy cone.</summary>
         private static (float Min, float Max) CenterBand(FlashlightDef def)
@@ -579,15 +584,16 @@ namespace StiflingDark.Unity
                 // The cone is flavor, not truth: it draws UNDER the light overlay (order 10)
                 // so the per-space shading — the real Bright set — always reads on top, and
                 // spaces the walls cut out of the beam stay visibly dark inside the cone.
+                bool narrow = CenterLineOnly || flashlight.CenterLineOnly;
                 var beam = NewSprite(_dynamic, "Beam",
-                    CenterLineOnly ? _beamSpriteNarrow : _beamSprite,
+                    narrow ? _beamSpriteNarrow : _beamSprite,
                     new Color(1f, 0.86f, 0.55f, 0.10f), 9);
                 beam.transform.position = world;
                 beam.transform.rotation = Quaternion.Euler(0, 0, BeamDegrees(flashlight.AngleRadians));
                 // The printed sight lines, at the same transparency as the wash beneath so
                 // the whole template reads as one see-through overlay.
                 NewSprite(beam.transform, "BeamLines",
-                    CenterLineOnly ? _beamLinesSpriteNarrow : _beamLinesSprite,
+                    narrow ? _beamLinesSpriteNarrow : _beamLinesSprite,
                     new Color(1f, 1f, 1f, 0.10f), 12);
             }
         }
@@ -664,7 +670,7 @@ namespace StiflingDark.Unity
 
         private void DrawInvestigators(PlayerView view)
         {
-            var roster = _describe.BaseInvestigators;
+            var roster = _describe.PlayableInvestigators;
             for (int i = 0; i < view.Investigators.Count; i++)
             {
                 var panel = view.Investigators[i];
@@ -943,9 +949,11 @@ namespace StiflingDark.Unity
         /// Enter aim mode. From here until a click, mouse movement around the figure re-runs
         /// the engine's own beam solver over the synced LoS mask and lights the result live.
         /// </summary>
-        public void BeginAim(string fromSpace, Action<double> confirm, Action cancel)
+        public void BeginAim(string fromSpace, Action<double> confirm, Action cancel,
+            bool centerLineOnly = false)
         {
             _aimFrom = fromSpace;
+            _aimCenterLineOnly = centerLineOnly;
             _aimConfirm = confirm;
             _aimCancel = cancel;
             _aiming = true;
@@ -975,10 +983,10 @@ namespace StiflingDark.Unity
                 return;
             }
             var go = NewSprite(_dynamic, "AimBeam",
-                CenterLineOnly ? _beamSpriteNarrow : _beamSprite,
+                AimCenterLineOnly ? _beamSpriteNarrow : _beamSprite,
                 new Color(1f, 0.88f, 0.58f, 0.22f), 15);
             NewSprite(go.transform, "AimBeamLines",
-                CenterLineOnly ? _beamLinesSpriteNarrow : _beamLinesSprite,
+                AimCenterLineOnly ? _beamLinesSpriteNarrow : _beamLinesSprite,
                 new Color(1f, 1f, 1f, 0.22f), 16);
             _beamIndicator = go.transform;
         }
@@ -1004,7 +1012,7 @@ namespace StiflingDark.Unity
             }
             _aimAngle = angle;
             _light.SetPreview(_board.PreviewBright(_aimFrom, angle,
-                CenterLineOnly ? 3 : (int?)null));
+                AimCenterLineOnly ? Game.CenterLineSightLines : (int?)null));
             if (_beamIndicator != null)
             {
                 _beamIndicator.rotation = Quaternion.Euler(0, 0, BeamDegrees(angle));

@@ -32,9 +32,8 @@ namespace StiflingDark.Unity
 
         public GameDatabase Db => _db;
 
-        /// <summary>The 10 base Investigators, in the same order the server offers them.</summary>
-        public IReadOnlyList<InvestigatorDef> BaseInvestigators => _db.Investigators
-            .Where(i => i.Set == "base")
+        /// <summary>Every Investigator, base and promo, in the same order the server offers them.</summary>
+        public IReadOnlyList<InvestigatorDef> PlayableInvestigators => _db.Investigators
             .OrderBy(i => i.Id, System.StringComparer.Ordinal)
             .ToList();
 

@@ -254,6 +254,8 @@ namespace StiflingDark.Engine.Core
             public List<string> BrightZones { get; set; } = new List<string>();
             public List<string> DimZones { get; set; } = new List<string>();
             public List<string> BrightSpaces { get; set; } = new List<string>();
+            public List<string> DimSpaces { get; set; } = new List<string>();
+            public bool DimDarkInverted { get; set; }
             public MirrorDoorColor? OpenMirrorColor { get; set; }
             public List<string> OpenWindows { get; set; } = new List<string>();
             public List<string> FalseWindows { get; set; } = new List<string>();
@@ -267,6 +269,7 @@ namespace StiflingDark.Engine.Core
             public string Space { get; set; } = "";
             public double AngleRadians { get; set; }
             public List<string> BrightSpaces { get; set; } = new List<string>();
+            public bool CenterLineOnly { get; set; }
         }
 
         public sealed class ObjectiveInfo
@@ -351,6 +354,8 @@ namespace StiflingDark.Engine.Core
             "stalk", "blood", "enraged", "corporeal", "eggsacs-remaining", "eggsacs-destroyed",
             "banish-supplies", "altar-revealed", "burning-until", "knife-used-round",
             "skip-sprint-die-round", AbilitiesBlockedRoundKey,
+            // Mada's Coin is his to see: the client only offers the flip while he holds it.
+            Game.CoinTokenPrefix + "mada",
         };
 
         /// <summary>Objective tokens the rules keep on the Adversary's mini-map until the
@@ -421,6 +426,7 @@ namespace StiflingDark.Engine.Core
                     Space = f.Space,
                     AngleRadians = f.AngleRadians,
                     BrightSpaces = f.BrightSpaces.ToList(),
+                    CenterLineOnly = f.CenterLineOnly,
                 }).ToList(),
             };
 
@@ -475,6 +481,8 @@ namespace StiflingDark.Engine.Core
                 BrightZones = overlay.BrightZones.OrderBy(z => z, StringComparer.Ordinal).ToList(),
                 DimZones = overlay.DimZones.OrderBy(z => z, StringComparer.Ordinal).ToList(),
                 BrightSpaces = overlay.BrightSpaces.OrderBy(s => s, StringComparer.Ordinal).ToList(),
+                DimSpaces = overlay.DimSpaces.OrderBy(s => s, StringComparer.Ordinal).ToList(),
+                DimDarkInverted = overlay.DimDarkInverted,
                 OpenMirrorColor = overlay.OpenMirrorColor,
                 OpenWindows = overlay.OpenWindows.OrderBy(e => e, StringComparer.Ordinal).ToList(),
                 FalseWindows = overlay.FalseWindows.OrderBy(e => e, StringComparer.Ordinal).ToList(),

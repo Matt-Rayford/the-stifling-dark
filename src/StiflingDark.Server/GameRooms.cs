@@ -112,8 +112,7 @@ public sealed class Room
         AvailableScenarios = db.Maps.Select(m => m.Id).OrderBy(id => id, StringComparer.Ordinal).ToList(),
         // The three v1 Adversaries; Game.NewGame refuses anything else.
         AvailableAdversaries = new List<string> { "butcher", "cult-of-hunlow", "insatiable-horror" },
-        AvailableInvestigators = db.Investigators.Where(i => i.Set == "base")
-            .Select(i => i.Id).OrderBy(id => id, StringComparer.Ordinal).ToList(),
+        AvailableInvestigators = db.Investigators.Select(i => i.Id).OrderBy(id => id, StringComparer.Ordinal).ToList(),
     };
 
     // --------------------------------------------------------------- lobby

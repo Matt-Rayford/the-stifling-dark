@@ -175,7 +175,7 @@ namespace StiflingDark.Unity
             var yours = room.YourSeatInfo;
             if (yours != null && yours.Role == SeatRole.Investigator)
             {
-                foreach (var def in _describe.BaseInvestigators)
+                foreach (var def in _describe.PlayableInvestigators)
                 {
                     var captured = def;
                     bool taken = room.Seats.Any(s =>
@@ -245,7 +245,7 @@ namespace StiflingDark.Unity
             var room = _session.Room;
             UiKit.Clear(_controls);
             Head("SEAT " + seat + " PLAYS…");
-            foreach (var def in _describe.BaseInvestigators)
+            foreach (var def in _describe.PlayableInvestigators)
             {
                 var captured = def;
                 bool taken = room.Seats.Any(s => s.Seat != seat && s.InvestigatorId == captured.Id);

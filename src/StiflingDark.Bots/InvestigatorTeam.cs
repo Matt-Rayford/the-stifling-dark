@@ -774,7 +774,7 @@ public sealed partial class InvestigatorTeam
             // lighting an objective — a merely-decent placement wastes the Charge the
             // auto-recharge would have banked instead (designer notes 2026-08-31).
             double bar = AttackImpossibleNextTurn() ? Tuning.IdleBeamBar : 0;
-            if (score > bar && _act.Try("place-flashlight", () => _g.PlaceFlashlight(bestAngle)))
+            if (score > bar && _act.Try("place-flashlight", () => PlaceFlashlightOrNightVision(inv, bestAngle)))
             {
                 _beamedThisRound.Add(inv.DefId);
                 SweepFlashlight(inv);

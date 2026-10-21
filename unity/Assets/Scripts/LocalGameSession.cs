@@ -112,7 +112,7 @@ namespace StiflingDark.Unity
         private static List<string> ChooseRoster(GameDatabase db, DeterministicRng rng,
             IReadOnlyList<string> picks)
         {
-            var pool = db.Investigators.Where(i => i.Set == "base").Select(i => i.Id)
+            var pool = db.Investigators.Select(i => i.Id)
                 .OrderBy(id => id, StringComparer.Ordinal).ToList();
             rng.Shuffle(pool);
             var roster = new List<string>();

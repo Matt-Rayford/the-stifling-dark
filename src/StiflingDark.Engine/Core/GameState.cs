@@ -165,6 +165,8 @@ namespace StiflingDark.Engine.Core
         public string Space { get; set; } = "";
         public double AngleRadians { get; set; }
         public List<string> BrightSpaces { get; set; } = new List<string>();
+        /// <summary>Placed with Winston's Night Vision: only the centre lines carry light.</summary>
+        public bool CenterLineOnly { get; set; }
     }
 
     public sealed class GameEvent
