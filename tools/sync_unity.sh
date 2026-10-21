@@ -111,13 +111,13 @@ fi
 
 echo "== player boards =="
 # Investigator player-board BACKS (the character-sheet side) for the solo-setup selector:
-# one PNG per base Investigator, page-mapped from the print PDF (pages 1-10 are the base
-# roster alphabetically; 11-12 are the excluded promos). FORCE_TEXTURES=1 re-renders.
+# one PNG per Investigator, page-mapped from the print PDF (pages 1-10 are the base
+# roster alphabetically; 11-12 are the promos Kya and Winston). FORCE_TEXTURES=1 re-renders.
 BOARDS="$STREAMING/player-boards"
 if [ -f game-assets/player-boards/investigator-backs.pdf ] && command -v pdftoppm >/dev/null; then
   mkdir -p "$BOARDS"
   page=1
-  for id in aira asher brielle dylan ibraheem lucy-belle mada marci mitchell vincent; do
+  for id in aira asher brielle dylan ibraheem lucy-belle mada marci mitchell vincent kya winston; do
     out="$BOARDS/$id.png"
     if [ ! -f "$out" ] || [ "${FORCE_TEXTURES:-0}" = "1" ]; then
       pdftoppm -png -f $page -l $page -scale-to 1100 -singlefile \
@@ -129,13 +129,12 @@ if [ -f game-assets/player-boards/investigator-backs.pdf ] && command -v pdftopp
   python3 tools/make_mips.py "$BOARDS" || echo "  !! mip packing failed (pip install pillow?)"
 fi
 # Investigator player-board FRONTS (the in-play side: stamina/charge tracks, ability
-# summaries, wound slots) for the in-game player board panel. Same alphabetical page
-# order as the backs; 11-12 are the excluded promos.
+# summaries, wound slots) for the in-game player board panel. Same page order as the backs.
 FRONT_BOARDS="$STREAMING/player-board-fronts"
 if [ -f game-assets/player-boards/investigator-fronts.pdf ] && command -v pdftoppm >/dev/null; then
   mkdir -p "$FRONT_BOARDS"
   page=1
-  for id in aira asher brielle dylan ibraheem lucy-belle mada marci mitchell vincent; do
+  for id in aira asher brielle dylan ibraheem lucy-belle mada marci mitchell vincent kya winston; do
     out="$FRONT_BOARDS/$id.png"
     if [ ! -f "$out" ] || [ "${FORCE_TEXTURES:-0}" = "1" ]; then
       pdftoppm -png -f $page -l $page -scale-to 1400 -singlefile \
