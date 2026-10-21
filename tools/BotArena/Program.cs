@@ -23,6 +23,19 @@ if (args.Length > 0 && args[0] == "invariants")
     return;
 }
 
+// Tuning mode: coordinate ascent over the Investigator bots' decision weights.
+//   dotnet run -c Release --project tools/BotArena -- tune [games] [passes] [firstSeed] [tuning.txt]
+if (args.Length > 0 && args[0] == "tune")
+{
+    int tuneGames = args.Length > 1 ? int.Parse(args[1], CultureInfo.InvariantCulture) : 120;
+    int passes = args.Length > 2 ? int.Parse(args[2], CultureInfo.InvariantCulture) : 2;
+    ulong tuneSeed = args.Length > 3 ? ulong.Parse(args[3], CultureInfo.InvariantCulture) : 1UL;
+    var startTuning = args.Length > 4 ? StiflingDark.Bots.BotTuning.Parse(File.ReadAllText(args[4])) : null;
+    string tuneOut = FindRepoRoot() is { } tuneRoot ? Path.Combine(tuneRoot, "bot-results") : "bot-results";
+    Tuner.Execute(LoadDatabase(), tuneGames, passes, tuneSeed, tuneOut, startTuning);
+    return;
+}
+
 // Probe mode: replay one seed and dump its event log.
 //   dotnet run -c Release --project tools/BotArena -- probe <seed> [logFilter]
 if (args.Length > 1 && (args[0] == "probe" || args[0] == "probe-passive"))
@@ -46,6 +59,10 @@ ulong firstSeed = args.Length > 1 ? ulong.Parse(args[1], CultureInfo.InvariantCu
 string outputDir = args.Length > 2 ? args[2] : FindRepoRoot() is { } root ? Path.Combine(root, "bot-results") : "bot-results";
 
 var db = LoadDatabase();
+// TSD_TUNING=<file>: replay with a tuned weight set (see the tune mode) instead of the defaults.
+var tuningOverride = Environment.GetEnvironmentVariable("TSD_TUNING") is { } tuningPath && File.Exists(tuningPath)
+    ? StiflingDark.Bots.BotTuning.Parse(File.ReadAllText(tuningPath))
+    : null;
 var records = new ConcurrentBag<GameRecord>();
 var anomalies = new ConcurrentBag<AnomalyRecord>();
 int finished = 0;
@@ -54,7 +71,7 @@ var clock = Stopwatch.StartNew();
 Parallel.For(0, games, new ParallelOptions { MaxDegreeOfParallelism = Math.Max(1, Environment.ProcessorCount - 1) }, index =>
 {
     ulong seed = firstSeed + (ulong)index;
-    var run = new GameRun(db, seed, passiveAdversary: passive);
+    var run = new GameRun(db, seed, passiveAdversary: passive, tuning: tuningOverride);
     GameRecord record;
     try
     {

@@ -50,6 +50,20 @@ public sealed class BotTable : IAnomalySink
         set => _actor.TraceRefusals = value;
     }
 
+    /// <summary>The Investigator team's decision weights (see <see cref="BotTuning"/>).</summary>
+    public BotTuning Tuning
+    {
+        get => _team.Tuning;
+        set => _team.Tuning = value;
+    }
+
+    /// <summary>Arena A/B: the Investigators' one-turn lookahead (InvestigatorTurnPlanner).</summary>
+    public bool TurnPlannerEnabled
+    {
+        get => _team.TurnPlannerEnabled;
+        set => _team.TurnPlannerEnabled = value;
+    }
+
     /// <summary>Probe hook: the label of every engine-accepted bot action, in order.</summary>
     public Action<string>? TraceActions
     {

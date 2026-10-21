@@ -104,6 +104,9 @@ public sealed partial class InvestigatorTeam
     /// <summary>Set by the single-seed probe mode to dump each Investigator's chosen plan.</summary>
     public Action<string>? Trace { get; set; }
 
+    /// <summary>Every weight the team decides with; the arena tunes a copy of the defaults.</summary>
+    public BotTuning Tuning { get; set; } = BotTuning.Default;
+
     private GameState S => _g.State;
 
     private List<InvestigatorState> Alive =>
@@ -125,6 +128,7 @@ public sealed partial class InvestigatorTeam
         }
         RebuildDanger();
         _belief.Update();
+        RefreshExposure();
         RecordSweeps();
         AssignErrands();
     }
@@ -240,22 +244,20 @@ public sealed partial class InvestigatorTeam
         {
             _goal[invId] = plan.Space;
         }
-        Trace?.Invoke($"r{S.Round,2} {invId,-11} {plan?.Label ?? "idle",-22} -> {plan?.Space ?? "-",-6} " +
+        // The errand says where the team wants this figure eventually; the turn planner
+        // says where it should actually stop THIS turn (a token on the way, a safer or
+        // better-lit end space, the switch with movement to spare).
+        var turn = PlanTurn(inv, plan);
+        Trace?.Invoke($"r{S.Round,2} {invId,-11} {turn.Label,-22} -> {turn.Space,-6} " +
                       $"from {inv.Space,-6} mp={inv.MpRemaining} w={inv.Wounds.Count} st={inv.Stamina} " +
-                      $"ch={inv.Charge} danger={Danger(inv.Space)} threat={_threatLevel}");
-        if (plan != null)
+                      $"ch={inv.Charge} danger={Danger(inv.Space)} threat={_threatLevel}" +
+                      (plan != null && turn != plan ? $" (errand {plan.Label} -> {plan.Space})" : ""));
+        UseTravelItems(inv, turn);
+        MaybeSprint(inv, turn);
+        Travel(inv, turn);
+        if (Active(inv) && Arrived(inv, turn) && turn.Arrive != null)
         {
-            UseTravelItems(inv, plan);
-            MaybeSprint(inv, plan);
-            Travel(inv, plan);
-            if (Active(inv) && Arrived(inv, plan) && plan.Arrive != null)
-            {
-                _act.Try("arrive:" + plan.Label, () => plan.Arrive());
-            }
-        }
-        else
-        {
-            // Nothing to do and no Sprint means the end-of-turn auto-Rest recovers Stamina.
+            _act.Try("arrive:" + turn.Label, () => turn.Arrive());
         }
 
         if (Active(inv))
@@ -771,7 +773,7 @@ public sealed partial class InvestigatorTeam
             // must EARN its Charge by boxing the Revealed figure out of the shadows or
             // lighting an objective — a merely-decent placement wastes the Charge the
             // auto-recharge would have banked instead (designer notes 2026-08-31).
-            double bar = AttackImpossibleNextTurn() ? 30 : 0;
+            double bar = AttackImpossibleNextTurn() ? Tuning.IdleBeamBar : 0;
             if (score > bar && _act.Try("place-flashlight", () => _g.PlaceFlashlight(bestAngle)))
             {
                 _beamedThisRound.Add(inv.DefId);
@@ -799,7 +801,7 @@ public sealed partial class InvestigatorTeam
         // A beam that can find a token (or light an objective) is worth the last Charge
         // outright — the Evidence search is the team's engine, and alternating by seat
         // halved its pace for no safety gain before first contact.
-        if (bestScore >= 24)
+        if (bestScore >= Tuning.EagerBeamScore)
         {
             return true;
         }
@@ -834,9 +836,12 @@ public sealed partial class InvestigatorTeam
     /// `avoid` excludes angles within a few degrees of an already-placed beam (Mitchell's
     /// Sweep re-aims the same Flashlight, so a near-duplicate would waste the second cone).
     /// </summary>
-    private (double Angle, double Score) BestFlashlightAngle(InvestigatorState inv, double? avoid)
+    /// <param name="at">Score the beam as if the Investigator stood here (the turn planner
+    /// asks about spaces it has not walked to yet); null means where they actually are.</param>
+    private (double Angle, double Score) BestFlashlightAngle(InvestigatorState inv, double? avoid,
+        string? at = null)
     {
-        var ctx = BuildBeamContext(inv);
+        var ctx = BuildBeamContext(inv, at ?? inv.Space);
         const int CoarseSteps = 24;
         const double CoarseStep = 2 * Math.PI / CoarseSteps;
         const double FineStep = Math.PI / 180;
@@ -899,6 +904,9 @@ public sealed partial class InvestigatorTeam
     /// per placement decision so the fine sweep's ~60 candidate angles share one BFS.</summary>
     private sealed class BeamContext
     {
+        /// <summary>Where the beam is scored from — the Investigator's space, or a space the
+        /// turn planner is only considering.</summary>
+        public string From = "";
         /// <summary>Spaces a hidden Evidence token could still be on: every one lit is
         /// either the token found or one fewer place to look (see InvestigatorErrands).</summary>
         public HashSet<string> Search = new();
@@ -926,35 +934,45 @@ public sealed partial class InvestigatorTeam
         /// steeply as the cloud shrinks — a near-cornered figure is worth hunting.</summary>
         public HashSet<string> Possible = new();
         public double PruneWeight;
+        /// <summary>What lighting each space is worth this turn, every term folded in —
+        /// the beam score is the sum over the cone's newly lit spaces.</summary>
+        public Dictionary<string, double> SpaceValue = new(StringComparer.Ordinal);
+        /// <summary>For each teammate still to act this round, the cones they could place
+        /// from where they stand. A beam that takes a space a teammate could light better
+        /// pays for it (sequential greedy with one step of lookahead).</summary>
+        public List<List<HashSet<string>>> TeamOptions = new();
+        public double TeamBaseline;
     }
 
-    private BeamContext BuildBeamContext(InvestigatorState inv)
+    private BeamContext BuildBeamContext(InvestigatorState inv, string from)
     {
         var ctx = new BeamContext
         {
+            From = from,
             Search = S.Objective.SelectedEscapeCard == null ? EvidenceSearchSpaces() : new HashSet<string>(),
             // Finding tokens by light is the team's main engine before the Escape card;
             // under threat it still matters, just below the cover that keeps people alive.
-            SearchWeight = _threatLevel > 0 ? _playbook.EvidenceSearchWeight / 2 : _playbook.EvidenceSearchWeight,
+            SearchWeight = Tuning.SearchScale * (_threatLevel > 0 ? _playbook.EvidenceSearchWeight / 2 : _playbook.EvidenceSearchWeight),
             MustLight = MustLightSpaces(),
             Threatened = _threatLevel > 0,
-            Near = Nav.From(_g, inv.Space, 3),
+            Near = Nav.From(_g, from, 3),
         };
 
         // The ring an Attack could come from: every space this Investigator or a close teammate
         // stands on, plus everything adjacent to it. A beam over that ring means anything walking
         // in is Revealed on arrival, and a Revealed Adversary may not Attack for the rest of the round.
         var buddies = Alive.Where(o => o == inv || Nav.Hops(ctx.Near, o.Space) <= 2).ToList();
-        foreach (var friend in buddies)
+        var stands = buddies.Select(o => o == inv ? from : o.Space).ToList();
+        foreach (string stand in stands)
         {
-            ctx.GuardRing.Add(friend.Space);
-            foreach (string neighbour in Nav.Neighbors(_g, friend.Space))
+            ctx.GuardRing.Add(stand);
+            foreach (string neighbour in Nav.Neighbors(_g, stand))
             {
                 // A Window approach is its own alarm — the Adversary cannot cross without
                 // leaving a Noise token — so the guard beam belongs on the SILENT ways in
                 // (designer note 2026-08-31: a beam watched a Window while the open alley
                 // went dark).
-                var edge = _g.Graph.Edge(friend.Space, neighbour);
+                var edge = _g.Graph.Edge(stand, neighbour);
                 bool noisyWindow = edge != null && edge.Type == EdgeType.Window &&
                                    !S.Overlay.OpenWindows.Contains(BoardOverlay.EdgeKey(edge.A, edge.B));
                 if (!noisyWindow)
@@ -966,7 +984,7 @@ public sealed partial class InvestigatorTeam
         ctx.Lanes = ctx.Near.Keys.Where(k => Danger(k) > 0).ToHashSet();
         // Turtling: after the Doors are Locked these are the only ways left in, so a beam over
         // them seals the huddle for the round.
-        ctx.Entrances = Entrances(buddies);
+        ctx.Entrances = Entrances(stands);
 
         // The corridor the Adversary would WALK from its last known position to this
         // Investigator (movement distances, so a Locked door genuinely forces the long way
@@ -978,7 +996,7 @@ public sealed partial class InvestigatorTeam
         // the term is a mild tiebreak toward informative angles. Capped below MustLight —
         // even a fully cornered figure never outranks an objective that needs the light.
         ctx.Possible = _belief.HiddenUnion();
-        ctx.PruneWeight = ctx.Possible.Count == 0 ? 0 : Math.Min(30, 60.0 / ctx.Possible.Count);
+        ctx.PruneWeight = ctx.Possible.Count == 0 ? 0 : Math.Min(Tuning.PruneCap, Tuning.PruneScale / ctx.Possible.Count);
 
         if (S.Adversary.Revealed && !string.IsNullOrEmpty(S.Adversary.Space))
         {
@@ -993,7 +1011,7 @@ public sealed partial class InvestigatorTeam
             }
         }
 
-        var toInv = Nav.From(_g, inv.Space);
+        var toInv = Nav.From(_g, from);
         string? source = _threatSources
             .OrderBy(s => Nav.Hops(toInv, s)).ThenBy(s => s, StringComparer.Ordinal)
             .FirstOrDefault();
@@ -1011,7 +1029,146 @@ public sealed partial class InvestigatorTeam
                 }
             }
         }
+        FillSpaceValues(ctx);
+        ctx.TeamOptions = TeamBeamOptions(inv);
+        ctx.TeamBaseline = TeamRest(ctx, new HashSet<string>(StringComparer.Ordinal));
         return ctx;
+    }
+
+    /// <summary>Fold every scoring term into one value per space. Defensive cover is worth
+    /// NOTHING for a round in which nothing hostile can Attack (a wasted-Charge alley beam
+    /// with the Butcher revealed across the map), and pays ONLY while there is a threat to
+    /// defend against: before first contact nobody can be attacked, so guarding habits must
+    /// not outbid coverage and evidence work (designer notes 2026-08-31).</summary>
+    private void FillSpaceValues(BeamContext ctx)
+    {
+        var t = Tuning;
+        foreach (var space in _g.Graph.Def.Spaces)
+        {
+            string id = space.Id;
+            // Raw coverage is a first-class goal, not a tiebreak: a cone burying a third of
+            // its template in a wall must lose to one that lights more of the board.
+            double value = t.CoverageBase;
+            if (ctx.MustLight.Contains(id))
+            {
+                value += t.MustLight;
+            }
+            if (ctx.Possible.Contains(id))
+            {
+                value += ctx.PruneWeight; // information is offense: reveal it or rule it out
+            }
+            if (ctx.Denial.Contains(id))
+            {
+                value += t.Denial;
+            }
+            if (ctx.Search.Contains(id))
+            {
+                value += ctx.SearchWeight;
+            }
+            if (!ctx.AttackImpossible)
+            {
+                // ThreatApproach is not a habit — it only exists when the Adversary's last
+                // KNOWN position is within 9 hops, so it keeps a floor even at low threat
+                // (fleeing and then pointing the beam the wrong way was a real loss).
+                if (ctx.ThreatApproach.Contains(id))
+                {
+                    value += ctx.Threatened ? t.ThreatApproachHot : t.ThreatApproachCold;
+                }
+                if (ctx.Threatened)
+                {
+                    if (ctx.Entrances.Contains(id))
+                    {
+                        value += t.Entrances;
+                    }
+                    if (ctx.GuardRing.Contains(id))
+                    {
+                        value += t.GuardRing;
+                    }
+                    if (ctx.Lanes.Contains(id))
+                    {
+                        value += t.Lanes;
+                    }
+                    // Choke points: a beam down a corridor mouth walls off a whole approach.
+                    if (_degree.TryGetValue(id, out int degree) && degree <= 2 &&
+                        Nav.Hops(ctx.Near, id) <= 3)
+                    {
+                        value += t.Choke;
+                    }
+                }
+            }
+            ctx.SpaceValue[id] = value;
+        }
+    }
+
+    private int _teamOptionsRound = -1;
+    private string _teamOptionsFor = "";
+    private List<List<HashSet<string>>> _teamOptionsCache = new();
+
+    /// <summary>The cones each teammate still to act this round could place from where they
+    /// stand — computed once per turn (the planner asks for many contexts per turn).</summary>
+    private List<List<HashSet<string>>> TeamBeamOptions(InvestigatorState inv)
+    {
+        if (_teamOptionsRound == S.Round && _teamOptionsFor == inv.DefId)
+        {
+            return _teamOptionsCache;
+        }
+        _teamOptionsRound = S.Round;
+        _teamOptionsFor = inv.DefId;
+        _teamOptionsCache = new List<List<HashSet<string>>>();
+        if (Tuning.TeamLookahead <= 0)
+        {
+            return _teamOptionsCache;
+        }
+        int cost = 1 + Math.Max(0, _g.RoundModifier(Game.FlashlightChargeSurchargeKey));
+        int? lineLimit = _g.RoundModifier(Game.FlashlightCenterLineOnlyKey) > 0 ? 3 : (int?)null;
+        const int Steps = 24;
+        foreach (var mate in Alive.Where(o => o != inv && !IsSpirit(o) && !o.TurnTakenThisRound &&
+                                              o.Charge >= cost))
+        {
+            var options = new List<HashSet<string>>();
+            for (int i = 0; i < Steps; i++)
+            {
+                try
+                {
+                    options.Add(_g.PreviewFlashlightAt(mate.Space, i * 2 * Math.PI / Steps, lineLimit));
+                }
+                catch (InvalidOperationException)
+                {
+                    // A space the template cannot be placed on: nothing to reserve for.
+                }
+            }
+            if (options.Count > 0)
+            {
+                _teamOptionsCache.Add(options);
+            }
+        }
+        return _teamOptionsCache;
+    }
+
+    /// <summary>The best each teammate still to act could add on top of what is already lit
+    /// plus <paramref name="taken"/> — the spaces this beam is about to claim.</summary>
+    private double TeamRest(BeamContext ctx, HashSet<string> taken)
+    {
+        double rest = 0;
+        foreach (var options in ctx.TeamOptions)
+        {
+            double best = 0;
+            foreach (var cone in options)
+            {
+                double value = 0;
+                foreach (string id in cone)
+                {
+                    if (!taken.Contains(id) && !S.Overlay.BrightSpaces.Contains(id) &&
+                        ctx.SpaceValue.TryGetValue(id, out double v))
+                    {
+                        value += v;
+                    }
+                }
+                best = Math.Max(best, value);
+            }
+            rest += best;
+        }
+        return rest;
     }
 
     /// <summary>What one beam angle is worth from where the Investigator is standing.</summary>
@@ -1023,7 +1180,7 @@ public sealed partial class InvestigatorTeam
             // Hazy: plan with the same three-verticals restriction the placement will get,
             // or the bot overvalues wide angles that will be trimmed to nothing.
             int? lineLimit = _g.RoundModifier(Game.FlashlightCenterLineOnlyKey) > 0 ? 3 : (int?)null;
-            bright = _g.PreviewFlashlight(inv.DefId, angle, lineLimit);
+            bright = _g.PreviewFlashlightAt(ctx.From, angle, lineLimit);
         }
         catch (InvalidOperationException)
         {
@@ -1036,64 +1193,17 @@ public sealed partial class InvestigatorTeam
             {
                 continue; // a teammate already covers it; do not pay twice for the same space
             }
-            // Raw coverage is a first-class goal, not a tiebreak: a cone burying a third of
-            // its template in a wall must lose to one that lights more of the board
-            // (designer note 2026-08-31 — Brielle wasted 30% of her light on a wall while
-            // small positional bonuses carried the angle).
-            score += 1.0;
-            if (ctx.MustLight.Contains(id))
+            if (ctx.SpaceValue.TryGetValue(id, out double value))
             {
-                score += 40;
+                score += value;
             }
-            if (ctx.Possible.Contains(id))
-            {
-                // Information is offense: reveal the figure or shrink where it could hide.
-                score += ctx.PruneWeight;
-            }
-            if (ctx.Denial.Contains(id))
-            {
-                score += 10;
-            }
-            if (ctx.Search.Contains(id))
-            {
-                score += ctx.SearchWeight;
-            }
-            // Defensive cover is worth NOTHING for a round in which nothing hostile can
-            // Attack (a wasted-Charge alley beam with the Butcher revealed across the map),
-            // and it pays ONLY while there is a threat to defend against: before first
-            // contact nobody can be attacked, so guarding habits must not outbid coverage
-            // and evidence work (designer notes 2026-08-31).
-            if (!ctx.AttackImpossible)
-            {
-                // ThreatApproach is not a habit — it only exists when the Adversary's last
-                // KNOWN position is within 9 hops, so it keeps a floor even at low threat
-                // (fleeing and then pointing the beam the wrong way was a real loss).
-                if (ctx.ThreatApproach.Contains(id))
-                {
-                    score += ctx.Threatened ? 16 : 6;
-                }
-                if (ctx.Threatened)
-                {
-                    if (ctx.Entrances.Contains(id))
-                    {
-                        score += 14;
-                    }
-                    if (ctx.GuardRing.Contains(id))
-                    {
-                        score += 12;
-                    }
-                    if (ctx.Lanes.Contains(id))
-                    {
-                        score += 6;
-                    }
-                    // Choke points: a beam down a corridor mouth walls off a whole approach.
-                    if (_degree.TryGetValue(id, out int degree) && degree <= 2 &&
-                        Nav.Hops(ctx.Near, id) <= 3)
-                    {
-                        score += 4;
-                    }
-                }
-            }
+        }
+        // Coordination: what this cone takes from the best cones teammates could still place
+        // this round comes off its score, so the first beamer leaves a teammate's best
+        // spaces alone when it has something nearly as good of its own.
+        if (ctx.TeamOptions.Count > 0)
+        {
+            score -= Tuning.TeamLookahead * (ctx.TeamBaseline - TeamRest(ctx, bright));
         }
         return score;
     }
