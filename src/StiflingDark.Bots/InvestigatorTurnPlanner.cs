@@ -25,22 +25,6 @@ public sealed partial class InvestigatorTeam
     /// are ranked on the cheap features alone.</summary>
     private const int PlannerBeamCandidates = 8;
 
-    private const double ArrivalActionValue = 40;
-    private const double ErrandFinishValue = 12;
-    private const double ProgressPerCost = 4;
-    private const double PickUpEvidenceValue = 30;
-    private const double PickUpPoiValue = 8;
-    private const double PickUpMedicalValue = 5;
-    private const double SwitchNowValue = 25;
-    private const double SwitchNextTurnValue = 16;
-    private const double BankValue = 25;
-    private const double BeamShare = 0.3;
-    private const double ExposureWeight = 18;
-    private const double KnownDangerWeight = 5;
-    private const double DarkAloneValue = 4;
-    private const double BuddyGapPerHop = 1.5;
-    private const double UnusedMpValue = 1.0;
-
     /// <summary>Space -> how many of the cloud's spaces could reach it in one Adversary
     /// turn. Rebuilt each round with the belief (see <see cref="RefreshExposure"/>).</summary>
     private readonly Dictionary<string, int> _cloudReach = new(StringComparer.Ordinal);
@@ -112,7 +96,7 @@ public sealed partial class InvestigatorTeam
             int destToTarget = Nav.Hops(toTarget, space);
             if (nowToTarget != int.MaxValue && destToTarget != int.MaxValue)
             {
-                score += (nowToTarget - destToTarget) * ProgressPerCost;
+                score += (nowToTarget - destToTarget) * Tuning.ProgressPerCost;
             }
             bool reachesTarget = errand.StopAt == 0
                 ? space == errand.Space
@@ -120,21 +104,21 @@ public sealed partial class InvestigatorTeam
             bool concrete = reachesTarget;
             if (reachesTarget)
             {
-                score += errand.Arrive != null ? ArrivalActionValue : ErrandFinishValue;
+                score += errand.Arrive != null ? Tuning.ArrivalAction : Tuning.ErrandFinish;
             }
             if (S.Evidence.Any(e => e.Value.Revealed && e.Value.Space == space))
             {
-                score += PickUpEvidenceValue;
+                score += Tuning.PickUpEvidence;
                 concrete = true;
             }
             if (S.PoiTokens.Any(p => p.TokenSpace == space && p.Revealed && !p.Collected))
             {
-                score += PickUpPoiValue;
+                score += Tuning.PickUpPoi;
                 concrete = true;
             }
             if (S.MedicalItemSpaces.Contains(space))
             {
-                score += PickUpMedicalValue;
+                score += Tuning.PickUpMedical;
                 concrete = true;
             }
             var def = _g.Graph.Space(space);
@@ -144,13 +128,13 @@ public sealed partial class InvestigatorTeam
             {
                 // Arriving with movement to spare flips the lights now and works the lit
                 // Zone; arriving spent means flipping at the start of next turn instead.
-                score += inv.MpRemaining - cost >= 2 ? SwitchNowValue : SwitchNextTurnValue;
+                score += inv.MpRemaining - cost >= 2 ? Tuning.SwitchNow : Tuning.SwitchNext;
                 concrete = true;
             }
             if (inv.EvidenceCarried.Count > 0 && CanTakeInvolved(inv) && _turnInSpaces.Contains(space) &&
                 !reachesTarget)
             {
-                score += BankValue;
+                score += Tuning.Bank;
                 concrete = true;
             }
             if (!concrete && destToTarget != int.MaxValue && plannedRemaining != int.MaxValue &&
@@ -167,22 +151,22 @@ public sealed partial class InvestigatorTeam
                 // merely herd everyone into corners.
                 if (_cloudSize > 0 && _cloudSize * 2 <= _g.Graph.Def.Spaces.Count)
                 {
-                    score -= ExposureWeight * Exposure(space) * (1 + inv.Wounds.Count);
+                    score -= Tuning.Exposure * Exposure(space) * (1 + inv.Wounds.Count);
                 }
-                score -= KnownDangerWeight * Danger(space);
+                score -= Tuning.KnownDanger * Danger(space);
                 bool dark = _g.Graph.EffectiveLight(space, S.Overlay) == LightLevel.Dark;
                 bool alone = !Alive.Any(o => o != inv && Nav.Hops(Nav.From(_g, space, 2), o.Space) <= 2);
                 if (dark && alone)
                 {
-                    score -= _threatLevel > 0 ? DarkAloneValue * 2 : DarkAloneValue;
+                    score -= _threatLevel > 0 ? Tuning.DarkAlone * 2 : Tuning.DarkAlone;
                 }
             }
             if (buddyField != null)
             {
                 int gap = Nav.Hops(buddyField, space);
-                score -= BuddyGapPerHop * Math.Max(0, (gap == int.MaxValue ? 12 : gap) - 4);
+                score -= Tuning.BuddyGap * Math.Max(0, (gap == int.MaxValue ? 12 : gap) - 4);
             }
-            score -= UnusedMpValue * Math.Max(0, inv.MpRemaining - cost);
+            score -= Tuning.UnusedMp * Math.Max(0, inv.MpRemaining - cost);
 
             ranked.Add((space, score));
         }
@@ -207,7 +191,7 @@ public sealed partial class InvestigatorTeam
             double total = score;
             if (canBeam)
             {
-                total += BeamShare * BestFlashlightAngle(inv, avoid: null, at: space).Score;
+                total += Tuning.BeamShare * BestFlashlightAngle(inv, avoid: null, at: space).Score;
             }
             if (total > bestScore)
             {

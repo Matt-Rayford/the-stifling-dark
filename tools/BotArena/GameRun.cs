@@ -19,12 +19,16 @@ public sealed class GameRun : IAnomalySink
     private readonly bool _trace;
     private readonly bool _passiveAdversary;
 
-    public GameRun(GameDatabase db, ulong seed, bool trace = false, bool passiveAdversary = false)
+    private readonly BotTuning? _tuning;
+
+    public GameRun(GameDatabase db, ulong seed, bool trace = false, bool passiveAdversary = false,
+        BotTuning? tuning = null)
     {
         _db = db;
         _seed = seed;
         _trace = trace;
         _passiveAdversary = passiveAdversary;
+        _tuning = tuning;
     }
 
     public List<AnomalyRecord> Anomalies { get; } = new();
@@ -79,6 +83,7 @@ public sealed class GameRun : IAnomalySink
         {
             // A/B baseline for the one-turn lookahead: TSD_PLANNER=off walks straight at errands.
             TurnPlannerEnabled = Environment.GetEnvironmentVariable("TSD_PLANNER") != "off",
+            Tuning = _tuning ?? BotTuning.Default,
         };
         var adversary = _passiveAdversary
             ? AdversaryBot.CreatePassive(game, act, rng, this)

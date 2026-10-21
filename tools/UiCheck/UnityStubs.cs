@@ -289,6 +289,7 @@ namespace UnityEngine
         public Vector2 sizeDelta { get; set; }
         public Vector2 anchoredPosition { get; set; }
         public Rect rect => default;
+        public void GetWorldCorners(Vector3[] corners) { }
     }
 
     public static class RectTransformUtility

@@ -344,7 +344,6 @@ namespace StiflingDark.Unity
             DrawPoiTokens(view);
             DrawMedicalItems(view);
             DrawBoardTokens(view);
-            DrawEventCard(view);
             DrawFlashlights(view);
             DrawAdversary(view);
             DrawInvestigators(view);
@@ -570,64 +569,6 @@ namespace StiflingDark.Unity
                 BoardMini(pair.Value, TokenArt.ObjectiveToken(pair.Key),
                     new Color(0.55f, 0.82f, 0.88f), Short(pair.Key), 22, pair.Key);
             }
-        }
-
-        private Rect _eventCardRect;
-        /// <summary>The current Event's face, while one is on display beside the map.</summary>
-        public Sprite EventCardSprite { get; private set; }
-
-        /// <summary>
-        /// The round's Event card, resting off the map's top-right corner in world space so
-        /// it pans and zooms with the board (designer request 2026-08-31 — the physical
-        /// table keeps the drawn Event beside the board).
-        /// </summary>
-        private void DrawEventCard(PlayerView view)
-        {
-            _eventCardRect = default;
-            EventCardSprite = null;
-            if (string.IsNullOrEmpty(view.CurrentEvent))
-            {
-                return;
-            }
-            var sprite = _art.EventCard(view.CurrentEvent);
-            EventCardSprite = sprite;
-            if (sprite == null)
-            {
-                return;
-            }
-            float mapW = (float)_board.SourceWidth;
-            float width = mapW * 0.15f;
-            float height = width * sprite.bounds.size.y / Mathf.Max(0.0001f, sprite.bounds.size.x);
-            float left = mapW * 1.025f;
-            float top = 0f; // flush with the map's top edge
-            var go = NewSprite(_dynamic, "EventCard", sprite, Color.white, 8);
-            go.transform.position = new Vector3(left + width / 2f, -(top + height / 2f), 0f);
-            float scale = width / Mathf.Max(0.0001f, sprite.bounds.size.x);
-            go.transform.localScale = new Vector3(scale, scale, 1f);
-            // World rect (y-up), for the hover-to-enlarge check and the reveal's slide target.
-            _eventCardRect = new Rect(left, -(top + height), width, height);
-        }
-
-        /// <summary>Is the mouse over the resting Event card right now?</summary>
-        public bool EventCardUnderMouse() =>
-            _eventCardRect.width > 0 &&
-            _eventCardRect.Contains((Vector2)_camera.ScreenToWorldPoint(Input.mousePosition));
-
-        /// <summary>The resting card's on-screen centre and height, or null while absent —
-        /// where the round-start reveal slides its full-size card to.</summary>
-        public (Vector2 Center, float Height)? EventCardScreenSpot()
-        {
-            if (_eventCardRect.width <= 0)
-            {
-                return null;
-            }
-            var center = _camera.WorldToScreenPoint(new Vector3(
-                _eventCardRect.x + _eventCardRect.width / 2f,
-                _eventCardRect.y + _eventCardRect.height / 2f, 0f));
-            var top = _camera.WorldToScreenPoint(new Vector3(
-                _eventCardRect.x, _eventCardRect.y + _eventCardRect.height, 0f));
-            var bottom = _camera.WorldToScreenPoint(new Vector3(_eventCardRect.x, _eventCardRect.y, 0f));
-            return ((Vector2)center, Mathf.Abs(top.y - bottom.y));
         }
 
         private void DrawFlashlights(PlayerView view)

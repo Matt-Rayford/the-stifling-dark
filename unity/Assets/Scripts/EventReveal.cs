@@ -6,8 +6,8 @@ namespace StiflingDark.Unity
 {
     /// <summary>
     /// The round's Event card, presented the way a player would deal it: full size over a
-    /// darkened backdrop for a beat, then slid and shrunk to its resting spot beside the
-    /// board while the backdrop lifts on its own. Fire-and-forget — the object destroys
+    /// darkened backdrop for a beat, then slid and shrunk to its resting spot in the side
+    /// panel's EVENT section while the backdrop lifts on its own. Fire-and-forget — the object destroys
     /// its canvas when the slide lands.
     /// </summary>
     public sealed class EventReveal : MonoBehaviour
