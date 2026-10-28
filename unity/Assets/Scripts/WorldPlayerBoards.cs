@@ -8,9 +8,8 @@ namespace StiflingDark.Unity
 {
     /// <summary>
     /// Investigator boards laid out in the map's own world space, so they pan and zoom with
-    /// it: one row below the map, this seat's board centred under it and every other
-    /// Investigator's continuing rightward from the map's right edge. Markers ride the
-    /// printed Stamina and Charge
+    /// it: this seat's board centred below the map, every other Investigator's stacked in
+    /// one column down the map's right edge. Markers ride the printed Stamina and Charge
     /// tracks, the Major Ability token sits on its printed gear while unspent, and Wound
     /// chips fill the printed slots (hover a chip for what the viewer may know of the card).
     ///
@@ -85,25 +84,30 @@ namespace StiflingDark.Unity
                 return;
             }
 
-            // One shared row of same-sized boards below the map: this seat's centred under
-            // it, everyone else's continuing rightward from the map's right edge.
+            // Same-sized boards: this seat's centred under the map, everyone else's stacked
+            // down a single column off the map's right edge, the column's foot level with
+            // the map's bottom.
             float gap = GapShare * mapWidth;
             float width = BoardWidthShare * mapWidth;
-            float top = -(mapHeight + gap);
             float bottom = -mapHeight;
             var mine = view.Investigators.FirstOrDefault(i => i.DefId == myInvestigatorId);
             if (mine != null)
             {
-                bottom = Mathf.Min(bottom, top - DrawBoard(mine, (mapWidth - width) / 2f, top, width));
+                float myTop = -(mapHeight + gap);
+                bottom = Mathf.Min(bottom, myTop - DrawBoard(mine, (mapWidth - width) / 2f, myTop, width));
             }
 
-            float left = mapWidth;
-            foreach (var inv in view.Investigators.Where(i => i.DefId != myInvestigatorId))
+            var others = view.Investigators.Where(i => i.DefId != myInvestigatorId).ToList();
+            float columnGap = gap * 0.6f;
+            float columnHeight = others.Sum(inv => BoardHeight(inv, width)) +
+                                 columnGap * Mathf.Max(0, others.Count - 1);
+            float columnLeft = mapWidth + gap;
+            float columnTop = -mapHeight + columnHeight;
+            foreach (var inv in others)
             {
-                bottom = Mathf.Min(bottom, top - DrawBoard(inv, left, top, width));
-                left += width + gap * 0.6f;
+                columnTop -= DrawBoard(inv, columnLeft, columnTop, width) + columnGap;
             }
-            RightExtent = Mathf.Max(mapWidth, left - gap * 0.6f);
+            RightExtent = others.Count > 0 ? columnLeft + width : mapWidth;
             BottomExtent = bottom;
         }
 
@@ -122,15 +126,23 @@ namespace StiflingDark.Unity
 
         // ------------------------------------------------------------- one board
 
-        /// <summary>Draw one Investigator's board with its top-left at (left, top); returns
-        /// the board's world height so the caller can stack the next one.</summary>
-        private float DrawBoard(PlayerView.InvestigatorPanel inv, float left, float top, float width)
+        /// <summary>World height of an Investigator's board at this width: the art's own
+        /// aspect, or the fallback card's when no art was synced.</summary>
+        private float BoardHeight(PlayerView.InvestigatorPanel inv, float width)
         {
             var sprite = _art.PlayerBoardFront(inv.DefId);
             float aspect = sprite != null && sprite.bounds.size.y > 0f
                 ? sprite.bounds.size.x / sprite.bounds.size.y
                 : FallbackAspect;
-            float height = width / aspect;
+            return width / aspect;
+        }
+
+        /// <summary>Draw one Investigator's board with its top-left at (left, top); returns
+        /// the board's world height so the caller can stack the next one.</summary>
+        private float DrawBoard(PlayerView.InvestigatorPanel inv, float left, float top, float width)
+        {
+            var sprite = _art.PlayerBoardFront(inv.DefId);
+            float height = BoardHeight(inv, width);
 
             if (sprite == null)
             {

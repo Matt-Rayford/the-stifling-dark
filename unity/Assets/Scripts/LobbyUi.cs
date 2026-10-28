@@ -145,34 +145,23 @@ namespace StiflingDark.Unity
             }
         }
 
-        private void RenderControls(RoomState room)
+        /// <summary>Role and Investigator for the viewer's own seat — every player's to
+        /// change, host or not (the server lets a seat reshape itself).</summary>
+        private void RenderOwnSeat(RoomState room)
         {
-            UiKit.Clear(_controls);
-            if (room.Started)
-            {
-                Head("The game has started.");
-                return;
-            }
-            if (!room.YouAreHost)
-            {
-                Head("Waiting for the host");
-                Row(_controls, "Only seat 0 may add bots, pick the scenario, or start.", 15,
-                    UiKit.MutedColor);
-                Head("Your Investigator");
-                Row(_controls, "Ask the host to change it — set_seat is host-only.", 14,
-                    UiKit.MutedColor);
-                return;
-            }
-
-            Head("ADD A SEAT");
-            UiKit.CreateButton(_controls, "+  Bot Investigator", 17,
-                () => _session.AddBot(SeatRole.Investigator));
-            UiKit.CreateButton(_controls, "+  Bot Adversary", 17,
-                () => _session.AddBot(SeatRole.Adversary), !room.HasAdversary,
-                "This table already has an Adversary.");
+            Head("YOUR SEAT");
+            var yours = room.YourSeatInfo;
+            bool youAreAdversary = yours != null && yours.Role == SeatRole.Adversary;
+            bool otherAdversary = room.Seats.Any(s => s.Seat != room.YourSeat && s.Role == SeatRole.Adversary);
+            UiKit.CreateButton(_controls, (youAreAdversary ? "○  " : "●  ") + "Play as an Investigator", 15,
+                () => _session.SetSeat(room.YourSeat, role: SeatRole.Investigator),
+                youAreAdversary, "Already yours.");
+            UiKit.CreateButton(_controls, (youAreAdversary ? "●  " : "○  ") + "Play as the Adversary", 15,
+                () => _session.SetSeat(room.YourSeat, role: SeatRole.Adversary),
+                !youAreAdversary && !otherAdversary,
+                youAreAdversary ? "Already yours." : "This table already has an Adversary.");
 
             Head("YOUR INVESTIGATOR");
-            var yours = room.YourSeatInfo;
             if (yours != null && yours.Role == SeatRole.Investigator)
             {
                 foreach (var def in _describe.PlayableInvestigators)
@@ -183,13 +172,40 @@ namespace StiflingDark.Unity
                     bool current = yours.InvestigatorId == captured.Id;
                     UiKit.CreateButton(_controls,
                         (current ? "●  " : "○  ") + captured.Name + "   ·   MP " + captured.Mp +
-                        "   ·   " + captured.MinorAbility.Name + " / " + captured.MajorAbility.Name,
+                        "   ·   " + captured.Playstyle + "   ·   " +
+                        captured.MinorAbilityTag + " / " + captured.MajorAbilityTag,
                         15,
                         () => _session.SetSeat(room.YourSeat, investigatorId: captured.Id),
                         !taken && !current,
                         taken ? "Another seat already plays " + captured.Name + "." : "Already yours.");
                 }
             }
+
+        }
+
+        private void RenderControls(RoomState room)
+        {
+            UiKit.Clear(_controls);
+            if (room.Started)
+            {
+                Head("The game has started.");
+                return;
+            }
+            RenderOwnSeat(room);
+            if (!room.YouAreHost)
+            {
+                Head("Waiting for the host");
+                Row(_controls, "Only seat 0 may add bots, pick the scenario, or start.", 15,
+                    UiKit.MutedColor);
+                return;
+            }
+
+            Head("ADD A SEAT");
+            UiKit.CreateButton(_controls, "+  Bot Investigator", 17,
+                () => _session.AddBot(SeatRole.Investigator));
+            UiKit.CreateButton(_controls, "+  Bot Adversary", 17,
+                () => _session.AddBot(SeatRole.Adversary), !room.HasAdversary,
+                "This table already has an Adversary.");
 
             Head("SCENARIO");
             foreach (string scenario in Options(room.Setup.AvailableScenarios, "sawmill",

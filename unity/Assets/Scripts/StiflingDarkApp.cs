@@ -96,14 +96,25 @@ namespace StiflingDark.Unity
         /// <summary>
         /// Last URL actually connected to wins; then StreamingAssets/client-config.json (written
         /// by tools/sync_unity.sh, so a build for a friend can point at Railway); then localhost.
+        /// A remembered localhost does not outrank a configured public server: the dev
+        /// default is remembered after any local session, and it silently pointed every later
+        /// connect at a server that was no longer running.
         /// </summary>
         private static string LoadServerUrl()
         {
             string remembered = PlayerPrefs.GetString(PrefServer, "");
-            if (!string.IsNullOrEmpty(remembered))
+            string configured = ConfiguredServerUrl();
+            if (!string.IsNullOrEmpty(remembered) && (remembered != DefaultServer || configured == null))
             {
                 return remembered;
             }
+            return configured ?? DefaultServer;
+        }
+
+        /// <summary>The serverUrl in StreamingAssets/client-config.json, or null when there is
+        /// none (missing or malformed file, or the file names the dev default).</summary>
+        private static string ConfiguredServerUrl()
+        {
             try
             {
                 string path = Path.Combine(Application.streamingAssetsPath, "client-config.json");
@@ -111,7 +122,7 @@ namespace StiflingDark.Unity
                 {
                     var config = Newtonsoft.Json.Linq.JObject.Parse(File.ReadAllText(path));
                     string url = (string)config["serverUrl"];
-                    if (!string.IsNullOrEmpty(url))
+                    if (!string.IsNullOrEmpty(url) && url != DefaultServer)
                     {
                         return url;
                     }
@@ -119,9 +130,9 @@ namespace StiflingDark.Unity
             }
             catch (Exception)
             {
-                // Malformed config: fall through to the dev default.
+                // Malformed config: treated as absent.
             }
-            return DefaultServer;
+            return null;
         }
 
         /// <summary>
@@ -140,20 +151,32 @@ namespace StiflingDark.Unity
             return key;
         }
 
-        private void Connect()
+        /// <summary>
+        /// Connect only when there is nothing usable: no session yet, a session to a different
+        /// server than Settings now names, or one whose connection failed. A live session is
+        /// kept — reconnecting would tear down the lobby and table built against it.
+        /// </summary>
+        private void EnsureConnected()
         {
-            if (_describe == null)
+            string target = NormalizeServerUrl(_serverInput.text);
+            if (_session == null || _session.Url != target || _session.ConnectionError.Length > 0)
             {
-                return;
+                Connect();
             }
-            string url = (_serverInput.text ?? "").Trim();
+        }
+
+        /// <summary>
+        /// Accept whatever gets pasted: an http(s) URL from the browser bar, a bare domain, or
+        /// a proper ws(s) URL. Public hosts sit behind TLS (Railway terminates it), so anything
+        /// that is not localhost defaults to wss://.
+        /// </summary>
+        private static string NormalizeServerUrl(string typed)
+        {
+            string url = (typed ?? "").Trim();
             if (url.Length == 0)
             {
                 url = DefaultServer;
             }
-            // Accept whatever gets pasted: an http(s) URL from the browser bar, a bare
-            // domain, or a proper ws(s) URL. Public hosts sit behind TLS (Railway
-            // terminates it), so anything that is not localhost defaults to wss://.
             if (url.StartsWith("http://"))
             {
                 url = "ws://" + url.Substring("http://".Length);
@@ -171,6 +194,16 @@ namespace StiflingDark.Unity
             {
                 url = url.TrimEnd('/') + "/ws";
             }
+            return url;
+        }
+
+        private void Connect()
+        {
+            if (_describe == null)
+            {
+                return;
+            }
+            string url = NormalizeServerUrl(_serverInput.text);
             string name = NameOrDefault();
             PlayerPrefs.SetString(PrefServer, url);
             PlayerPrefs.Save();
@@ -192,14 +225,14 @@ namespace StiflingDark.Unity
                 // instead of a dead table.
                 if (_session.Room.Code == code && _stage != Stage.Menu)
                 {
-                    ReturnToMenu(MenuScreen.Online);
+                    ReturnToMenu(MenuScreen.Join);
                 }
             };
             _menuRevision = -1;
 
             // The lobby and table are built against a live session, so rebuild them per connect.
             _lobby = new LobbyUi(_menu.parent, _session, _describe);
-            _lobby.LeaveRequested = () => ReturnToMenu(MenuScreen.Online);
+            _lobby.LeaveRequested = () => ReturnToMenu(MenuScreen.Join);
             _lobby.SetActive(false);
         }
 
@@ -323,7 +356,7 @@ namespace StiflingDark.Unity
             }
             else if (_stage != Stage.Menu && !inRoom)
             {
-                ReturnToMenu(MenuScreen.Online);
+                ReturnToMenu(MenuScreen.Join);
             }
 
             switch (_stage)
@@ -393,7 +426,7 @@ namespace StiflingDark.Unity
                     : () =>
                     {
                         _session.LeaveRoom();
-                        ReturnToMenu(MenuScreen.Online);
+                        ReturnToMenu(MenuScreen.Join);
                     };
                 _gameSession = session;
                 _builtScenario = scenarioId;

@@ -230,10 +230,12 @@ fi
 
 echo "== client config =="
 # Baked into builds but never committed (StreamingAssets is gitignored).
-# Set SD_SERVER_URL when building for friends:  SD_SERVER_URL=wss://... tools/sync_unity.sh
+# The public Railway deployment is the default; set SD_SERVER_URL to point a build elsewhere
+# (SD_SERVER_URL=ws://localhost:5226/ws tools/sync_unity.sh for a local-only client).
+RAILWAY_URL="wss://the-stifling-dark-production.up.railway.app/ws"
 if [ ! -f "$STREAMING/client-config.json" ] || [ -n "${SD_SERVER_URL:-}" ]; then
-  echo "{ \"serverUrl\": \"${SD_SERVER_URL:-ws://localhost:5226/ws}\" }" > "$STREAMING/client-config.json"
-  echo "  wrote client-config.json (${SD_SERVER_URL:-ws://localhost:5226/ws})"
+  echo "{ \"serverUrl\": \"${SD_SERVER_URL:-$RAILWAY_URL}\" }" > "$STREAMING/client-config.json"
+  echo "  wrote client-config.json (${SD_SERVER_URL:-$RAILWAY_URL})"
 fi
 
 echo "done:"

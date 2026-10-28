@@ -313,9 +313,9 @@ namespace StiflingDark.Engine.Core
             {
                 throw new InvalidOperationException($"{inv.DefId} is no longer on the board.");
             }
-            if (State.ActiveInvestigator == inv.DefId)
+            if (State.OpenTurns.Contains(inv.DefId))
             {
-                RequireNoPendingWindow();
+                RequireNoPendingWindow(inv);
             }
             RequireActionAllowed(inv, ActionUseAbility);
             return new AbilityUse
@@ -1014,7 +1014,7 @@ namespace StiflingDark.Engine.Core
 
         private void RequireOwnTurn(InvestigatorState inv, string why)
         {
-            if (State.Phase != GamePhase.InvestigatorTurns || State.ActiveInvestigator != inv.DefId)
+            if (State.Phase != GamePhase.InvestigatorTurns || !State.OpenTurns.Contains(inv.DefId))
             {
                 throw new InvalidOperationException($"{why}; it is not {inv.DefId}'s turn.");
             }

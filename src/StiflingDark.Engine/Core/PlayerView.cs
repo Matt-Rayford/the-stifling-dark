@@ -46,7 +46,13 @@ namespace StiflingDark.Engine.Core
         public int Round { get; set; }
         /// <summary>Rounds in the scenario, so a client can draw the round tracker.</summary>
         public int TotalRounds { get; set; }
+        /// <summary>The one open turn, or null when none or several are open.</summary>
         public string? ActiveInvestigator { get; set; }
+        /// <summary>Every Investigator whose turn is open right now.</summary>
+        public List<string> OpenTurns { get; set; } = new List<string>();
+        public bool SimultaneousTurns { get; set; }
+        /// <summary>This viewer's own Window crossing is waiting on a choice (the Adversary
+        /// seat sees any crossing).</summary>
         public bool PendingWindowChoice { get; set; }
 
         public string? CurrentEvent { get; set; }
@@ -397,7 +403,12 @@ namespace StiflingDark.Engine.Core
                 Round = State.Round,
                 TotalRounds = Db.Config.Rounds,
                 ActiveInvestigator = State.ActiveInvestigator,
-                PendingWindowChoice = State.PendingWindowChoice,
+                OpenTurns = State.OpenTurns.ToList(),
+                SimultaneousTurns = State.SimultaneousTurns,
+                PendingWindowChoice = State.PendingWindowChoice &&
+                                      (viewerInvestigatorId == null ||
+                                       State.PendingWindowInvestigator == null ||
+                                       State.PendingWindowInvestigator == viewerInvestigatorId),
                 CurrentEvent = State.CurrentEvent,
                 PendingEventChoices = PendingEventChoices(),
                 PersistentMajorEvents = PersistentMajorEvents(),

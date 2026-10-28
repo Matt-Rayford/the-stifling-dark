@@ -1,3 +1,4 @@
+using StiflingDark.Protocol;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Newtonsoft.Json.Linq;
 using StiflingDark.Engine.Core;
@@ -87,6 +88,26 @@ public class ServerTests : IClassFixture<WebApplicationFactory<Program>>
     }
 
     [Fact]
+    public async Task A_guest_may_change_their_own_role_but_not_another_seat()
+    {
+        await using var host = await TestClient.ConnectAsync(_factory);
+        await host.SendAsync(new { type = "create_room", name = "Host" });
+        string code = (string)(await host.NextOfTypeAsync("room"))["code"]!;
+
+        await using var guest = await TestClient.ConnectAsync(_factory);
+        await guest.SendAsync(new { type = "join_room", code, name = "Guest" });
+        int guestSeat = (int)(await guest.NextOfTypeAsync("room"))["yourSeat"]!;
+
+        await guest.SendAsync(new { type = "set_seat", seat = guestSeat, role = "adversary" });
+        var room = await guest.NextOfTypeAsync("room");
+        Assert.Equal("adversary", (string)room["seats"]![guestSeat]!["role"]!);
+
+        await guest.SendAsync(new { type = "set_seat", seat = 0, role = "adversary" });
+        var refused = await guest.NextOfTypeAsync("error");
+        Assert.Contains("Only the host", (string)refused["message"]!);
+    }
+
+    [Fact]
     public async Task Only_the_host_may_reshape_the_table()
     {
         await using var host = await TestClient.ConnectAsync(_factory);
@@ -131,6 +152,43 @@ public class ServerTests : IClassFixture<WebApplicationFactory<Program>>
         var update = await host.NextAsync(m => (string?)m["type"] == "update" &&
             (int?)m["view"]?["round"] >= 1);
         Assert.Equal("investigatorTurns", (string)update["view"]!["phase"]!);
+    }
+
+    [Fact]
+    public async Task Two_human_investigators_take_their_turns_at_the_same_time()
+    {
+        await using var host = await TestClient.ConnectAsync(_factory);
+        await host.SendAsync(new { type = "create_room", name = "Host" });
+        string code = (string)(await host.NextOfTypeAsync("room"))["code"]!;
+        await using var guest = await TestClient.ConnectAsync(_factory);
+        await guest.SendAsync(new { type = "join_room", code, name = "Guest" });
+        await guest.NextOfTypeAsync("room");
+        await guest.SendAsync(new { type = "ready", ready = true });
+        await host.SendAsync(new { type = "add_bot", role = "adversary" });
+        await host.NextOfTypeAsync("room");
+        await host.SendAsync(new { type = "start_game" });
+
+        // Round 1: both human seats are awaited at once, not one after the other.
+        var hostUpdate = await host.NextAsync(m => (string?)m["type"] == "update" &&
+            (int?)m["view"]?["round"] >= 1);
+        Assert.True((bool)hostUpdate["view"]!["simultaneousTurns"]!);
+        Assert.Equal(new[] { 0, 1 }, hostUpdate["actingSeats"]!.Select(t => (int)t).OrderBy(i => i));
+
+        string hostInv = (string)hostUpdate["view"]!["investigators"]![0]!["defId"]!;
+        string guestInv = (string)hostUpdate["view"]!["investigators"]![1]!["defId"]!;
+        await host.SendAsync(new { type = "command",
+            command = WireCodec.EncodeCommand(new BeginInvestigatorTurnCommand { InvestigatorId = hostInv }) });
+        await guest.SendAsync(new { type = "command",
+            command = WireCodec.EncodeCommand(new BeginInvestigatorTurnCommand { InvestigatorId = guestInv }) });
+        var bothOpen = await host.NextAsync(m => (string?)m["type"] == "update" &&
+            m["view"]?["openTurns"]?.Count() == 2);
+        Assert.True((bool)bothOpen["yourTurn"]!);
+
+        // Each seat's command lands on its own open turn.
+        await guest.SendAsync(new { type = "command", command = WireCodec.EncodeCommand(new SprintCommand()) });
+        var afterSprint = await host.NextAsync(m => (string?)m["type"] == "update" &&
+            (bool?)m["view"]?["investigators"]?[1]?["sprintedOrRested"] == true);
+        Assert.False((bool)afterSprint["view"]!["investigators"]![0]!["sprintedOrRested"]!);
     }
 
     [Fact]

@@ -334,10 +334,10 @@ namespace StiflingDark.Unity
                         .Select(s => s.Seat).ToList();
 
                 case GamePhase.InvestigatorTurns:
-                    if (view.ActiveInvestigator != null)
+                    if (view.OpenTurns.Count > 0)
                     {
                         return Room.Seats
-                            .Where(s => s.InvestigatorId == view.ActiveInvestigator)
+                            .Where(s => view.OpenTurns.Contains(s.InvestigatorId))
                             .Select(s => s.Seat).ToList();
                     }
                     var pending = view.Investigators

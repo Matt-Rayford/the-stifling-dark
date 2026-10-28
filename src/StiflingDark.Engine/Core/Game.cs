@@ -260,7 +260,7 @@ namespace StiflingDark.Engine.Core
             }
             State.Round = round;
             State.Phase = GamePhase.InvestigatorTurns;
-            State.ActiveInvestigator = null;
+            State.OpenTurns.Clear();
             foreach (var inv in State.Investigators)
             {
                 inv.TurnTakenThisRound = false;
@@ -284,9 +284,13 @@ namespace StiflingDark.Engine.Core
         public void BeginInvestigatorTurn(string invId)
         {
             RequirePhase(GamePhase.InvestigatorTurns);
-            if (State.ActiveInvestigator != null)
+            if (State.OpenTurns.Count > 0 && !State.SimultaneousTurns)
             {
-                throw new InvalidOperationException($"{State.ActiveInvestigator} has not finished their turn.");
+                throw new InvalidOperationException($"{State.OpenTurns[0]} has not finished their turn.");
+            }
+            if (State.OpenTurns.Contains(invId))
+            {
+                throw new InvalidOperationException($"{invId}'s turn is already open.");
             }
             if (EscapeChoicePending)
             {
@@ -299,7 +303,7 @@ namespace StiflingDark.Engine.Core
             {
                 throw new InvalidOperationException($"{invId} cannot take a turn.");
             }
-            State.ActiveInvestigator = invId;
+            State.OpenTurns.Add(invId);
             inv.MpRemaining = IsSpirit(inv) ? SpiritMp : Db.Investigator(invId).Mp;
             inv.SprintedOrRested = false;
             inv.Rested = false;
@@ -415,6 +419,7 @@ namespace StiflingDark.Engine.Core
             if (step.CrossesWindow)
             {
                 State.PendingWindowChoice = true;
+                State.PendingWindowInvestigator = inv.DefId;
             }
             ApplyCarriageRotation(inv);
             ApplyWaterFloat(inv);
@@ -425,11 +430,12 @@ namespace StiflingDark.Engine.Core
         public void ResolveWindow(bool stopAndLoseStamina)
         {
             var inv = ActiveInv();
-            if (!State.PendingWindowChoice)
+            if (!State.PendingWindowChoice || State.PendingWindowInvestigator != inv.DefId)
             {
                 throw new InvalidOperationException("No window crossing to resolve.");
             }
             State.PendingWindowChoice = false;
+            State.PendingWindowInvestigator = null;
             if (stopAndLoseStamina && inv.Stamina > 0)
             {
                 LoseStamina(inv, 1);
@@ -797,7 +803,7 @@ namespace StiflingDark.Engine.Core
             }
             NoteTurnResourceGains(inv);
             inv.TurnTakenThisRound = true;
-            State.ActiveInvestigator = null;
+            State.OpenTurns.Remove(inv.DefId);
             AdvanceToAdversaryTurnIfRoundComplete();
         }
 
@@ -810,7 +816,7 @@ namespace StiflingDark.Engine.Core
         /// </summary>
         private void AdvanceToAdversaryTurnIfRoundComplete()
         {
-            if (State.Phase != GamePhase.InvestigatorTurns || State.ActiveInvestigator != null)
+            if (State.Phase != GamePhase.InvestigatorTurns || State.OpenTurns.Count > 0)
             {
                 return;
             }
@@ -1386,11 +1392,50 @@ namespace StiflingDark.Engine.Core
             return medkits[0].Id; // single card type; no shuffle needed per the rulebook
         }
 
+        /// <summary>
+        /// The Investigator a command acts for: the one named by <see cref="ActingAs"/> (the
+        /// server names the seat's Investigator around every command), else the single open
+        /// turn. With several turns open, an unnamed actor is ambiguous and refused.
+        /// </summary>
         private InvestigatorState ActiveInv()
         {
             RequirePhase(GamePhase.InvestigatorTurns);
-            return Investigator(State.ActiveInvestigator
-                ?? throw new InvalidOperationException("No investigator turn in progress."));
+            string? id = ActingInvestigatorId();
+            if (id == null)
+            {
+                throw new InvalidOperationException(State.OpenTurns.Count == 0
+                    ? "No investigator turn in progress."
+                    : "Several turns are open; say which Investigator is acting.");
+            }
+            if (!State.OpenTurns.Contains(id))
+            {
+                throw new InvalidOperationException($"It is not {id}'s turn.");
+            }
+            return Investigator(id);
+        }
+
+        private string? ActingInvestigatorId() =>
+            _actingAs ?? (State.OpenTurns.Count == 1 ? State.OpenTurns[0] : null);
+
+        private string? _actingAs;
+
+        /// <summary>
+        /// Name the Investigator the following commands act for, until the scope is disposed.
+        /// Needed only while several turns are open at once (<see cref="GameState.SimultaneousTurns"/>);
+        /// with one open turn the commands find it on their own.
+        /// </summary>
+        public IDisposable ActingAs(string investigatorId)
+        {
+            string? previous = _actingAs;
+            _actingAs = investigatorId;
+            return new ActorScope(() => _actingAs = previous);
+        }
+
+        private sealed class ActorScope : IDisposable
+        {
+            private readonly Action _restore;
+            public ActorScope(Action restore) => _restore = restore;
+            public void Dispose() => _restore();
         }
 
         private InvestigatorState Investigator(string id) =>
@@ -1405,9 +1450,19 @@ namespace StiflingDark.Engine.Core
             }
         }
 
+        /// <summary>A Window crossing waits on its crosser alone; another open turn goes on.</summary>
         private void RequireNoPendingWindow()
         {
-            if (State.PendingWindowChoice)
+            if (State.PendingWindowChoice &&
+                (State.PendingWindowInvestigator == null || State.PendingWindowInvestigator == ActingInvestigatorId()))
+            {
+                throw new InvalidOperationException("Resolve the Window crossing first.");
+            }
+        }
+
+        private void RequireNoPendingWindow(InvestigatorState inv)
+        {
+            if (State.PendingWindowChoice && State.PendingWindowInvestigator == inv.DefId)
             {
                 throw new InvalidOperationException("Resolve the Window crossing first.");
             }

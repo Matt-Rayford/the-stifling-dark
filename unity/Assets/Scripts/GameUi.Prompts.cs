@@ -112,7 +112,8 @@ namespace StiflingDark.Unity
             var me = AmAdversary ? null : Me;
             bool waiting = me != null
                 && view.Phase == GamePhase.InvestigatorTurns
-                && view.ActiveInvestigator == null
+                && !view.OpenTurns.Contains(me.DefId)
+                && (view.SimultaneousTurns || view.OpenTurns.Count == 0)
                 && !me.TurnTakenThisRound
                 && !me.Escaped
                 && _session.YourTurn

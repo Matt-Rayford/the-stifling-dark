@@ -202,9 +202,17 @@ namespace StiflingDark.Engine.Data
         private static List<InvestigatorDef> LoadInvestigators(string path)
         {
             var j = ReadJson(path);
+            // The board backs' summary block (playstyle and ability tags) is keyed by id in
+            // a separate section of the file.
+            var summaries = new Dictionary<string, JToken>(StringComparer.Ordinal);
+            foreach (var summary in j["backs"]?["summaries"] as JArray ?? new JArray())
+            {
+                summaries[summary["id"]!.Value<string>()!] = summary;
+            }
             var result = new List<InvestigatorDef>();
             foreach (var i in (JArray)j["investigators"]!)
             {
+                summaries.TryGetValue(i["id"]!.Value<string>()!, out var back);
                 result.Add(new InvestigatorDef
                 {
                     Id = i["id"]!.Value<string>()!,
@@ -215,6 +223,9 @@ namespace StiflingDark.Engine.Data
                     StaminaTrack = ParseTrack(i["staminaTrack"]!),
                     ChargeTrack = ParseTrack(i["chargeTrack"]!),
                     Set = i["set"]?.Value<string>() ?? "base",
+                    Playstyle = back?["playstyle"]?.Value<string>() ?? "",
+                    MinorAbilityTag = back?["minorAbilityTag"]?.Value<string>() ?? "",
+                    MajorAbilityTag = back?["majorAbilityTag"]?.Value<string>() ?? "",
                 });
             }
             return result;

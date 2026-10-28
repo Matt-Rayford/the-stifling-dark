@@ -215,7 +215,30 @@ namespace StiflingDark.Engine.Core
         public GameResult Result { get; set; }
         public int Round { get; set; }
         /// <summary>DefId of the Investigator whose turn is in progress, or null between turns.</summary>
-        public string? ActiveInvestigator { get; set; }
+        /// <summary>Investigators whose turns are open right now: one at a time by the rules,
+        /// several at once when <see cref="SimultaneousTurns"/> lets human seats play together.</summary>
+        public List<string> OpenTurns { get; set; } = new List<string>();
+
+        /// <summary>Several Investigator turns may be open at once — an online table with more
+        /// than one human Investigator, who should not have to wait on each other.</summary>
+        public bool SimultaneousTurns { get; set; }
+
+        /// <summary>The one open turn, or null when none or several are open. The setter only
+        /// exists so snapshots written before <see cref="OpenTurns"/> still load.</summary>
+        public string? ActiveInvestigator
+        {
+            get => OpenTurns.Count == 1 ? OpenTurns[0] : null;
+            set
+            {
+                if (value != null && !OpenTurns.Contains(value))
+                {
+                    OpenTurns.Add(value);
+                }
+            }
+        }
+
+        /// <summary>Whose Window crossing is waiting on a choice (see <see cref="PendingWindowChoice"/>).</summary>
+        public string? PendingWindowInvestigator { get; set; }
 
         public List<InvestigatorState> Investigators { get; set; } = new List<InvestigatorState>();
         public AdversaryState Adversary { get; set; } = new AdversaryState();

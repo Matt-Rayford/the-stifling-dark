@@ -94,6 +94,11 @@ namespace StiflingDark.Engine.Data
         public TrackDef ChargeTrack { get; set; } = new TrackDef();
         /// <summary>"base" or "promo" — both playable (promo unlocked 2026-10-21).</summary>
         public string Set { get; set; } = "base";
+        /// <summary>The board back's one-word role tag ("Objectives", "Support"…); "" when the data has none.</summary>
+        public string Playstyle { get; set; } = "";
+        /// <summary>The board back's one-phrase ability descriptors; "" when the data has none.</summary>
+        public string MinorAbilityTag { get; set; } = "";
+        public string MajorAbilityTag { get; set; } = "";
     }
 
     /// <summary>A card in any deck. Deck-specific fields are null when not applicable.</summary>

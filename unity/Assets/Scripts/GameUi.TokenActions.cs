@@ -180,7 +180,7 @@ namespace StiflingDark.Unity
                 // The data carries no ability names (only their text), so the row says what
                 // kind of ability it is and the tooltip carries the card text.
                 string major = string.IsNullOrEmpty(def.MajorAbility.Name) ? "Major ability" : def.MajorAbility.Name;
-                row(major + "  (" + me.MajorAbilityTokens + " token)", () =>
+                row(major, () =>
                     AskArgs(major, def.MajorAbility.Text,
                         args => Send(new UseMajorAbilityCommand { Args = args })),
                     active && me.MajorAbilityTokens > 0,
