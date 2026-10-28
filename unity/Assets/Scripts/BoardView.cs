@@ -343,6 +343,7 @@ namespace StiflingDark.Unity
                 return;
             }
 
+            DrawDimRings(view);
             DrawOverlayMarkers(view);
             DrawObjectiveTokens(view);
             DrawEvidence(view);
@@ -421,6 +422,35 @@ namespace StiflingDark.Unity
                 Scale(disc, (float)_board.Map.SpaceRadius * 2f);
             }
         }
+
+        /// <summary>
+        /// The board prints a Dark space as a dashed ring and a Dim one as a solid ring. A Dim
+        /// token on a Zone (or a Campfire, or Kya's inversion) makes printed-Dark spaces Dim
+        /// without reprinting the board, so a solid ring goes over each of them — drawn under
+        /// the light overlay so it takes the same shading as the printed rings around it.
+        /// </summary>
+        private void DrawDimRings(PlayerView view)
+        {
+            var overlay = BoardModel.OverlayFrom(view);
+            foreach (var space in _board.Map.Spaces)
+            {
+                if (space.PrintedLight != LightLevel.Dark ||
+                    _board.Graph.EffectiveLight(space.Id, overlay) != LightLevel.Dim)
+                {
+                    continue;
+                }
+                var ring = NewSprite(_dynamic, "DimRing", UiSprites.Ring, DimRingColor, DimRingOrder);
+                ring.transform.position = WorldOf(space.Id);
+                Scale(ring, (float)_board.Map.SpaceRadius * 2f * DimRingDiameterShare);
+            }
+        }
+
+        /// <summary>The printed rings' light grey; a hair wider than the circle so the solid
+        /// ring covers the dashed one underneath.</summary>
+        private static readonly Color DimRingColor = new Color(0.82f, 0.82f, 0.80f);
+        private const float DimRingDiameterShare = 1.06f;
+        /// <summary>Under the light overlay (order 10) and the beam wash (9).</summary>
+        private const int DimRingOrder = 8;
 
         private void DrawOverlayMarkers(PlayerView view)
         {

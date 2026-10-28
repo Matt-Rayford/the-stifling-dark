@@ -163,7 +163,7 @@ if [ -f "game-assets/player-boards/adersary-fronts.pdf" ] && command -v pdftoppm
 fi
 
 echo "== item cards =="
-# Item card faces for the in-game hand, one PNG per card id. The print PDFs hold a few
+# Item, Event and Wound card faces (the hand, the Event panel, the player-board Wound slots), one PNG per card id. The print PDFs hold a few
 # cards the digital port does not use and are not perfectly alphabetical, so pages are
 # matched by NAME: pdftotext reads each page's title and it is slugified into the card
 # id. Ids in game-data with no matching page are reported (the client shows a text
@@ -181,13 +181,13 @@ def slug(name):
     return re.sub(r'-+', '-', re.sub(r'[^a-z0-9]+', '-', name)).strip('-')
 
 known = set()
-for deck in ['general-items', 'cursed-items', 'objective-items', 'medical-items', 'events']:
+for deck in ['general-items', 'cursed-items', 'objective-items', 'medical-items', 'events', 'wounds']:
     path = os.path.join('game-data/cards', deck + '.json')
     if os.path.exists(path):
         known |= {c['id'] for c in json.load(open(path))['cards']}
 
 found = set()
-for deck in ['general-items', 'cursed-items', 'objective-items', 'events']:
+for deck in ['general-items', 'cursed-items', 'objective-items', 'events', 'wounds']:
     pdf = os.path.join('game-assets/cards', deck + '.pdf')
     if not os.path.exists(pdf):
         print('  !! %s missing (game-assets/ is gitignored)' % pdf)
@@ -220,7 +220,14 @@ missing = sorted(i for i in known
 if missing:
     print('  !! no card art matched for: ' + ', '.join(missing))
 CARDS_EOF
-  for deck in general-items cursed-items objective-items events; do
+  # The Wound deck's back (face-down Wounds on the player boards) is a loose PNG, scaled to
+  # the same 800px height as the rendered faces.
+  if [ -f game-assets/cards/wound-card-back.png ]; then
+    mkdir -p "$STREAMING/cards/wounds"
+    cp game-assets/cards/wound-card-back.png "$STREAMING/cards/wounds/back.png"
+    sips --resampleHeight 800 "$STREAMING/cards/wounds/back.png" >/dev/null 2>&1 || true
+  fi
+  for deck in general-items cursed-items objective-items events wounds; do
     [ -d "$STREAMING/cards/$deck" ] && \
       python3 tools/make_mips.py "$STREAMING/cards/$deck" || true
   done

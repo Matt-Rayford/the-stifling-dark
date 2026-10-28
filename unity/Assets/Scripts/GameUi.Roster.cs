@@ -27,7 +27,7 @@ namespace StiflingDark.Unity
                     panel.Dead ? "DEAD" : null,
                     panel.Escaped ? "ESCAPED" : null,
                     panel.TurnTakenThisRound ? "turn taken" : null,
-                    view.OpenTurns.Contains(panel.DefId) ? "taking their turn" : null,
+                    view.TurnOpenFor(panel.DefId) ? "taking their turn" : null,
                     panel.Rested ? "rested" : null,
                     panel.SprintedOrRested && !panel.Rested ? "sprinted" : null,
                     panel.MovementLocked ? "movement locked" : null,

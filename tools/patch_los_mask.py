@@ -7,9 +7,14 @@ Sawmill's blue pickup). Polygons below are hand-traced in TEXTURE pixels of the 
 board renders; the tool converts to board-source coordinates, rasterizes, and ORs them
 into the mask bits. Idempotent — re-running changes nothing once the bits are set.
 
+The same colour-keyed extraction also mistook the magenta Light Switch rings and icons for
+walls (2026-10-27 playtest: no Flashlight could ever light a switch space), so the bits
+inside every space circle of the kinds in CLEAR_CIRCLE_KINDS are cleared afterwards.
+
 Format (see RasterLineOfSightBlocker): "SDLM", int32 w, int32 h, double scale
 (mask px -> board px), row-major packed bits, MSB first, 1 = blocks sight.
 """
+import json
 import struct
 import sys
 
@@ -27,6 +32,39 @@ PATCHES = {
         [(656, 2340), (690, 2340), (690, 2515), (656, 2515)],
     ]),
 }
+
+
+# Space kinds whose printed circle is decoration, never an obstacle. Cleared a touch past
+# the radius so the dashed ring itself goes too.
+CLEAR_CIRCLE_KINDS = ('lightswitch',)
+CLEAR_RADIUS_SHARE = 1.08
+
+
+def clear_space_circles(map_id):
+    path = 'game-data/maps/%s-los-mask.bin' % map_id
+    raw = bytearray(open(path, 'rb').read())
+    assert raw[:4] == b'SDLM', path
+    w, h = struct.unpack_from('<ii', raw, 4)
+    scale = struct.unpack_from('<d', raw, 12)[0]
+    board = json.load(open('game-data/maps/%s.json' % map_id))
+    radius = board['spaceRadius'] * CLEAR_RADIUS_SHARE / scale
+    cleared = 0
+    for space in board['spaces']:
+        if space['kind'].lower() not in CLEAR_CIRCLE_KINDS:
+            continue
+        cx, cy = space['x'] / scale, space['y'] / scale
+        for my in range(max(0, int(cy - radius)), min(h, int(cy + radius) + 2)):
+            for mx in range(max(0, int(cx - radius)), min(w, int(cx + radius) + 2)):
+                if (mx + 0.5 - cx) ** 2 + (my + 0.5 - cy) ** 2 > radius * radius:
+                    continue
+                index = my * w + mx
+                byte = 20 + (index >> 3)
+                bit = 0x80 >> (index & 7)
+                if raw[byte] & bit:
+                    raw[byte] &= ~bit & 0xFF
+                    cleared += 1
+    open(path, 'wb').write(raw)
+    print('%s: cleared %d mask px inside %s circles' % (map_id, cleared, '/'.join(CLEAR_CIRCLE_KINDS)))
 
 
 def point_in_polygon(x, y, polygon):
@@ -71,4 +109,6 @@ def patch(map_id, texture_width, source_width, polygons):
 if __name__ == '__main__':
     for map_id, (tex_w, src_w, polys) in PATCHES.items():
         patch(map_id, tex_w, src_w, polys)
+    for map_id in ('sawmill', 'amusement-park'):
+        clear_space_circles(map_id)
     sys.exit(0)

@@ -218,8 +218,7 @@ namespace StiflingDark.Unity
 
         private bool MyTurnActive => View != null && !AmAdversary &&
             View.Phase == GamePhase.InvestigatorTurns &&
-            !string.IsNullOrEmpty(MyInvestigatorId) &&
-            View.OpenTurns.Contains(MyInvestigatorId);
+            View.TurnOpenFor(MyInvestigatorId);
 
         private void Render()
         {
@@ -405,7 +404,7 @@ namespace StiflingDark.Unity
             // "Between turns" for this seat: no turn of ours is open. At a sequential table
             // that also means nobody's is; at a simultaneous one other humans may be mid-turn.
             bool between = view.Phase == GamePhase.InvestigatorTurns && !MyTurnActive &&
-                           (view.SimultaneousTurns || view.OpenTurns.Count == 0);
+                           (view.SimultaneousTurns || !view.OpenTurnIds.Any());
             bool active = MyTurnActive;
 
             if (between)
@@ -417,7 +416,7 @@ namespace StiflingDark.Unity
                 // plainly so it is never pressed by accident.
                 foreach (var other in view.Investigators.Where(i =>
                     i.DefId != me.DefId && !i.TurnTakenThisRound && !i.Escaped &&
-                    !view.OpenTurns.Contains(i.DefId)))
+                    !view.TurnOpenFor(i.DefId)))
                 {
                     var captured = other;
                     UiKit.CreateButton(_actionsBody,
@@ -444,7 +443,7 @@ namespace StiflingDark.Unity
         {
             string space = null;
             string actingBot = view.Phase == GamePhase.InvestigatorTurns
-                ? view.OpenTurns.FirstOrDefault(id => id != MyInvestigatorId &&
+                ? view.OpenTurnIds.FirstOrDefault(id => id != MyInvestigatorId &&
                     _session.Room.Seats.Any(s => s.Fill == SeatFill.Bot && s.InvestigatorId == id))
                 : null;
             if (actingBot != null)

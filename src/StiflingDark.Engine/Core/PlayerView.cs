@@ -51,6 +51,19 @@ namespace StiflingDark.Engine.Core
         /// <summary>Every Investigator whose turn is open right now.</summary>
         public List<string> OpenTurns { get; set; } = new List<string>();
         public bool SimultaneousTurns { get; set; }
+
+        /// <summary>Is this Investigator's turn open? Reads <see cref="ActiveInvestigator"/> as
+        /// well, so a client stays right against a server that predates <see cref="OpenTurns"/>.</summary>
+        public bool TurnOpenFor(string investigatorId) =>
+            !string.IsNullOrEmpty(investigatorId) &&
+            (OpenTurns.Contains(investigatorId) || ActiveInvestigator == investigatorId);
+
+        /// <summary>Every open turn, from whichever of the two fields the server filled.</summary>
+        [Newtonsoft.Json.JsonIgnore]
+        public IEnumerable<string> OpenTurnIds =>
+            ActiveInvestigator != null && !OpenTurns.Contains(ActiveInvestigator)
+                ? OpenTurns.Concat(new[] { ActiveInvestigator })
+                : OpenTurns;
         /// <summary>This viewer's own Window crossing is waiting on a choice (the Adversary
         /// seat sees any crossing).</summary>
         public bool PendingWindowChoice { get; set; }

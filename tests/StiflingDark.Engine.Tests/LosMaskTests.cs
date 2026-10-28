@@ -40,12 +40,15 @@ namespace StiflingDark.Engine.Tests
         [InlineData("M-1", "M-2")] // mirror wall
         [InlineData("104", "C-1")] // carousel rim
         [InlineData("22", "M-11")] // curtain: passable but opaque
-        [InlineData("M-6", "M-11")] // hatched mirror wall
         public void Park_walls_and_curtains_block(string a, string b) =>
             Assert.True(Blocked("amusement-park", a, b));
 
         [Theory]
         [InlineData("M-9", "M-14")] // mirror door: never blocks sight
+        // Crosses only the red mirror-door strip above M-11's door token. It read as blocked
+        // until 2026-10-27 purely because M-11's magenta switch ring had been extracted as a
+        // wall; with the ring scrubbed, the strip is a mirror door like any other.
+        [InlineData("M-6", "M-11")]
         [InlineData("71", "72")] // within one carriage
         [InlineData("G-3", "1")] // window
         [InlineData("142", "153")] // open midway (pennant art must not block)
