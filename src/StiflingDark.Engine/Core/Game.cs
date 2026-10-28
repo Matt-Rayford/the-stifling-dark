@@ -40,6 +40,50 @@ namespace StiflingDark.Engine.Core
         /// <summary>Swap in the obstacle-mask blocker once wall geometry is extracted.</summary>
         public void SetLineOfSightBlocker(ILineOfSightBlocker blocker) => _losBlocker = blocker;
 
+        /// <summary>
+        /// The Adversary's printed line of sight: "a straight line from any part of your space's
+        /// circle to any part of the target's circle without hitting any Obstacles". Centre to
+        /// centre is tried first; failing that, rim points of both circles are paired up, so a
+        /// doorway or wall tip that happens to cut the centre line does not hide an Investigator
+        /// standing in plain view.
+        /// </summary>
+        public bool AdversaryHasLineOfSight(string fromSpace, string toSpace)
+        {
+            var from = Graph.Space(fromSpace);
+            var to = Graph.Space(toSpace);
+            if (!_losBlocker.Blocks(from.X, from.Y, to.X, to.Y))
+            {
+                return true;
+            }
+            double rim = Graph.Def.SpaceRadius * LineOfSightRimShare;
+            for (int i = 0; i < LineOfSightRimSamples; i++)
+            {
+                double a = 2 * Math.PI * i / LineOfSightRimSamples;
+                double fx = from.X + rim * Math.Cos(a), fy = from.Y + rim * Math.Sin(a);
+                for (int j = 0; j < LineOfSightRimSamples; j++)
+                {
+                    double b = 2 * Math.PI * j / LineOfSightRimSamples;
+                    if (!_losBlocker.Blocks(fx, fy, to.X + rim * Math.Cos(b), to.Y + rim * Math.Sin(b)))
+                    {
+                        return true;
+                    }
+                }
+            }
+            return false;
+        }
+
+        /// <summary>Centre line only — the strict reading, kept for comparison in tests.</summary>
+        public bool CentreLineOfSightClear(string fromSpace, string toSpace)
+        {
+            var from = Graph.Space(fromSpace);
+            var to = Graph.Space(toSpace);
+            return !_losBlocker.Blocks(from.X, from.Y, to.X, to.Y);
+        }
+
+        /// <summary>Rim points sit just inside the printed circle so a sample never starts on the ring itself.</summary>
+        private const double LineOfSightRimShare = 0.85;
+        private const int LineOfSightRimSamples = 12;
+
         private Game(GameDatabase db, GameState state)
         {
             Db = db;
