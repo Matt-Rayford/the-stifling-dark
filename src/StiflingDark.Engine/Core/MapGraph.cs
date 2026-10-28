@@ -24,6 +24,13 @@ namespace StiflingDark.Engine.Core
         /// <summary>Individually Bright spaces (flashlight coverage and similar effects).</summary>
         public HashSet<string> BrightSpaces { get; } = new HashSet<string>();
 
+        /// <summary>Individually Dim spaces (Winston's Campfire radius). Written by Game.PromoAbilities.cs.</summary>
+        public HashSet<string> DimSpaces { get; } = new HashSet<string>();
+
+        /// <summary>Kya's Major for the rest of the round: every Dim reads Dark and every Dark
+        /// reads Dim, for every player. Bright is untouched.</summary>
+        public bool DimDarkInverted { get; set; }
+
         /// <summary>The Mirror Maze color that is Open this round (null outside the Amusement Park).</summary>
         public MirrorDoorColor? OpenMirrorColor { get; set; }
 
@@ -112,7 +119,8 @@ namespace StiflingDark.Engine.Core
 
         /// <summary>
         /// Effective light level. Precedence per the rulebook: flashlight/Bright token,
-        /// then Dim token or printed Dim, then Dark.
+        /// then Dim token or printed Dim, then Dark — with Dim and Dark swapped while
+        /// <see cref="BoardOverlay.DimDarkInverted"/> is in force.
         /// </summary>
         public LightLevel EffectiveLight(string spaceId, BoardOverlay overlay)
         {
@@ -122,11 +130,18 @@ namespace StiflingDark.Engine.Core
             {
                 return LightLevel.Bright;
             }
-            if (space.Zone != null && overlay.DimZones.Contains(space.Zone))
+            bool dimToken = (space.Zone != null && overlay.DimZones.Contains(space.Zone)) ||
+                            overlay.DimSpaces.Contains(spaceId);
+            if (!dimToken && space.PrintedLight == LightLevel.Bright)
             {
-                return LightLevel.Dim;
+                return LightLevel.Bright;
             }
-            return space.PrintedLight;
+            bool dim = dimToken || space.PrintedLight == LightLevel.Dim;
+            if (overlay.DimDarkInverted)
+            {
+                dim = !dim;
+            }
+            return dim ? LightLevel.Dim : LightLevel.Dark;
         }
 
         /// <summary>

@@ -40,6 +40,50 @@ namespace StiflingDark.Engine.Core
         /// <summary>Swap in the obstacle-mask blocker once wall geometry is extracted.</summary>
         public void SetLineOfSightBlocker(ILineOfSightBlocker blocker) => _losBlocker = blocker;
 
+        /// <summary>
+        /// The Adversary's printed line of sight: "a straight line from any part of your space's
+        /// circle to any part of the target's circle without hitting any Obstacles". Centre to
+        /// centre is tried first; failing that, rim points of both circles are paired up, so a
+        /// doorway or wall tip that happens to cut the centre line does not hide an Investigator
+        /// standing in plain view.
+        /// </summary>
+        public bool AdversaryHasLineOfSight(string fromSpace, string toSpace)
+        {
+            var from = Graph.Space(fromSpace);
+            var to = Graph.Space(toSpace);
+            if (!_losBlocker.Blocks(from.X, from.Y, to.X, to.Y))
+            {
+                return true;
+            }
+            double rim = Graph.Def.SpaceRadius * LineOfSightRimShare;
+            for (int i = 0; i < LineOfSightRimSamples; i++)
+            {
+                double a = 2 * Math.PI * i / LineOfSightRimSamples;
+                double fx = from.X + rim * Math.Cos(a), fy = from.Y + rim * Math.Sin(a);
+                for (int j = 0; j < LineOfSightRimSamples; j++)
+                {
+                    double b = 2 * Math.PI * j / LineOfSightRimSamples;
+                    if (!_losBlocker.Blocks(fx, fy, to.X + rim * Math.Cos(b), to.Y + rim * Math.Sin(b)))
+                    {
+                        return true;
+                    }
+                }
+            }
+            return false;
+        }
+
+        /// <summary>Centre line only — the strict reading, kept for comparison in tests.</summary>
+        public bool CentreLineOfSightClear(string fromSpace, string toSpace)
+        {
+            var from = Graph.Space(fromSpace);
+            var to = Graph.Space(toSpace);
+            return !_losBlocker.Blocks(from.X, from.Y, to.X, to.Y);
+        }
+
+        /// <summary>Rim points sit just inside the printed circle so a sample never starts on the ring itself.</summary>
+        private const double LineOfSightRimShare = 0.85;
+        private const int LineOfSightRimSamples = 12;
+
         private Game(GameDatabase db, GameState state)
         {
             Db = db;
@@ -75,11 +119,7 @@ namespace StiflingDark.Engine.Core
             var startSpaces = map.Spaces.Where(s => s.Kind == SpaceKind.Start).Select(s => s.Id).ToHashSet();
             foreach (var (invId, space) in setup.InvestigatorStartSpaces.Select(kv => (kv.Key, kv.Value)))
             {
-                var def = db.Investigator(invId);
-                if (def.Set != "base")
-                {
-                    throw new InvalidOperationException($"'{invId}' is not part of the v1 roster.");
-                }
+                db.Investigator(invId); // validates the id
                 if (!startSpaces.Contains(space))
                 {
                     throw new InvalidOperationException($"'{space}' is not a Start space.");
@@ -264,7 +304,7 @@ namespace StiflingDark.Engine.Core
             }
             State.Round = round;
             State.Phase = GamePhase.InvestigatorTurns;
-            State.ActiveInvestigator = null;
+            State.OpenTurns.Clear();
             foreach (var inv in State.Investigators)
             {
                 inv.TurnTakenThisRound = false;
@@ -288,9 +328,13 @@ namespace StiflingDark.Engine.Core
         public void BeginInvestigatorTurn(string invId)
         {
             RequirePhase(GamePhase.InvestigatorTurns);
-            if (State.ActiveInvestigator != null)
+            if (State.OpenTurns.Count > 0 && !State.SimultaneousTurns)
             {
-                throw new InvalidOperationException($"{State.ActiveInvestigator} has not finished their turn.");
+                throw new InvalidOperationException($"{State.OpenTurns[0]} has not finished their turn.");
+            }
+            if (State.OpenTurns.Contains(invId))
+            {
+                throw new InvalidOperationException($"{invId}'s turn is already open.");
             }
             if (EscapeChoicePending)
             {
@@ -303,7 +347,7 @@ namespace StiflingDark.Engine.Core
             {
                 throw new InvalidOperationException($"{invId} cannot take a turn.");
             }
-            State.ActiveInvestigator = invId;
+            State.OpenTurns.Add(invId);
             inv.MpRemaining = IsSpirit(inv) ? SpiritMp : Db.Investigator(invId).Mp;
             inv.SprintedOrRested = false;
             inv.Rested = false;
@@ -419,6 +463,7 @@ namespace StiflingDark.Engine.Core
             if (step.CrossesWindow)
             {
                 State.PendingWindowChoice = true;
+                State.PendingWindowInvestigator = inv.DefId;
             }
             ApplyCarriageRotation(inv);
             ApplyWaterFloat(inv);
@@ -429,11 +474,12 @@ namespace StiflingDark.Engine.Core
         public void ResolveWindow(bool stopAndLoseStamina)
         {
             var inv = ActiveInv();
-            if (!State.PendingWindowChoice)
+            if (!State.PendingWindowChoice || State.PendingWindowInvestigator != inv.DefId)
             {
                 throw new InvalidOperationException("No window crossing to resolve.");
             }
             State.PendingWindowChoice = false;
+            State.PendingWindowInvestigator = null;
             if (stopAndLoseStamina && inv.Stamina > 0)
             {
                 LoseStamina(inv, 1);
@@ -626,15 +672,25 @@ namespace StiflingDark.Engine.Core
 
         // ---------- Final actions & end of turn ----------
 
-        public void PlaceFlashlight(double angleRadians)
+        public void PlaceFlashlight(double angleRadians) =>
+            PlaceFlashlightCore(ActiveInv(), angleRadians, nightVision: false);
+
+        /// <summary>
+        /// The one placement path. <paramref name="nightVision"/> is Winston's Minor: the
+        /// Charge is waived and the template is cut to its centre lines before any card trims it
+        /// further (Game.PromoAbilities.cs checks his "not at 0 Charge" clause first).
+        /// </summary>
+        private void PlaceFlashlightCore(InvestigatorState inv, double angleRadians, bool nightVision)
         {
-            var inv = ActiveInv();
             RequireNoPendingWindow();
             RequireActionAllowed(inv, ActionPlaceFlashlight);
             RequireNoFinalAction(inv);
-            PayFlashlightCharge(inv);
+            if (!nightVision)
+            {
+                PayFlashlightCharge(inv);
+            }
             inv.FinalAction = FinalActionKind.PlaceFlashlight;
-            var bright = PreviewFlashlight(inv.DefId, angleRadians);
+            var bright = PreviewFlashlight(inv.DefId, angleRadians, nightVision ? CenterLineSightLines : (int?)null);
             // Cards that shrink the beam (Misty's range, Hazy/Downpour/Tunnel Vision's center
             // lines) trim it here, before anything is lit or Revealed, so a space outside the
             // reduced beam never reveals what stands on it.
@@ -645,6 +701,7 @@ namespace StiflingDark.Engine.Core
                 Space = inv.Space,
                 AngleRadians = angleRadians,
                 BrightSpaces = bright.OrderBy(s => s).ToList(),
+                CenterLineOnly = nightVision,
             });
             State.Overlay.BrightSpaces.UnionWith(bright);
             Log("flashlight", $"{inv.DefId} lit {bright.Count} spaces");
@@ -756,7 +813,7 @@ namespace StiflingDark.Engine.Core
             // should stay the same") — those Wounds only bite on turns whose Sprint,
             // Flashlight, or Involved Action already forfeited the matching recovery.
             if (!IsSpirit(inv) && !inv.Dead && !inv.Escaped &&
-                inv.FinalAction != FinalActionKind.InvolvedAction)
+                inv.FinalAction != FinalActionKind.InvolvedAction && !RecoveryForfeited(inv))
             {
                 if (!inv.SprintedOrRested)
                 {
@@ -775,7 +832,7 @@ namespace StiflingDark.Engine.Core
                 // nothing below may touch TurnTakenThisRound or hand the phase to the Adversary.
                 return;
             }
-            if (inv.Rested && inv.FinalAction != FinalActionKind.InvolvedAction)
+            if (inv.Rested && inv.FinalAction != FinalActionKind.InvolvedAction && !RecoveryForfeited(inv))
             {
                 // Heavy Winds / Heavy Smoke / Tornado: no Stamina may be gained as part of a
                 // Final Action this round, Rest included.
@@ -790,7 +847,7 @@ namespace StiflingDark.Engine.Core
             }
             NoteTurnResourceGains(inv);
             inv.TurnTakenThisRound = true;
-            State.ActiveInvestigator = null;
+            State.OpenTurns.Remove(inv.DefId);
             AdvanceToAdversaryTurnIfRoundComplete();
         }
 
@@ -803,7 +860,7 @@ namespace StiflingDark.Engine.Core
         /// </summary>
         private void AdvanceToAdversaryTurnIfRoundComplete()
         {
-            if (State.Phase != GamePhase.InvestigatorTurns || State.ActiveInvestigator != null)
+            if (State.Phase != GamePhase.InvestigatorTurns || State.OpenTurns.Count > 0)
             {
                 return;
             }
@@ -1016,8 +1073,8 @@ namespace StiflingDark.Engine.Core
                 // branch below must never overwrite that Result, and no new round may begin.
                 return;
             }
-            State.Overlay.BrightSpaces.Clear();
             State.Flashlights.Clear();
+            RecomputeBrightSpaces(); // Flashlights are gone; a Campfire that survived OnRoundEnd keeps its light
             // Zone lights burn out to Faltering after their round.
             foreach (string zone in State.Overlay.BrightZones)
             {
@@ -1253,6 +1310,7 @@ namespace StiflingDark.Engine.Core
             {
                 State.Overlay.BrightSpaces.UnionWith(f.BrightSpaces);
             }
+            State.Overlay.BrightSpaces.UnionWith(BoardTokenSpaces(CampfireTokenPrefix));
         }
 
         private bool IsBright(string spaceId) => Graph.EffectiveLight(spaceId, State.Overlay) == LightLevel.Bright;
@@ -1378,11 +1436,50 @@ namespace StiflingDark.Engine.Core
             return medkits[0].Id; // single card type; no shuffle needed per the rulebook
         }
 
+        /// <summary>
+        /// The Investigator a command acts for: the one named by <see cref="ActingAs"/> (the
+        /// server names the seat's Investigator around every command), else the single open
+        /// turn. With several turns open, an unnamed actor is ambiguous and refused.
+        /// </summary>
         private InvestigatorState ActiveInv()
         {
             RequirePhase(GamePhase.InvestigatorTurns);
-            return Investigator(State.ActiveInvestigator
-                ?? throw new InvalidOperationException("No investigator turn in progress."));
+            string? id = ActingInvestigatorId();
+            if (id == null)
+            {
+                throw new InvalidOperationException(State.OpenTurns.Count == 0
+                    ? "No investigator turn in progress."
+                    : "Several turns are open; say which Investigator is acting.");
+            }
+            if (!State.OpenTurns.Contains(id))
+            {
+                throw new InvalidOperationException($"It is not {id}'s turn.");
+            }
+            return Investigator(id);
+        }
+
+        private string? ActingInvestigatorId() =>
+            _actingAs ?? (State.OpenTurns.Count == 1 ? State.OpenTurns[0] : null);
+
+        private string? _actingAs;
+
+        /// <summary>
+        /// Name the Investigator the following commands act for, until the scope is disposed.
+        /// Needed only while several turns are open at once (<see cref="GameState.SimultaneousTurns"/>);
+        /// with one open turn the commands find it on their own.
+        /// </summary>
+        public IDisposable ActingAs(string investigatorId)
+        {
+            string? previous = _actingAs;
+            _actingAs = investigatorId;
+            return new ActorScope(() => _actingAs = previous);
+        }
+
+        private sealed class ActorScope : IDisposable
+        {
+            private readonly Action _restore;
+            public ActorScope(Action restore) => _restore = restore;
+            public void Dispose() => _restore();
         }
 
         private InvestigatorState Investigator(string id) =>
@@ -1397,9 +1494,19 @@ namespace StiflingDark.Engine.Core
             }
         }
 
+        /// <summary>A Window crossing waits on its crosser alone; another open turn goes on.</summary>
         private void RequireNoPendingWindow()
         {
-            if (State.PendingWindowChoice)
+            if (State.PendingWindowChoice &&
+                (State.PendingWindowInvestigator == null || State.PendingWindowInvestigator == ActingInvestigatorId()))
+            {
+                throw new InvalidOperationException("Resolve the Window crossing first.");
+            }
+        }
+
+        private void RequireNoPendingWindow(InvestigatorState inv)
+        {
+            if (State.PendingWindowChoice && State.PendingWindowInvestigator == inv.DefId)
             {
                 throw new InvalidOperationException("Resolve the Window crossing first.");
             }

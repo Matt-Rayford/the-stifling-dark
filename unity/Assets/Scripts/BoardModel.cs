@@ -130,6 +130,8 @@ namespace StiflingDark.Unity
             overlay.BrightZones.UnionWith(info.BrightZones);
             overlay.DimZones.UnionWith(info.DimZones);
             overlay.BrightSpaces.UnionWith(info.BrightSpaces);
+            overlay.DimSpaces.UnionWith(info.DimSpaces);
+            overlay.DimDarkInverted = info.DimDarkInverted;
             overlay.OpenMirrorColor = info.OpenMirrorColor;
             overlay.OpenWindows.UnionWith(info.OpenWindows);
             overlay.FalseWindows.UnionWith(info.FalseWindows);

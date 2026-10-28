@@ -181,7 +181,7 @@ namespace StiflingDark.Unity
             {
                 RenderBoardStrip(_investigatorSection, InvestigatorStripModel(),
                     "YOUR INVESTIGATOR",
-                    _describe.BaseInvestigators.Select(def => def.Id).ToList());
+                    _describe.PlayableInvestigators.Select(def => def.Id).ToList());
             }
             SettleSection(_investigatorSection);
         }
@@ -436,7 +436,7 @@ namespace StiflingDark.Unity
         private List<string> BotInvestigatorOptions(int seatIndex)
         {
             var options = new List<string> { RandomPick };
-            options.AddRange(_describe.BaseInvestigators.Select(def => def.Id).Where(id =>
+            options.AddRange(_describe.PlayableInvestigators.Select(def => def.Id).Where(id =>
                 (_soloRole != SeatRole.Investigator || id != _soloInvestigator) &&
                 !_soloBotInvestigators.Where((held, i) => i != seatIndex && held == id).Any()));
             return options;

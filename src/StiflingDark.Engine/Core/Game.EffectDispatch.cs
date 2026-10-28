@@ -78,6 +78,7 @@ namespace StiflingDark.Engine.Core
         partial void AbilitiesAdjustMoveCost(InvestigatorState inv, string from, string to, List<int> costBox);
         partial void AbilitiesOnAdversaryMoveStep(string from, string to);
         partial void AbilitiesOnAdversaryRevealed(string figureId);
+        partial void AbilitiesOnRoundEnd();
 
         partial void OnInvestigatorDeath(InvestigatorState inv)
         {
@@ -172,6 +173,7 @@ namespace StiflingDark.Engine.Core
             ItemsOnRoundEnd();
             EventsOnRoundEnd();
             SpiritsOnRoundEnd();
+            AbilitiesOnRoundEnd();
             AdversaryOnRoundEnd();
         }
 

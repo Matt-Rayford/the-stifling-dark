@@ -75,6 +75,11 @@ namespace StiflingDark.Unity
         private bool CenterLineOnly =>
             _view != null && _view.RoundModifiers.ContainsKey(Game.FlashlightCenterLineOnlyKey);
 
+        /// <summary>The beam being aimed is Winston's Night Vision: centre lines only.</summary>
+        private bool _aimCenterLineOnly;
+
+        private bool AimCenterLineOnly => CenterLineOnly || _aimCenterLineOnly;
+
         /// <summary>The template-x band the three vertical sight lines span, plus the line
         /// weight, for the physically-cut Hazy cone.</summary>
         private static (float Min, float Max) CenterBand(FlashlightDef def)
@@ -338,6 +343,7 @@ namespace StiflingDark.Unity
                 return;
             }
 
+            DrawDimRings(view);
             DrawOverlayMarkers(view);
             DrawObjectiveTokens(view);
             DrawEvidence(view);
@@ -416,6 +422,35 @@ namespace StiflingDark.Unity
                 Scale(disc, (float)_board.Map.SpaceRadius * 2f);
             }
         }
+
+        /// <summary>
+        /// The board prints a Dark space as a dashed ring and a Dim one as a solid ring. A Dim
+        /// token on a Zone (or a Campfire, or Kya's inversion) makes printed-Dark spaces Dim
+        /// without reprinting the board, so a solid ring goes over each of them — drawn under
+        /// the light overlay so it takes the same shading as the printed rings around it.
+        /// </summary>
+        private void DrawDimRings(PlayerView view)
+        {
+            var overlay = BoardModel.OverlayFrom(view);
+            foreach (var space in _board.Map.Spaces)
+            {
+                if (space.PrintedLight != LightLevel.Dark ||
+                    _board.Graph.EffectiveLight(space.Id, overlay) != LightLevel.Dim)
+                {
+                    continue;
+                }
+                var ring = NewSprite(_dynamic, "DimRing", UiSprites.Ring, DimRingColor, DimRingOrder);
+                ring.transform.position = WorldOf(space.Id);
+                Scale(ring, (float)_board.Map.SpaceRadius * 2f * DimRingDiameterShare);
+            }
+        }
+
+        /// <summary>The printed rings' light grey; a hair wider than the circle so the solid
+        /// ring covers the dashed one underneath.</summary>
+        private static readonly Color DimRingColor = new Color(0.82f, 0.82f, 0.80f);
+        private const float DimRingDiameterShare = 1.06f;
+        /// <summary>Under the light overlay (order 10) and the beam wash (9).</summary>
+        private const int DimRingOrder = 8;
 
         private void DrawOverlayMarkers(PlayerView view)
         {
@@ -579,15 +614,16 @@ namespace StiflingDark.Unity
                 // The cone is flavor, not truth: it draws UNDER the light overlay (order 10)
                 // so the per-space shading — the real Bright set — always reads on top, and
                 // spaces the walls cut out of the beam stay visibly dark inside the cone.
+                bool narrow = CenterLineOnly || flashlight.CenterLineOnly;
                 var beam = NewSprite(_dynamic, "Beam",
-                    CenterLineOnly ? _beamSpriteNarrow : _beamSprite,
+                    narrow ? _beamSpriteNarrow : _beamSprite,
                     new Color(1f, 0.86f, 0.55f, 0.10f), 9);
                 beam.transform.position = world;
                 beam.transform.rotation = Quaternion.Euler(0, 0, BeamDegrees(flashlight.AngleRadians));
                 // The printed sight lines, at the same transparency as the wash beneath so
                 // the whole template reads as one see-through overlay.
                 NewSprite(beam.transform, "BeamLines",
-                    CenterLineOnly ? _beamLinesSpriteNarrow : _beamLinesSprite,
+                    narrow ? _beamLinesSpriteNarrow : _beamLinesSprite,
                     new Color(1f, 1f, 1f, 0.10f), 12);
             }
         }
@@ -664,7 +700,7 @@ namespace StiflingDark.Unity
 
         private void DrawInvestigators(PlayerView view)
         {
-            var roster = _describe.BaseInvestigators;
+            var roster = _describe.PlayableInvestigators;
             for (int i = 0; i < view.Investigators.Count; i++)
             {
                 var panel = view.Investigators[i];
@@ -943,9 +979,11 @@ namespace StiflingDark.Unity
         /// Enter aim mode. From here until a click, mouse movement around the figure re-runs
         /// the engine's own beam solver over the synced LoS mask and lights the result live.
         /// </summary>
-        public void BeginAim(string fromSpace, Action<double> confirm, Action cancel)
+        public void BeginAim(string fromSpace, Action<double> confirm, Action cancel,
+            bool centerLineOnly = false)
         {
             _aimFrom = fromSpace;
+            _aimCenterLineOnly = centerLineOnly;
             _aimConfirm = confirm;
             _aimCancel = cancel;
             _aiming = true;
@@ -975,10 +1013,10 @@ namespace StiflingDark.Unity
                 return;
             }
             var go = NewSprite(_dynamic, "AimBeam",
-                CenterLineOnly ? _beamSpriteNarrow : _beamSprite,
+                AimCenterLineOnly ? _beamSpriteNarrow : _beamSprite,
                 new Color(1f, 0.88f, 0.58f, 0.22f), 15);
             NewSprite(go.transform, "AimBeamLines",
-                CenterLineOnly ? _beamLinesSpriteNarrow : _beamLinesSprite,
+                AimCenterLineOnly ? _beamLinesSpriteNarrow : _beamLinesSprite,
                 new Color(1f, 1f, 1f, 0.22f), 16);
             _beamIndicator = go.transform;
         }
@@ -1004,7 +1042,7 @@ namespace StiflingDark.Unity
             }
             _aimAngle = angle;
             _light.SetPreview(_board.PreviewBright(_aimFrom, angle,
-                CenterLineOnly ? 3 : (int?)null));
+                AimCenterLineOnly ? Game.CenterLineSightLines : (int?)null));
             if (_beamIndicator != null)
             {
                 _beamIndicator.rotation = Quaternion.Euler(0, 0, BeamDegrees(angle));

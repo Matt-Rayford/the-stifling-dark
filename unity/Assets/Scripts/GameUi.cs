@@ -218,8 +218,7 @@ namespace StiflingDark.Unity
 
         private bool MyTurnActive => View != null && !AmAdversary &&
             View.Phase == GamePhase.InvestigatorTurns &&
-            View.ActiveInvestigator == MyInvestigatorId &&
-            !string.IsNullOrEmpty(MyInvestigatorId);
+            View.TurnOpenFor(MyInvestigatorId);
 
         private void Render()
         {
@@ -297,8 +296,7 @@ namespace StiflingDark.Unity
             }
             else if (_session.YourTurn)
             {
-                _banner.text = view.Phase == GamePhase.InvestigatorTurns &&
-                               view.ActiveInvestigator == null
+                _banner.text = view.Phase == GamePhase.InvestigatorTurns && !MyTurnActive
                     ? "YOUR MOVE — begin your turn"
                     : "YOUR MOVE";
             }
@@ -403,7 +401,10 @@ namespace StiflingDark.Unity
                 return;
             }
 
-            bool between = view.Phase == GamePhase.InvestigatorTurns && view.ActiveInvestigator == null;
+            // "Between turns" for this seat: no turn of ours is open. At a sequential table
+            // that also means nobody's is; at a simultaneous one other humans may be mid-turn.
+            bool between = view.Phase == GamePhase.InvestigatorTurns && !MyTurnActive &&
+                           (view.SimultaneousTurns || !view.OpenTurnIds.Any());
             bool active = MyTurnActive;
 
             if (between)
@@ -414,7 +415,8 @@ namespace StiflingDark.Unity
                 // another seat's Investigator, bots included. Handy when a bot wedges; label it
                 // plainly so it is never pressed by accident.
                 foreach (var other in view.Investigators.Where(i =>
-                    i.DefId != me.DefId && !i.TurnTakenThisRound && !i.Escaped))
+                    i.DefId != me.DefId && !i.TurnTakenThisRound && !i.Escaped &&
+                    !view.TurnOpenFor(i.DefId)))
                 {
                     var captured = other;
                     UiKit.CreateButton(_actionsBody,
@@ -440,13 +442,13 @@ namespace StiflingDark.Unity
         private void FollowBotAction(PlayerView view)
         {
             string space = null;
-            if (view.Phase == GamePhase.InvestigatorTurns && view.ActiveInvestigator != null &&
-                view.ActiveInvestigator != MyInvestigatorId &&
-                _session.Room.Seats.Any(s => s.Fill == SeatFill.Bot &&
-                    s.InvestigatorId == view.ActiveInvestigator))
+            string actingBot = view.Phase == GamePhase.InvestigatorTurns
+                ? view.OpenTurnIds.FirstOrDefault(id => id != MyInvestigatorId &&
+                    _session.Room.Seats.Any(s => s.Fill == SeatFill.Bot && s.InvestigatorId == id))
+                : null;
+            if (actingBot != null)
             {
-                space = view.Investigators
-                    .FirstOrDefault(i => i.DefId == view.ActiveInvestigator)?.Space;
+                space = view.Investigators.FirstOrDefault(i => i.DefId == actingBot)?.Space;
             }
             else if (view.Phase == GamePhase.AdversaryTurn && !AmAdversary &&
                 _session.Room.Seats.Any(s => s.Fill == SeatFill.Bot &&

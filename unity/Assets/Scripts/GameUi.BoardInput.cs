@@ -393,6 +393,28 @@ namespace StiflingDark.Unity
             Render();
         }
 
+        /// <summary>Winston's Night Vision: the same aim mode with the centre-line template,
+        /// sent as his Minor Ability (the angle as its one argument) — the engine places the
+        /// beam for 0 Charge and ends his turn.</summary>
+        private void BeginNightVisionAim()
+        {
+            var me = Me;
+            if (me == null)
+            {
+                return;
+            }
+            _prompt.Hide();
+            _boardView.FocusOn(me.Space);
+            _boardView.BeginAim(me.Space,
+                angle => Send(new UseMinorAbilityCommand
+                {
+                    Args = new List<string> { angle.ToString("R", CultureInfo.InvariantCulture) },
+                }),
+                () => Render(),
+                centerLineOnly: true);
+            Render();
+        }
+
         /// <summary>
         /// Re-enters beam-aiming for Mitchell's Sweep, anchored at the FLASHLIGHT'S space
         /// rather than his own (he may well have moved since placing it, and the printed text

@@ -14,14 +14,14 @@ namespace StiflingDark.Unity
         private enum MenuScreen
         {
             Root,
-            Online,
+            Join,
             Solo,
             Settings,
         }
 
         private RectTransform _menu;
         private RectTransform _rootScreen;
-        private RectTransform _onlineScreen;
+        private RectTransform _joinScreen;
         private RectTransform _soloScreen;
         private RectTransform _settingsScreen;
         private MenuScreen _menuScreen = MenuScreen.Root;
@@ -47,13 +47,16 @@ namespace StiflingDark.Unity
             UiKit.Anchor(_menu, Vector2.zero, Vector2.one);
 
             BuildRootScreen();
-            BuildOnlineScreen();
+            BuildJoinScreen();
             BuildSoloScreen();
             BuildSettingsScreen();
             BuildSoloSetup();
 
-            // Last child, so the toast draws over whichever screen is up.
-            _toast = UiKit.CreateText(_menu, "", 18, TextAnchor.MiddleCenter, UiKit.AccentColor);
+            // On the canvas rather than the menu panel: the lobby and table replace the
+            // menu, and a refused seat change or a lost connection must still be seen there.
+            // Re-raised to the top each time it speaks (see Toast), since the lobby is built
+            // later and would otherwise draw over it.
+            _toast = UiKit.CreateText(canvas, "", 18, TextAnchor.MiddleCenter, UiKit.AccentColor);
             UiKit.Anchor((RectTransform)_toast.transform, Vector2.zero, new Vector2(1, 0),
                 new Vector2(80, 16), new Vector2(-80, 52));
 
@@ -77,7 +80,8 @@ namespace StiflingDark.Unity
             var column = MenuColumn(_rootScreen, "RootColumn",
                 new Vector2(0.34f, 0.24f), new Vector2(0.66f, 0.60f), 14);
             MenuButton(column, "Play vs Bots", OpenSoloScreen);
-            MenuButton(column, "Join with a room code", () => ShowMenuScreen(MenuScreen.Online));
+            MenuButton(column, "Host Game", HostGame);
+            MenuButton(column, "Join a Game", () => ShowMenuScreen(MenuScreen.Join));
             MenuButton(column, "Settings", () => ShowMenuScreen(MenuScreen.Settings));
 
             _rootStatus = UiKit.CreateText(_rootScreen, "", 15, TextAnchor.UpperCenter,
@@ -86,38 +90,53 @@ namespace StiflingDark.Unity
                 new Vector2(0.2f, 0.12f), new Vector2(0.8f, 0.30f));
         }
 
-        private void BuildOnlineScreen()
+        /// <summary>
+        /// Join by room code, Lemonade Wars style: the code is the whole screen. The server is
+        /// never shown here — it is the configured one (Settings holds the field for the rare
+        /// change) and the connection is made on the way in.
+        /// </summary>
+        private void BuildJoinScreen()
         {
-            _onlineScreen = UiKit.CreateGroup(_menu, "MenuOnline");
-            UiKit.Anchor(_onlineScreen, Vector2.zero, Vector2.one);
+            _joinScreen = UiKit.CreateGroup(_menu, "MenuJoin");
+            UiKit.Anchor(_joinScreen, Vector2.zero, Vector2.one);
             var columnMin = new Vector2(0.30f, 0.06f);
-            CreateBackButton(_onlineScreen, columnMin.x);
-            CreateHeading(_onlineScreen, "PLAY ONLINE",
-                "Start a table of your own, or join one with its room code");
+            CreateBackButton(_joinScreen, columnMin.x);
+            CreateHeading(_joinScreen, "JOIN A GAME", "Enter the room code your host gave you");
 
-            var column = MenuColumn(_onlineScreen, "OnlineColumn",
-                columnMin, new Vector2(0.70f, 0.81f), 8);
+            var column = MenuColumn(_joinScreen, "JoinColumn",
+                columnMin, new Vector2(0.70f, 0.81f), 10);
 
-            UiKit.CreateText(column, "Server", 14, TextAnchor.MiddleLeft, UiKit.MutedColor)
-                .gameObject.AddComponent<LayoutElement>().minHeight = 20;
-            _serverInput = UiKit.CreateInput(column, DefaultServer, LoadServerUrl());
+            var codeLabel = UiKit.CreateText(column, "ROOM CODE", 20, TextAnchor.MiddleCenter,
+                UiKit.MutedColor);
+            codeLabel.font = UiKit.MenuFont;
+            codeLabel.gameObject.AddComponent<LayoutElement>().minHeight = 30;
 
-            UiKit.CreateButton(column, "Connect", 18, Connect)
-                .GetComponent<LayoutElement>().minHeight = 44;
-            UiKit.CreateButton(column, "Use localhost", 18, () =>
+            _codeInput = UiKit.CreateInput(column, "ABCDE", "");
+            _codeInput.gameObject.GetComponent<LayoutElement>().minHeight = 84;
+            _codeInput.characterLimit = 5;
+            // Room codes are upper-case letters; typed or pasted, each character lands
+            // upper-cased so what you see is exactly what the server will look up.
+            _codeInput.onValidateInput += (text, index, added) => char.ToUpperInvariant(added);
+            _codeInput.textComponent.fontSize = 52;
+            _codeInput.textComponent.alignment = TMPro.TextAlignmentOptions.Center;
+            if (_codeInput.placeholder is TMP_Text codePlaceholder)
             {
-                _serverInput.text = DefaultServer;
-                Connect();
-            }).GetComponent<LayoutElement>().minHeight = 44;
+                codePlaceholder.fontSize = 52;
+                codePlaceholder.alignment = TMPro.TextAlignmentOptions.Center;
+            }
+
+            // Everyone joins as an Investigator; the lobby is where a seat changes role.
+            UiKit.CreateButton(column, "Join", 20, () => Join(SeatRole.Investigator))
+                .GetComponent<LayoutElement>().minHeight = 52;
 
             _menuStatus = UiKit.CreateText(column, "", 15, TextAnchor.MiddleCenter, UiKit.MutedColor);
             _menuStatus.gameObject.AddComponent<LayoutElement>().minHeight = 28;
 
-            var actions = UiKit.CreatePanel(column, "Actions", UiKit.PanelColor);
-            var actionsElement = actions.gameObject.AddComponent<LayoutElement>();
-            actionsElement.flexibleHeight = 1;
-            actionsElement.minHeight = 120;
-            _menuBody = UiKit.CreateScrollList(actions, 6f);
+            var games = UiKit.CreatePanel(column, "MyGames", UiKit.PanelColor);
+            var gamesElement = games.gameObject.AddComponent<LayoutElement>();
+            gamesElement.flexibleHeight = 1;
+            gamesElement.minHeight = 120;
+            _menuBody = UiKit.CreateScrollList(games, 6f);
         }
 
         private void BuildSoloScreen()
@@ -152,6 +171,21 @@ namespace StiflingDark.Unity
 
             Head(column, "YOUR NAME");
             _settingsNameInput = UiKit.CreateInput(column, "name", RememberedPlayerName());
+            Head(column, "SERVER");
+            _serverInput = UiKit.CreateInput(column, DefaultServer, LoadServerUrl());
+            var serverButtons = UiKit.CreateRow(column, "ServerButtons", 8f, 36f);
+            string configured = ConfiguredServerUrl();
+            if (configured != null)
+            {
+                UiKit.CreateButton(serverButtons, "Use " + ServerHost(configured), 15,
+                    () => _serverInput.text = configured);
+            }
+            UiKit.CreateButton(serverButtons, "Use localhost", 15,
+                () => _serverInput.text = DefaultServer);
+            UiKit.CreateText(column, "Applies the next time you host or join.", 13,
+                TextAnchor.MiddleLeft, UiKit.MutedColor)
+                .gameObject.AddComponent<LayoutElement>().minHeight = 20;
+
             Head(column, "MASTER VOLUME");
             var volume = UiKit.CreateSlider(column,
                 100 / Music.VolumeStep, Music.Volume / Music.VolumeStep);
@@ -250,13 +284,18 @@ namespace StiflingDark.Unity
             RememberPlayerName();
             _menuScreen = screen;
             _rootScreen.gameObject.SetActive(screen == MenuScreen.Root);
-            _onlineScreen.gameObject.SetActive(screen == MenuScreen.Online);
+            _joinScreen.gameObject.SetActive(screen == MenuScreen.Join);
             _soloScreen.gameObject.SetActive(screen == MenuScreen.Solo);
             _settingsScreen.gameObject.SetActive(screen == MenuScreen.Settings);
 
             if (screen == MenuScreen.Settings)
             {
                 _settingsNameInput.text = RememberedPlayerName();
+            }
+            if (screen == MenuScreen.Join)
+            {
+                EnsureConnected();
+                _codeInput.ActivateInputField();
             }
             _confirmEndCode = "";
             // The body that is now on screen belongs to the screen we just left.
@@ -270,11 +309,29 @@ namespace StiflingDark.Unity
                 Toast("game-data did not load — offline play needs it.");
                 return;
             }
-            if (_soloInvestigator.Length == 0 && _describe.BaseInvestigators.Count > 0)
+            if (_soloInvestigator.Length == 0 && _describe.PlayableInvestigators.Count > 0)
             {
-                _soloInvestigator = _describe.BaseInvestigators[0].Id;
+                _soloInvestigator = _describe.PlayableInvestigators[0].Id;
             }
             ShowMenuScreen(MenuScreen.Solo);
+        }
+
+        /// <summary>
+        /// One click from the root to a table of your own: connect to the configured server
+        /// and create the room (the create waits for the welcome). The root's status line
+        /// shows the connection — or its failure — meanwhile; the lobby takes over the moment
+        /// the room arrives. The host seat starts as an Investigator and can switch to the
+        /// Adversary from the lobby.
+        /// </summary>
+        private void HostGame()
+        {
+            if (_describe == null)
+            {
+                Toast("game-data did not load — online play needs it.");
+                return;
+            }
+            EnsureConnected();
+            _session.CreateRoom(NameOrDefault(), SeatRole.Investigator);
         }
 
         private static string RememberedPlayerName() =>
@@ -312,6 +369,7 @@ namespace StiflingDark.Unity
             {
                 _toast.text = message;
                 _toastUntil = Time.time + 6f;
+                _toast.transform.SetAsLastSibling();
             }
         }
 
@@ -330,14 +388,14 @@ namespace StiflingDark.Unity
         {
             switch (_menuScreen)
             {
-                case MenuScreen.Online:
-                    RenderOnlineScreen();
+                case MenuScreen.Join:
+                    RenderJoinScreen();
                     break;
                 case MenuScreen.Solo:
                     RenderSoloScreen();
                     break;
                 default:
-                    _rootStatus.text = _loadError.Length > 0 ? DataLoadErrorText : "";
+                    _rootStatus.text = _loadError.Length > 0 ? DataLoadErrorText : ConnectionStatus();
                     break;
             }
         }
@@ -346,11 +404,24 @@ namespace StiflingDark.Unity
             "game-data did not load:\n" + _loadError +
             "\n\nRun tools/sync_unity.sh, then reopen the project.";
 
-        private void RenderOnlineScreen()
+        /// <summary>"" once greeted (or before any connect); otherwise where the connection stands.</summary>
+        private string ConnectionStatus()
         {
-            // The body is rebuilt from scratch every revision, so a half-typed code has to be
-            // carried across the rebuild by hand.
-            string typedCode = _codeInput == null ? "" : _codeInput.text;
+            if (_session == null || _session.Greeted)
+            {
+                return "";
+            }
+            if (_session.ConnectionError.Length > 0)
+            {
+                return "Could not reach " + ServerHost(_session.Url) + ": " + _session.ConnectionError;
+            }
+            return _session.Connected
+                ? "Connected — identifying…"
+                : "Connecting to " + ServerHost(_session.Url) + "…";
+        }
+
+        private void RenderJoinScreen()
+        {
             UiKit.Clear(_menuBody);
             if (_loadError.Length > 0)
             {
@@ -362,31 +433,13 @@ namespace StiflingDark.Unity
                 _menuStatus.text = "Not connected.";
                 return;
             }
-            _menuStatus.text = _session.Connected
-                ? (_session.Greeted
-                    ? "Connected as " + _session.PlayerId
-                    : "Connected — identifying…")
-                : _session.ConnectionError.Length > 0
-                    ? "Not connected: " + _session.ConnectionError
-                    : "Connecting to " + _session.Url + "…";
-
+            _menuStatus.text = _session.Greeted ? "Connected as " + _session.PlayerId : ConnectionStatus();
             if (!_session.Greeted)
             {
                 return;
             }
 
-            Head(_menuBody, "NEW TABLE");
-            UiKit.CreateButton(_menuBody, "Create a room — I play an Investigator", 18,
-                () => _session.CreateRoom(NameOrDefault(), SeatRole.Investigator));
-            UiKit.CreateButton(_menuBody, "Create a room — I play the Adversary", 18,
-                () => _session.CreateRoom(NameOrDefault(), SeatRole.Adversary));
-
-            Head(_menuBody, "JOIN BY CODE");
-            _codeInput = UiKit.CreateInput(_menuBody, "5-letter room code", typedCode);
-            UiKit.CreateButton(_menuBody, "Join as Investigator", 17,
-                () => Join(SeatRole.Investigator));
-            UiKit.CreateButton(_menuBody, "Join as Adversary", 17, () => Join(SeatRole.Adversary));
-
+            Head(_menuBody, "MY GAMES");
             string lastRoom = PlayerPrefs.GetString(PrefLastRoom, "");
             if (lastRoom.Length > 0)
             {
@@ -394,8 +447,6 @@ namespace StiflingDark.Unity
                     () => _session.JoinRoom(lastRoom, NameOrDefault(),
                         PlayerPrefs.GetString("sd_token_" + lastRoom, ""), SeatRole.Investigator));
             }
-
-            Head(_menuBody, "MY GAMES");
             if (_session.GamesList.Count == 0)
             {
                 UiKit.CreateText(_menuBody, "(none yet)", 15, TextAnchor.MiddleLeft, UiKit.MutedColor)
@@ -464,8 +515,24 @@ namespace StiflingDark.Unity
                 Toast("Enter a room code first.");
                 return;
             }
+            EnsureConnected();
             _session.JoinRoom(code, NameOrDefault(),
                 PlayerPrefs.GetString("sd_token_" + code, ""), role);
+        }
+
+        /// <summary>"localhost:5226" or "the-stifling-dark-production.up.railway.app" — the part
+        /// of a server URL a player recognises.</summary>
+        private static string ServerHost(string url)
+        {
+            try
+            {
+                var uri = new System.Uri(url);
+                return uri.IsDefaultPort ? uri.Host : uri.Host + ":" + uri.Port;
+            }
+            catch (System.Exception)
+            {
+                return url;
+            }
         }
 
         private static void Head(RectTransform body, string title)

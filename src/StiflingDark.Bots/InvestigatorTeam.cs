@@ -226,6 +226,9 @@ public sealed partial class InvestigatorTeam
 
     public void TakeTurn(string invId)
     {
+        // Named for the whole turn: at a table where human turns stay open alongside, every
+        // command below must say it is this Investigator's.
+        using var acting = _g.ActingAs(invId);
         _act.Must("begin-turn:" + invId, () => _g.BeginInvestigatorTurn(invId));
         var inv = S.Investigators.First(i => i.DefId == invId);
         RecordSweeps();
@@ -272,7 +275,7 @@ public sealed partial class InvestigatorTeam
     }
 
     private bool Active(InvestigatorState inv) =>
-        S.Phase == GamePhase.InvestigatorTurns && S.ActiveInvestigator == inv.DefId;
+        S.Phase == GamePhase.InvestigatorTurns && S.OpenTurns.Contains(inv.DefId);
 
     private bool Arrived(InvestigatorState inv, Plan plan)
     {
@@ -774,7 +777,7 @@ public sealed partial class InvestigatorTeam
             // lighting an objective — a merely-decent placement wastes the Charge the
             // auto-recharge would have banked instead (designer notes 2026-08-31).
             double bar = AttackImpossibleNextTurn() ? Tuning.IdleBeamBar : 0;
-            if (score > bar && _act.Try("place-flashlight", () => _g.PlaceFlashlight(bestAngle)))
+            if (score > bar && _act.Try("place-flashlight", () => PlaceFlashlightOrNightVision(inv, bestAngle)))
             {
                 _beamedThisRound.Add(inv.DefId);
                 SweepFlashlight(inv);

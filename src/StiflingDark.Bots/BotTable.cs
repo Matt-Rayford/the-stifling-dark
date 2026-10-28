@@ -157,11 +157,29 @@ public sealed class BotTable : IAnomalySink
             NotifyEscapeSelection();
         }
 
-        if (state.ActiveInvestigator != null)
+        // A bot's own open turn was abandoned (a restart, a seat flipped to bot): close it.
+        foreach (string open in state.OpenTurns.Where(_botInvestigators.Contains).ToList())
         {
-            // A human began their own turn; it is theirs to finish.
-            return _botInvestigators.Contains(state.ActiveInvestigator) &&
-                   ResumeAbandonedBotTurn(state.ActiveInvestigator);
+            if (!ResumeAbandonedBotTurn(open))
+            {
+                return false;
+            }
+        }
+        if (state.SimultaneousTurns)
+        {
+            // Human turns stay open around the bots, who simply play on in their own order.
+            string? bot = _team.NextToAct(i =>
+                _botInvestigators.Contains(i.DefId) && !state.OpenTurns.Contains(i.DefId));
+            if (bot == null)
+            {
+                return false;
+            }
+            _team.TakeTurn(bot);
+            return true;
+        }
+        if (state.OpenTurns.Count > 0)
+        {
+            return false; // a human began their own turn; it is theirs to finish
         }
 
         // Turn order inside the round is the team's to choose, so the bot brain picks even
@@ -183,8 +201,11 @@ public sealed class BotTable : IAnomalySink
     private bool ResumeAbandonedBotTurn(string investigatorId)
     {
         Anomaly("resumed-open-turn", $"{investigatorId}'s turn was already open; ending it");
-        _actor.Try("end-abandoned-turn", () => _game.EndTurnWithoutFinalAction());
-        return _game.State.ActiveInvestigator == null;
+        using (_game.ActingAs(investigatorId))
+        {
+            _actor.Try("end-abandoned-turn", () => _game.EndTurnWithoutFinalAction());
+        }
+        return !_game.State.OpenTurns.Contains(investigatorId);
     }
 
     /// <summary>

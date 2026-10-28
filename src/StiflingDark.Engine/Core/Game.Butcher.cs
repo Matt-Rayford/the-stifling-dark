@@ -99,8 +99,9 @@ namespace StiflingDark.Engine.Core
 
         /// <summary>
         /// Stalk core action: once per Adversary turn, target any number of Investigators within
-        /// 8 spaces (line of sight is not yet modeled — see the TODO below), place The Butcher's
-        /// Shadow token on his current space, then resolve Spine Chill per target.
+        /// 8 spaces and in line of sight (<see cref="AdversaryHasLineOfSight"/>: any part of his
+        /// circle to any part of theirs), place The Butcher's Shadow token on his current space,
+        /// then resolve Spine Chill per target.
         /// </summary>
         public void ButcherStalk(List<string> targetInvIds)
         {
@@ -125,7 +126,6 @@ namespace StiflingDark.Engine.Core
             }
 
             var withinRange = Graph.DistancesFrom(adv.Space, 8, State.Overlay);
-            var from = Graph.Space(adv.Space);
             var targets = new List<InvestigatorState>();
             foreach (string id in targetInvIds)
             {
@@ -134,8 +134,7 @@ namespace StiflingDark.Engine.Core
                 {
                     throw new InvalidOperationException($"{id} is not within 8 spaces of The Butcher to Stalk.");
                 }
-                var to = Graph.Space(inv.Space);
-                if (_losBlocker.Blocks(from.X, from.Y, to.X, to.Y))
+                if (!AdversaryHasLineOfSight(adv.Space, inv.Space))
                 {
                     throw new InvalidOperationException($"{id} is not in The Butcher's line of sight.");
                 }

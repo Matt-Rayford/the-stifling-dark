@@ -46,7 +46,26 @@ namespace StiflingDark.Engine.Core
         public int Round { get; set; }
         /// <summary>Rounds in the scenario, so a client can draw the round tracker.</summary>
         public int TotalRounds { get; set; }
+        /// <summary>The one open turn, or null when none or several are open.</summary>
         public string? ActiveInvestigator { get; set; }
+        /// <summary>Every Investigator whose turn is open right now.</summary>
+        public List<string> OpenTurns { get; set; } = new List<string>();
+        public bool SimultaneousTurns { get; set; }
+
+        /// <summary>Is this Investigator's turn open? Reads <see cref="ActiveInvestigator"/> as
+        /// well, so a client stays right against a server that predates <see cref="OpenTurns"/>.</summary>
+        public bool TurnOpenFor(string investigatorId) =>
+            !string.IsNullOrEmpty(investigatorId) &&
+            (OpenTurns.Contains(investigatorId) || ActiveInvestigator == investigatorId);
+
+        /// <summary>Every open turn, from whichever of the two fields the server filled.</summary>
+        [Newtonsoft.Json.JsonIgnore]
+        public IEnumerable<string> OpenTurnIds =>
+            ActiveInvestigator != null && !OpenTurns.Contains(ActiveInvestigator)
+                ? OpenTurns.Concat(new[] { ActiveInvestigator })
+                : OpenTurns;
+        /// <summary>This viewer's own Window crossing is waiting on a choice (the Adversary
+        /// seat sees any crossing).</summary>
         public bool PendingWindowChoice { get; set; }
 
         public string? CurrentEvent { get; set; }
@@ -254,6 +273,8 @@ namespace StiflingDark.Engine.Core
             public List<string> BrightZones { get; set; } = new List<string>();
             public List<string> DimZones { get; set; } = new List<string>();
             public List<string> BrightSpaces { get; set; } = new List<string>();
+            public List<string> DimSpaces { get; set; } = new List<string>();
+            public bool DimDarkInverted { get; set; }
             public MirrorDoorColor? OpenMirrorColor { get; set; }
             public List<string> OpenWindows { get; set; } = new List<string>();
             public List<string> FalseWindows { get; set; } = new List<string>();
@@ -267,6 +288,7 @@ namespace StiflingDark.Engine.Core
             public string Space { get; set; } = "";
             public double AngleRadians { get; set; }
             public List<string> BrightSpaces { get; set; } = new List<string>();
+            public bool CenterLineOnly { get; set; }
         }
 
         public sealed class ObjectiveInfo
@@ -351,6 +373,8 @@ namespace StiflingDark.Engine.Core
             "stalk", "blood", "enraged", "corporeal", "eggsacs-remaining", "eggsacs-destroyed",
             "banish-supplies", "altar-revealed", "burning-until", "knife-used-round",
             "skip-sprint-die-round", AbilitiesBlockedRoundKey,
+            // Mada's Coin is his to see: the client only offers the flip while he holds it.
+            Game.CoinTokenPrefix + "mada",
         };
 
         /// <summary>Objective tokens the rules keep on the Adversary's mini-map until the
@@ -392,7 +416,12 @@ namespace StiflingDark.Engine.Core
                 Round = State.Round,
                 TotalRounds = Db.Config.Rounds,
                 ActiveInvestigator = State.ActiveInvestigator,
-                PendingWindowChoice = State.PendingWindowChoice,
+                OpenTurns = State.OpenTurns.ToList(),
+                SimultaneousTurns = State.SimultaneousTurns,
+                PendingWindowChoice = State.PendingWindowChoice &&
+                                      (viewerInvestigatorId == null ||
+                                       State.PendingWindowInvestigator == null ||
+                                       State.PendingWindowInvestigator == viewerInvestigatorId),
                 CurrentEvent = State.CurrentEvent,
                 PendingEventChoices = PendingEventChoices(),
                 PersistentMajorEvents = PersistentMajorEvents(),
@@ -421,6 +450,7 @@ namespace StiflingDark.Engine.Core
                     Space = f.Space,
                     AngleRadians = f.AngleRadians,
                     BrightSpaces = f.BrightSpaces.ToList(),
+                    CenterLineOnly = f.CenterLineOnly,
                 }).ToList(),
             };
 
@@ -475,6 +505,8 @@ namespace StiflingDark.Engine.Core
                 BrightZones = overlay.BrightZones.OrderBy(z => z, StringComparer.Ordinal).ToList(),
                 DimZones = overlay.DimZones.OrderBy(z => z, StringComparer.Ordinal).ToList(),
                 BrightSpaces = overlay.BrightSpaces.OrderBy(s => s, StringComparer.Ordinal).ToList(),
+                DimSpaces = overlay.DimSpaces.OrderBy(s => s, StringComparer.Ordinal).ToList(),
+                DimDarkInverted = overlay.DimDarkInverted,
                 OpenMirrorColor = overlay.OpenMirrorColor,
                 OpenWindows = overlay.OpenWindows.OrderBy(e => e, StringComparer.Ordinal).ToList(),
                 FalseWindows = overlay.FalseWindows.OrderBy(e => e, StringComparer.Ordinal).ToList(),

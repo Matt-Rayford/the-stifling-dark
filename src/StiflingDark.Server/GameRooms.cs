@@ -112,8 +112,7 @@ public sealed class Room
         AvailableScenarios = db.Maps.Select(m => m.Id).OrderBy(id => id, StringComparer.Ordinal).ToList(),
         // The three v1 Adversaries; Game.NewGame refuses anything else.
         AvailableAdversaries = new List<string> { "butcher", "cult-of-hunlow", "insatiable-horror" },
-        AvailableInvestigators = db.Investigators.Where(i => i.Set == "base")
-            .Select(i => i.Id).OrderBy(id => id, StringComparer.Ordinal).ToList(),
+        AvailableInvestigators = db.Investigators.Select(i => i.Id).OrderBy(id => id, StringComparer.Ordinal).ToList(),
     };
 
     // --------------------------------------------------------------- lobby
@@ -256,7 +255,10 @@ public sealed class Room
         List<Seat> toNotify;
         lock (_sync)
         {
-            string refusal = RequireHostInLobby(requestingSeat);
+            // Anyone may pick their own role and Investigator; only the host touches other
+            // seats or turns a seat into a bot.
+            bool ownSeatOnly = requestingSeat == targetSeat && !fill.HasValue;
+            string refusal = ownSeatOnly ? RequireInLobby() : RequireHostInLobby(requestingSeat);
             if (refusal.Length > 0)
             {
                 return refusal;
@@ -479,8 +481,10 @@ public sealed class Room
         {
             return "Only the host can change the table.";
         }
-        return _game != null ? "The game already started." : "";
+        return RequireInLobby();
     }
+
+    private string RequireInLobby() => _game != null ? "The game already started." : "";
 
     // ---------------------------------------------------------------- start
 
@@ -512,6 +516,11 @@ public sealed class Room
             {
                 _seed = BitConverter.ToUInt64(RandomNumberGenerator.GetBytes(8));
                 _game = BuildGame(_seed);
+                // Two or more human Investigators play their turns side by side rather than
+                // waiting on each other; a lone human keeps the sequential table, where the
+                // team (bots included) still chooses its order.
+                _game.State.SimultaneousTurns =
+                    _seats.Count(s => s.Role == SeatRole.Investigator && !s.IsBot) >= 2;
             }
             catch (InvalidOperationException e)
             {
@@ -716,7 +725,12 @@ public sealed class Room
             }
             try
             {
-                command.Apply(_game);
+                // Name the seat's Investigator so the command finds its own open turn even
+                // while other human turns are open alongside it.
+                using (seat.Role == SeatRole.Investigator ? _game.ActingAs(seat.InvestigatorId) : null)
+                {
+                    command.Apply(_game);
+                }
             }
             catch (InvalidOperationException e)
             {
@@ -909,9 +923,9 @@ public sealed class Room
     }
 
     /// <summary>
-    /// Seats the game is waiting on right now. During Investigator turns that is the seat
-    /// whose turn is open, or — between turns — every Investigator who has not gone yet,
-    /// because turn order inside the round is the team's to choose.
+    /// Seats the game is waiting on right now. During Investigator turns that is every seat
+    /// whose turn is open plus — between turns, or always at a simultaneous table — every
+    /// Investigator who has not gone yet, because turn order inside the round is the team's.
     /// </summary>
     private List<int> ActingSeats()
     {
@@ -928,14 +942,14 @@ public sealed class Room
                     .Select(s => s.Index).ToList();
 
             case GamePhase.InvestigatorTurns:
-                if (state.ActiveInvestigator is string active)
+                var awaited = state.OpenTurns.ToHashSet(StringComparer.Ordinal);
+                if (awaited.Count == 0 || state.SimultaneousTurns)
                 {
-                    return _seats.Where(s => s.InvestigatorId == active).Select(s => s.Index).ToList();
+                    awaited.UnionWith(state.Investigators
+                        .Where(i => !i.TurnTakenThisRound && !i.Escaped && (!i.Dead || i.SpiritId != null))
+                        .Select(i => i.DefId));
                 }
-                var pending = state.Investigators
-                    .Where(i => !i.TurnTakenThisRound && !i.Escaped && (!i.Dead || i.SpiritId != null))
-                    .Select(i => i.DefId).ToHashSet(StringComparer.Ordinal);
-                return _seats.Where(s => pending.Contains(s.InvestigatorId))
+                return _seats.Where(s => awaited.Contains(s.InvestigatorId))
                     .Select(s => s.Index).ToList();
 
             default:

@@ -9,7 +9,6 @@ public abstract class AdversaryBot
     protected readonly Actor Act;
     protected readonly DeterministicRng Rng;
     protected readonly IAnomalySink Sink;
-    private readonly RasterLineOfSightBlocker? _mask;
 
     protected AdversaryBot(Game g, Actor act, DeterministicRng rng, IAnomalySink sink)
     {
@@ -17,7 +16,6 @@ public abstract class AdversaryBot
         Act = act;
         Rng = rng;
         Sink = sink;
-        _mask = g.Db.LosMask(g.State.ScenarioId);
     }
 
     protected GameState S => G.State;
@@ -83,16 +81,9 @@ public abstract class AdversaryBot
     protected bool IsBright(string space) =>
         G.Graph.EffectiveLight(space, S.Overlay) == LightLevel.Bright;
 
-    protected bool HasLos(string a, string b)
-    {
-        if (_mask == null)
-        {
-            return true;
-        }
-        var from = G.Graph.Space(a);
-        var to = G.Graph.Space(b);
-        return !_mask.Blocks(from.X, from.Y, to.X, to.Y);
-    }
+    /// <summary>The engine's own reading of the printed line of sight, so the bot never
+    /// believes it can see less (or more) than a Stalk will be allowed.</summary>
+    protected bool HasLos(string a, string b) => G.AdversaryHasLineOfSight(a, b);
 
     protected HashSet<string> AttackAdjacency(string from) =>
         G.Graph.AdjacentForAdversaryAbilities(from, S.Overlay).ToHashSet();

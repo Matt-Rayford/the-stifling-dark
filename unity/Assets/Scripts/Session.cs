@@ -180,7 +180,25 @@ namespace StiflingDark.Unity
                 role = RoleWire(role),
             }));
 
-        public void LeaveRoom() => Send(new { type = MessageType.LeaveRoom });
+        /// <summary>
+        /// Leave the table. The server drops (or, mid-game, parks) the seat and tells the OTHER
+        /// seats; nothing comes back to the leaver, so the local room is cleared here — the
+        /// app otherwise reads the stale seat as "still at the table" and re-opens the lobby
+        /// the very next frame.
+        /// </summary>
+        public void LeaveRoom()
+        {
+            Send(new { type = MessageType.LeaveRoom });
+            Room.Code = "";
+            Room.YourSeat = -1;
+            Room.Token = "";
+            Room.Started = false;
+            Room.Setup = new SetupInfo();
+            Room.Seats = new List<SeatInfo>();
+            View = null;
+            Revision++;
+            RoomChanged?.Invoke();
+        }
 
         public void AddBot(SeatRole role, string investigatorId = null) => Send(new
         {

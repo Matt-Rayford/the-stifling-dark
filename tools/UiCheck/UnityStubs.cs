@@ -619,5 +619,9 @@ namespace TMPro
         public TMP_Text textComponent { get; set; }
         public UnityEngine.UI.Graphic placeholder { get; set; }
         public string text { get; set; }
+        public int characterLimit { get; set; }
+        public delegate char OnValidateInput(string text, int charIndex, char addedChar);
+        public OnValidateInput onValidateInput { get; set; }
+        public void ActivateInputField() { }
     }
 }

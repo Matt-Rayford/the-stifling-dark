@@ -197,7 +197,7 @@ public sealed class GameRun : IAnomalySink
     private void SelectObjectiveIfDue(InvestigatorTeam team, AdversaryBot adversary)
     {
         var game = _game!;
-        if (game.State.Phase == GamePhase.GameOver || game.State.ActiveInvestigator != null)
+        if (game.State.Phase == GamePhase.GameOver || game.State.OpenTurns.Count > 0)
         {
             return;
         }

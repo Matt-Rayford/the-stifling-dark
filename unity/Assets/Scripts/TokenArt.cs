@@ -124,6 +124,12 @@ namespace StiflingDark.Unity
         /// <summary>An Event card's face, for the board-side display and its reveal.</summary>
         public Sprite EventCard(string cardId) => BoardBack("cards/events", cardId);
 
+        /// <summary>A face-up Wound card, for the player board's Wound slots.</summary>
+        public Sprite WoundCard(string cardId) => BoardBack("cards/wounds", cardId);
+
+        /// <summary>The Wound deck's back: a face-down Wound in a slot.</summary>
+        public Sprite WoundCardBack() => BoardBack("cards/wounds", "back");
+
         /// <summary>
         /// A landscape board sheet from one of the StreamingAssets board folders. No circle
         /// mask: unlike a face token this is a card, and it keeps its corners.
@@ -469,6 +475,10 @@ namespace StiflingDark.Unity
             if (name.StartsWith("can:", System.StringComparison.Ordinal))
             {
                 return "investigator/abilities/Can.png";
+            }
+            if (name.StartsWith("campfire:", System.StringComparison.Ordinal))
+            {
+                return "investigator/abilities/Campfire.png";
             }
             if (name.Contains("escape-artist"))
             {

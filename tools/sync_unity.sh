@@ -111,13 +111,13 @@ fi
 
 echo "== player boards =="
 # Investigator player-board BACKS (the character-sheet side) for the solo-setup selector:
-# one PNG per base Investigator, page-mapped from the print PDF (pages 1-10 are the base
-# roster alphabetically; 11-12 are the excluded promos). FORCE_TEXTURES=1 re-renders.
+# one PNG per Investigator, page-mapped from the print PDF (pages 1-10 are the base
+# roster alphabetically; 11-12 are the promos Kya and Winston). FORCE_TEXTURES=1 re-renders.
 BOARDS="$STREAMING/player-boards"
 if [ -f game-assets/player-boards/investigator-backs.pdf ] && command -v pdftoppm >/dev/null; then
   mkdir -p "$BOARDS"
   page=1
-  for id in aira asher brielle dylan ibraheem lucy-belle mada marci mitchell vincent; do
+  for id in aira asher brielle dylan ibraheem lucy-belle mada marci mitchell vincent kya winston; do
     out="$BOARDS/$id.png"
     if [ ! -f "$out" ] || [ "${FORCE_TEXTURES:-0}" = "1" ]; then
       pdftoppm -png -f $page -l $page -scale-to 1100 -singlefile \
@@ -129,13 +129,12 @@ if [ -f game-assets/player-boards/investigator-backs.pdf ] && command -v pdftopp
   python3 tools/make_mips.py "$BOARDS" || echo "  !! mip packing failed (pip install pillow?)"
 fi
 # Investigator player-board FRONTS (the in-play side: stamina/charge tracks, ability
-# summaries, wound slots) for the in-game player board panel. Same alphabetical page
-# order as the backs; 11-12 are the excluded promos.
+# summaries, wound slots) for the in-game player board panel. Same page order as the backs.
 FRONT_BOARDS="$STREAMING/player-board-fronts"
 if [ -f game-assets/player-boards/investigator-fronts.pdf ] && command -v pdftoppm >/dev/null; then
   mkdir -p "$FRONT_BOARDS"
   page=1
-  for id in aira asher brielle dylan ibraheem lucy-belle mada marci mitchell vincent; do
+  for id in aira asher brielle dylan ibraheem lucy-belle mada marci mitchell vincent kya winston; do
     out="$FRONT_BOARDS/$id.png"
     if [ ! -f "$out" ] || [ "${FORCE_TEXTURES:-0}" = "1" ]; then
       pdftoppm -png -f $page -l $page -scale-to 1400 -singlefile \
@@ -164,7 +163,7 @@ if [ -f "game-assets/player-boards/adersary-fronts.pdf" ] && command -v pdftoppm
 fi
 
 echo "== item cards =="
-# Item card faces for the in-game hand, one PNG per card id. The print PDFs hold a few
+# Item, Event and Wound card faces (the hand, the Event panel, the player-board Wound slots), one PNG per card id. The print PDFs hold a few
 # cards the digital port does not use and are not perfectly alphabetical, so pages are
 # matched by NAME: pdftotext reads each page's title and it is slugified into the card
 # id. Ids in game-data with no matching page are reported (the client shows a text
@@ -182,13 +181,13 @@ def slug(name):
     return re.sub(r'-+', '-', re.sub(r'[^a-z0-9]+', '-', name)).strip('-')
 
 known = set()
-for deck in ['general-items', 'cursed-items', 'objective-items', 'medical-items', 'events']:
+for deck in ['general-items', 'cursed-items', 'objective-items', 'medical-items', 'events', 'wounds']:
     path = os.path.join('game-data/cards', deck + '.json')
     if os.path.exists(path):
         known |= {c['id'] for c in json.load(open(path))['cards']}
 
 found = set()
-for deck in ['general-items', 'cursed-items', 'objective-items', 'events']:
+for deck in ['general-items', 'cursed-items', 'objective-items', 'events', 'wounds']:
     pdf = os.path.join('game-assets/cards', deck + '.pdf')
     if not os.path.exists(pdf):
         print('  !! %s missing (game-assets/ is gitignored)' % pdf)
@@ -221,7 +220,14 @@ missing = sorted(i for i in known
 if missing:
     print('  !! no card art matched for: ' + ', '.join(missing))
 CARDS_EOF
-  for deck in general-items cursed-items objective-items events; do
+  # The Wound deck's back (face-down Wounds on the player boards) is a loose PNG, scaled to
+  # the same 800px height as the rendered faces.
+  if [ -f game-assets/cards/wound-card-back.png ]; then
+    mkdir -p "$STREAMING/cards/wounds"
+    cp game-assets/cards/wound-card-back.png "$STREAMING/cards/wounds/back.png"
+    sips --resampleHeight 800 "$STREAMING/cards/wounds/back.png" >/dev/null 2>&1 || true
+  fi
+  for deck in general-items cursed-items objective-items events wounds; do
     [ -d "$STREAMING/cards/$deck" ] && \
       python3 tools/make_mips.py "$STREAMING/cards/$deck" || true
   done
@@ -231,10 +237,12 @@ fi
 
 echo "== client config =="
 # Baked into builds but never committed (StreamingAssets is gitignored).
-# Set SD_SERVER_URL when building for friends:  SD_SERVER_URL=wss://... tools/sync_unity.sh
+# The public Railway deployment is the default; set SD_SERVER_URL to point a build elsewhere
+# (SD_SERVER_URL=ws://localhost:5226/ws tools/sync_unity.sh for a local-only client).
+RAILWAY_URL="wss://the-stifling-dark-production.up.railway.app/ws"
 if [ ! -f "$STREAMING/client-config.json" ] || [ -n "${SD_SERVER_URL:-}" ]; then
-  echo "{ \"serverUrl\": \"${SD_SERVER_URL:-ws://localhost:5226/ws}\" }" > "$STREAMING/client-config.json"
-  echo "  wrote client-config.json (${SD_SERVER_URL:-ws://localhost:5226/ws})"
+  echo "{ \"serverUrl\": \"${SD_SERVER_URL:-$RAILWAY_URL}\" }" > "$STREAMING/client-config.json"
+  echo "  wrote client-config.json (${SD_SERVER_URL:-$RAILWAY_URL})"
 fi
 
 echo "done:"

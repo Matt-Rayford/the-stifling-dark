@@ -112,7 +112,7 @@ namespace StiflingDark.Unity
         private static List<string> ChooseRoster(GameDatabase db, DeterministicRng rng,
             IReadOnlyList<string> picks)
         {
-            var pool = db.Investigators.Where(i => i.Set == "base").Select(i => i.Id)
+            var pool = db.Investigators.Select(i => i.Id)
                 .OrderBy(id => id, StringComparer.Ordinal).ToList();
             rng.Shuffle(pool);
             var roster = new List<string>();
@@ -334,10 +334,10 @@ namespace StiflingDark.Unity
                         .Select(s => s.Seat).ToList();
 
                 case GamePhase.InvestigatorTurns:
-                    if (view.ActiveInvestigator != null)
+                    if (view.OpenTurnIds.Any())
                     {
                         return Room.Seats
-                            .Where(s => s.InvestigatorId == view.ActiveInvestigator)
+                            .Where(s => view.TurnOpenFor(s.InvestigatorId))
                             .Select(s => s.Seat).ToList();
                     }
                     var pending = view.Investigators

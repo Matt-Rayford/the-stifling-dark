@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using StiflingDark.Engine.Core;
+using StiflingDark.Engine.Data;
 using StiflingDark.Protocol;
 
 namespace StiflingDark.Unity
@@ -165,7 +166,8 @@ namespace StiflingDark.Unity
         /// <summary>
         /// Minor and Major Abilities, Spirit abilities, and a pending Painkillers draw —
         /// everything the retired ABILITIES panel section used to offer, now beside the
-        /// figure with the other actions. The Abilities' own choices still go through the
+        /// figure with the other actions. Minors are per Investigator (see
+        /// <see cref="RenderMinorAbilityRow"/>); a Major's own choices still go through the
         /// argument sheet; a Spirit's abilities are named there too.
         /// </summary>
         private void RenderAbilityRows(PlayerView view, PlayerView.InvestigatorPanel me, bool active,
@@ -174,15 +176,11 @@ namespace StiflingDark.Unity
             var def = _describe.InvestigatorOrNull(me.DefId);
             if (me.SpiritId == null && def != null)
             {
-                // The data carries no ability names (only their text), so the rows say what
-                // kind of ability they are and the tooltip carries the card text.
-                string minor = string.IsNullOrEmpty(def.MinorAbility.Name) ? "Minor ability" : def.MinorAbility.Name;
+                RenderMinorAbilityRow(view, me, active, def, row);
+                // The data carries no ability names (only their text), so the row says what
+                // kind of ability it is and the tooltip carries the card text.
                 string major = string.IsNullOrEmpty(def.MajorAbility.Name) ? "Major ability" : def.MajorAbility.Name;
-                row(minor, () =>
-                    AskArgs(minor, def.MinorAbility.Text,
-                        args => Send(new UseMinorAbilityCommand { Args = args })),
-                    active, def.MinorAbility.Text);
-                row(major + "  (" + me.MajorAbilityTokens + " token)", () =>
+                row(major, () =>
                     AskArgs(major, def.MajorAbility.Text,
                         args => Send(new UseMajorAbilityCommand { Args = args })),
                     active && me.MajorAbilityTokens > 0,
@@ -206,6 +204,84 @@ namespace StiflingDark.Unity
                 row("Resolve Painkillers", () => ResolvePainkillers(me, painkillers), active,
                     "Two Wound cards were drawn: swap one for a face-up Wound, or keep none.");
             }
+        }
+
+        /// <summary>
+        /// The Minor Ability row, only for the Investigators whose Minor is something you
+        /// choose to do (designer list 2026-10-21). The passive ones — Asher's ignored Wound
+        /// slot, Dylan's Dark discount, Ibraheem's Footprint floor, Lucy's Sprint die, Marci's
+        /// Stamina track — are applied by the engine and get no button; Mitchell's Sweep is the
+        /// second half of placing his Flashlight (its own row above); Aira's free Involved
+        /// Action is armed on her behalf (see <see cref="SendArmingAiraIfNeeded"/>).
+        /// </summary>
+        private void RenderMinorAbilityRow(PlayerView view, PlayerView.InvestigatorPanel me, bool active,
+            InvestigatorDef def, Action<string, Action, bool, string> row)
+        {
+            string text = def.MinorAbility.Text;
+            switch (me.DefId)
+            {
+                case "brielle":
+                    int cansOnBoard = view.BoardTokens.Keys.Count(id =>
+                        id.StartsWith("can:" + me.DefId + ":", StringComparison.Ordinal) ||
+                        id.StartsWith("noise:" + me.DefId + ":", StringComparison.Ordinal));
+                    int cansLeft = Game.BrielleCanTokens - cansOnBoard;
+                    row("Place cans (" + cansLeft + ")", () =>
+                        PickSpaces(1, "Click a space within " + Game.BrielleCanRange + " of Brielle for a Can",
+                            picked => Send(new UseMinorAbilityCommand { Args = picked })),
+                        active && cansLeft > 0,
+                        cansLeft > 0 ? text : "All " + Game.BrielleCanTokens + " Cans are on the board.");
+                    break;
+                case "kya":
+                    bool swapped = view.RoundModifiers.ContainsKey(Game.KyaTransferUsedPrefix + me.DefId);
+                    row("Transference", () => _prompt.Show("kya-transference", "Transference", text,
+                            new List<PromptOption>
+                            {
+                                new PromptOption("Lose 1 Stamina, gain 1 Charge", () =>
+                                    Send(new UseMinorAbilityCommand { Args = new List<string> { Game.KyaGainCharge } })),
+                                new PromptOption("Lose 1 Charge, gain 1 Stamina", () =>
+                                    Send(new UseMinorAbilityCommand { Args = new List<string> { Game.KyaGainStamina } })),
+                            }, () => Render()),
+                        active && !swapped,
+                        swapped ? "Already swapped this round." : text + "\n\nNo Rest or Charge at the end of this turn.");
+                    break;
+                case "mada":
+                    if (view.Adversary.Counters.ContainsKey(Game.CoinTokenPrefix + me.DefId))
+                    {
+                        // A reaction to an Adversary Ability, so it is not tied to his own turn.
+                        row("Use Lucky Coin", () =>
+                            AskArgs("Use Lucky Coin", text, args => Send(new UseMinorAbilityCommand { Args = args })),
+                            true, text);
+                    }
+                    break;
+                case "vincent":
+                    bool onPoi = _board.SpaceOrNull(me.Space)?.Kind == SpaceKind.PointOfInterest;
+                    row("Scout", () => Send(new UseMinorAbilityCommand()), active && onPoi,
+                        onPoi ? text : "Scout only works from a Point of Interest space.");
+                    break;
+                case "winston":
+                    row("Night Vision (ends turn)", BeginNightVisionAim,
+                        active && me.FinalAction == FinalActionKind.None && me.Charge > 0,
+                        me.Charge > 0 ? text : "Night Vision may not be used with 0 Charge.");
+                    break;
+            }
+        }
+
+        /// <summary>
+        /// Aira's Minor lets one Involved Action resolve without ending her turn, and arming it
+        /// never costs her anything (designer ruling: it is passive). So every Involved Action
+        /// she sends is preceded by the arm; for anyone else the command goes straight through.
+        /// </summary>
+        private void SendArmingAiraIfNeeded(GameCommand command)
+        {
+            var me = Me;
+            var view = View;
+            if (me != null && view != null && me.DefId == "aira" && MyTurnActive &&
+                me.FinalAction == FinalActionKind.None &&
+                !view.RoundModifiers.ContainsKey(Game.AiraInvolvedArmedPrefix + me.DefId))
+            {
+                Send(new UseMinorAbilityCommand());
+            }
+            Send(command);
         }
 
         /// <summary>Painkillers drew two Wound cards: swap one for a face-up Wound, or keep
@@ -268,6 +344,7 @@ namespace StiflingDark.Unity
             bool Carrying(string name) =>
                 objective.TokenCarriers.TryGetValue(name, out var who) && who == me.DefId;
             void Add(string label, Action run) => row(label, run, active, null);
+            void SendInvolved(GameCommand command) => SendArmingAiraIfNeeded(command);
 
             string card = objective.SelectedEscapeCard ?? "";
             EscapeFlow.TryGetValue(card, out string flow);
@@ -275,24 +352,24 @@ namespace StiflingDark.Unity
             if (OnToken("saw") && Carrying("lockbox"))
             {
                 Add("Open the Lockbox",
-                    () => Send(new OpenLockboxCommand { PushYourLuck = false }));
+                    () => SendInvolved(new OpenLockboxCommand { PushYourLuck = false }));
                 Add("Open the Lockbox — push your luck",
-                    () => Send(new OpenLockboxCommand { PushYourLuck = true }));
+                    () => SendInvolved(new OpenLockboxCommand { PushYourLuck = true }));
             }
             if (OnToken("locked-escape"))
             {
                 switch (flow)
                 {
                     case "gate":
-                        Add("Power the Gate", () => Send(new PowerTheGateCommand()));
-                        Add("Escape through the Gate", () => Send(new EscapeThroughGateCommand()));
+                        Add("Power the Gate", () => SendInvolved(new PowerTheGateCommand()));
+                        Add("Escape through the Gate", () => SendInvolved(new EscapeThroughGateCommand()));
                         break;
                     case "tunnel":
-                        Add("Open the Service Tunnel", () => Send(new OpenServiceTunnelCommand()));
-                        Add("Escape through the Tunnel", () => Send(new EscapeThroughTunnelCommand()));
+                        Add("Open the Service Tunnel", () => SendInvolved(new OpenServiceTunnelCommand()));
+                        Add("Escape through the Tunnel", () => SendInvolved(new EscapeThroughTunnelCommand()));
                         break;
                     case "flare":
-                        Add("Fire the Flare Gun", () => Send(new FireFlareGunCommand()));
+                        Add("Fire the Flare Gun", () => SendInvolved(new FireFlareGunCommand()));
                         break;
                 }
             }
@@ -301,48 +378,48 @@ namespace StiflingDark.Unity
                 if (OnToken("truck"))
                 {
                     Add("Start the Truck…", () => PickSpaces(1, "Click the Truck's escape space",
-                        picked => Send(new StartTruckCommand { EscapeSpace = picked[0] })));
+                        picked => SendInvolved(new StartTruckCommand { EscapeSpace = picked[0] })));
                     foreach (var carried in objective.TokenCarriers
                         .Where(c => c.Value == me.DefId && !LandmarkTokens.Contains(c.Key)))
                     {
                         string part = carried.Key;
                         Add("Install " + part,
-                            () => Send(new InstallPartCommand { PartToken = part }));
+                            () => SendInvolved(new InstallPartCommand { PartToken = part }));
                     }
                 }
                 if (OnToken("escape"))
                 {
-                    Add("Escape at the Truck exit", () => Send(new EscapeAtTruckExitCommand()));
+                    Add("Escape at the Truck exit", () => SendInvolved(new EscapeAtTruckExitCommand()));
                 }
             }
             if (flow == "flare" && (objective.EscapeOpen || objective.EscapeReadyRound != null))
             {
-                Add("Escape by Helicopter", () => Send(new EscapeByHelicopterCommand()));
+                Add("Escape by Helicopter", () => SendInvolved(new EscapeByHelicopterCommand()));
             }
             switch (card)
             {
                 case "the-grave":
-                    Add("Dig up the Grave", () => Send(new DigUpGraveCommand()));
+                    Add("Dig up the Grave", () => SendInvolved(new DigUpGraveCommand()));
                     Add("Use the Hook…", () => PickSpaces(1, "Click the space the Hook targets",
-                        picked => Send(new UseTheHookCommand { ChosenSpace = picked[0] })));
+                        picked => SendInvolved(new UseTheHookCommand { ChosenSpace = picked[0] })));
                     if (me.Items != null && me.Items.Contains("frayed-ropes"))
                     {
-                        Add("Use the Frayed Ropes", () => Send(new UseFrayedRopesCommand()));
+                        Add("Use the Frayed Ropes", () => SendInvolved(new UseFrayedRopesCommand()));
                     }
                     break;
                 case "the-altar":
                     if (Carrying("ritual-knife"))
                     {
                         Add("Use the Ritual Knife",
-                            () => Send(new UseRitualKnifeCommand { FlipFaceDownWound = false }));
+                            () => SendInvolved(new UseRitualKnifeCommand { FlipFaceDownWound = false }));
                         Add("Use the Ritual Knife — flip a face-down Wound",
-                            () => Send(new UseRitualKnifeCommand { FlipFaceDownWound = true }));
+                            () => SendInvolved(new UseRitualKnifeCommand { FlipFaceDownWound = true }));
                     }
-                    Add("Cut the Rope Circle", () => Send(new CutRopeCircleCommand()));
+                    Add("Cut the Rope Circle", () => SendInvolved(new CutRopeCircleCommand()));
                     break;
                 case "the-eggs":
-                    Add("Destroy the Egg Sac", () => Send(new DestroyEggSacCommand()));
-                    Add("Banish the Horror", () => Send(new BanishTheHorrorCommand()));
+                    Add("Destroy the Egg Sac", () => SendInvolved(new DestroyEggSacCommand()));
+                    Add("Banish the Horror", () => SendInvolved(new BanishTheHorrorCommand()));
                     break;
             }
 
@@ -355,7 +432,7 @@ namespace StiflingDark.Unity
                 {
                     if (name == "ritual-knife" || name == "rope-circle")
                     {
-                        Send(new PickUpBanishTokenCommand { TokenName = name });
+                        SendArmingAiraIfNeeded(new PickUpBanishTokenCommand { TokenName = name });
                     }
                     else if (name.Contains("part") || name.Contains("ride"))
                     {
@@ -371,7 +448,7 @@ namespace StiflingDark.Unity
             {
                 string name = carried.Key;
                 Add("Drop " + name,
-                    () => Send(new DropObjectiveTokenCommand { TokenName = name }));
+                    () => SendInvolved(new DropObjectiveTokenCommand { TokenName = name }));
             }
         }
 
@@ -466,7 +543,7 @@ namespace StiflingDark.Unity
         {
             if (remaining.Count == 0)
             {
-                Send(new TurnInEvidenceCommand { TurnIns = chosen });
+                SendArmingAiraIfNeeded(new TurnInEvidenceCommand { TurnIns = chosen });
                 return;
             }
             string zone = remaining[0];

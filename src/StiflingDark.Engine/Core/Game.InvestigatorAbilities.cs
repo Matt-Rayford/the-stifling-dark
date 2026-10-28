@@ -7,7 +7,8 @@ namespace StiflingDark.Engine.Core
 {
     /// <summary>
     /// The 10 base Investigators' printed Minor and Major Abilities
-    /// (game-data/investigators.json). Implements the Abilities* sub-hooks declared in
+    /// (game-data/investigators.json; the two promo Investigators live in
+    /// Game.PromoAbilities.cs). Implements the Abilities* sub-hooks declared in
     /// Game.EffectDispatch.cs plus the two public entry points below.
     ///
     /// The API is deliberately two methods, mirroring <see cref="UseSpiritAbility"/>:
@@ -245,8 +246,8 @@ namespace StiflingDark.Engine.Core
                 throw new InvalidOperationException("Blood Chalice: name the Investigator whose Major Ability you are using.");
             }
             string ownerId = args[0];
-            var def = Db.Investigators.FirstOrDefault(i => i.Id == ownerId && i.Set == "base")
-                ?? throw new InvalidOperationException($"'{ownerId}' is not one of the 10 base Investigators.");
+            var def = Db.Investigators.FirstOrDefault(i => i.Id == ownerId)
+                ?? throw new InvalidOperationException($"'{ownerId}' is not an Investigator.");
             if (ownerId == actor.DefId)
             {
                 throw new InvalidOperationException("Blood Chalice uses *another* Investigator's Major Ability.");
@@ -269,9 +270,9 @@ namespace StiflingDark.Engine.Core
                 throw new InvalidOperationException($"{source}: name the Investigator whose Minor Ability you are using.");
             }
             string ownerId = args[0];
-            if (Db.Investigators.All(i => i.Id != ownerId || i.Set != "base"))
+            if (Db.Investigators.All(i => i.Id != ownerId))
             {
-                throw new InvalidOperationException($"'{ownerId}' is not one of the 10 base Investigators.");
+                throw new InvalidOperationException($"'{ownerId}' is not an Investigator.");
             }
             if (State.Investigators.Any(i => i.DefId == ownerId))
             {
@@ -312,9 +313,9 @@ namespace StiflingDark.Engine.Core
             {
                 throw new InvalidOperationException($"{inv.DefId} is no longer on the board.");
             }
-            if (State.ActiveInvestigator == inv.DefId)
+            if (State.OpenTurns.Contains(inv.DefId))
             {
-                RequireNoPendingWindow();
+                RequireNoPendingWindow(inv);
             }
             RequireActionAllowed(inv, ActionUseAbility);
             return new AbilityUse
@@ -336,6 +337,8 @@ namespace StiflingDark.Engine.Core
                 case "mada": MadaFlipCoin(use); break;
                 case "mitchell": MitchellSweep(use); break;
                 case "vincent": VincentScout(use); break;
+                case "kya": KyaTransfer(use); break;
+                case "winston": WinstonNightVision(use); break;
 
                 case "asher":
                     throw new InvalidOperationException(
@@ -379,6 +382,8 @@ namespace StiflingDark.Engine.Core
                 case "marci": MarciMoveInvestigators(use); break;
                 case "mitchell": MitchellFindAdversary(use); break;
                 case "vincent": VincentDrawCursedItem(use); break;
+                case "kya": KyaInvertLight(use); break;
+                case "winston": WinstonPlaceCampfire(use); break;
                 default:
                     throw new InvalidOperationException($"'{use.OwnerId}' has no implemented Major Ability.");
             }
@@ -1009,7 +1014,7 @@ namespace StiflingDark.Engine.Core
 
         private void RequireOwnTurn(InvestigatorState inv, string why)
         {
-            if (State.Phase != GamePhase.InvestigatorTurns || State.ActiveInvestigator != inv.DefId)
+            if (State.Phase != GamePhase.InvestigatorTurns || !State.OpenTurns.Contains(inv.DefId))
             {
                 throw new InvalidOperationException($"{why}; it is not {inv.DefId}'s turn.");
             }
@@ -1236,6 +1241,7 @@ namespace StiflingDark.Engine.Core
 
         partial void AbilitiesOnTurnEnd(InvestigatorState inv)
         {
+            CampfireOnTurnEnd(inv);
             // Asher's Major lasts "during this turn".
             ClearRoundModifier(IgnoreAllWoundsPrefix + inv.DefId);
             ClearRoundModifier(ForcedMajorAbilityPrefix + inv.DefId);

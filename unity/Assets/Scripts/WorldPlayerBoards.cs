@@ -8,9 +8,8 @@ namespace StiflingDark.Unity
 {
     /// <summary>
     /// Investigator boards laid out in the map's own world space, so they pan and zoom with
-    /// it: one row below the map, this seat's board centred under it and every other
-    /// Investigator's continuing rightward from the map's right edge. Markers ride the
-    /// printed Stamina and Charge
+    /// it: this seat's board centred below the map, every other Investigator's stacked in
+    /// one column down the map's right edge. Markers ride the printed Stamina and Charge
     /// tracks, the Major Ability token sits on its printed gear while unspent, and Wound
     /// chips fill the printed slots (hover a chip for what the viewer may know of the card).
     ///
@@ -49,6 +48,14 @@ namespace StiflingDark.Unity
         private const float WoundBandTop = 0.918f;
         private const float WoundBandBottom = 0.996f;
 
+        // ---- Wound cards sit IN the printed slots and hang below the board, as on the table
+        /// <summary>Card width as a share of the slot's; the rest is breathing room.</summary>
+        private const float WoundCardSlotShare = 0.92f;
+        /// <summary>Card aspect (width / height) of the rendered deck (536x800).</summary>
+        private const float WoundCardAspect = 536f / 800f;
+        /// <summary>Wounds past the fourth stack down the last slot by this much of a card.</summary>
+        private const float WoundStackStep = 0.16f;
+
         // Above the map sprite and the space graph, below figures; no overlap either way.
         private const int BoardOrder = 6;
         private const int MarkerOrder = 7;
@@ -85,25 +92,30 @@ namespace StiflingDark.Unity
                 return;
             }
 
-            // One shared row of same-sized boards below the map: this seat's centred under
-            // it, everyone else's continuing rightward from the map's right edge.
+            // Same-sized boards: this seat's centred under the map, everyone else's stacked
+            // down a single column off the map's right edge, the column's foot level with
+            // the map's bottom.
             float gap = GapShare * mapWidth;
             float width = BoardWidthShare * mapWidth;
-            float top = -(mapHeight + gap);
             float bottom = -mapHeight;
             var mine = view.Investigators.FirstOrDefault(i => i.DefId == myInvestigatorId);
             if (mine != null)
             {
-                bottom = Mathf.Min(bottom, top - DrawBoard(mine, (mapWidth - width) / 2f, top, width));
+                float myTop = -(mapHeight + gap);
+                bottom = Mathf.Min(bottom, myTop - DrawBoard(mine, (mapWidth - width) / 2f, myTop, width));
             }
 
-            float left = mapWidth;
-            foreach (var inv in view.Investigators.Where(i => i.DefId != myInvestigatorId))
+            var others = view.Investigators.Where(i => i.DefId != myInvestigatorId).ToList();
+            float columnGap = gap * 0.6f;
+            float columnHeight = others.Sum(inv => BoardHeight(inv, width)) +
+                                 columnGap * Mathf.Max(0, others.Count - 1);
+            float columnLeft = mapWidth + gap;
+            float columnTop = -mapHeight + columnHeight;
+            foreach (var inv in others)
             {
-                bottom = Mathf.Min(bottom, top - DrawBoard(inv, left, top, width));
-                left += width + gap * 0.6f;
+                columnTop -= DrawBoard(inv, columnLeft, columnTop, width) + columnGap;
             }
-            RightExtent = Mathf.Max(mapWidth, left - gap * 0.6f);
+            RightExtent = others.Count > 0 ? columnLeft + width : mapWidth;
             BottomExtent = bottom;
         }
 
@@ -122,20 +134,42 @@ namespace StiflingDark.Unity
 
         // ------------------------------------------------------------- one board
 
-        /// <summary>Draw one Investigator's board with its top-left at (left, top); returns
-        /// the board's world height so the caller can stack the next one.</summary>
-        private float DrawBoard(PlayerView.InvestigatorPanel inv, float left, float top, float width)
+        /// <summary>World height of an Investigator's board at this width — the art's own
+        /// aspect, or the fallback card's when no art was synced — plus the room its Wound
+        /// cards hang below it, reserved whether or not any are dealt so nothing shifts
+        /// when one arrives.</summary>
+        private float BoardHeight(PlayerView.InvestigatorPanel inv, float width)
         {
             var sprite = _art.PlayerBoardFront(inv.DefId);
             float aspect = sprite != null && sprite.bounds.size.y > 0f
                 ? sprite.bounds.size.x / sprite.bounds.size.y
                 : FallbackAspect;
-            float height = width / aspect;
+            float art = width / aspect;
+            float hang = WoundBandTop * art + WoundCardHeight(width) - art;
+            return art + Mathf.Max(0f, hang);
+        }
+
+        private static float WoundSlotWidth(float boardWidth) =>
+            (WoundBandRight - WoundBandLeft - WoundBandGap * (WoundSlots - 1)) / WoundSlots * boardWidth;
+
+        private static float WoundCardHeight(float boardWidth) =>
+            WoundSlotWidth(boardWidth) * WoundCardSlotShare / WoundCardAspect;
+
+        /// <summary>Draw one Investigator's board with its top-left at (left, top); returns
+        /// the board's world height so the caller can stack the next one.</summary>
+        private float DrawBoard(PlayerView.InvestigatorPanel inv, float left, float top, float width)
+        {
+            var sprite = _art.PlayerBoardFront(inv.DefId);
+            float total = BoardHeight(inv, width);
+            float height = sprite != null && sprite.bounds.size.y > 0f
+                ? width / (sprite.bounds.size.x / sprite.bounds.size.y)
+                : width / FallbackAspect;
 
             if (sprite == null)
             {
                 DrawFallback(inv, left, top, width, height);
-                return height;
+                DrawWounds(inv, left, top, width, height);
+                return total;
             }
 
             var board = NewSprite("Board-" + inv.DefId, sprite, Color.white, BoardOrder);
@@ -156,7 +190,7 @@ namespace StiflingDark.Unity
                     MajorAbilityX, MajorAbilityY, MajorAbilityDiameter * width);
             }
             DrawWounds(inv, left, top, width, height);
-            return height;
+            return total;
         }
 
         /// <summary>The physical marker token (tokens/investigator/player-board); when that
@@ -184,33 +218,24 @@ namespace StiflingDark.Unity
         // ----------------------------------------------------------------- wounds
 
         /// <summary>
-        /// One chip per Wound across the printed slots: face-up Wounds name their card (hover
-        /// for its text), face-down ones stay anonymous. Anything past the fourth slot — the
-        /// unslotted Wounds included — collapses into the last slot as "+N more".
+        /// One card per Wound in the printed slots, hanging below the board the way the
+        /// physical cards do: a face-up Wound shows its face (hover for the text), a face-down
+        /// one shows the deck's back. Wounds past the fourth slot — the unslotted ones included
+        /// — stack down the last slot.
         /// </summary>
         private void DrawWounds(PlayerView.InvestigatorPanel inv, float left, float top,
             float width, float height)
         {
             var wounds = inv.Wounds.Concat(inv.NonSlotWounds).ToList();
-            if (wounds.Count == 0)
+            for (int i = 0; i < wounds.Count; i++)
             {
-                return;
-            }
-            bool overflows = wounds.Count > WoundSlots;
-            int shown = overflows ? WoundSlots - 1 : wounds.Count;
-            for (int slot = 0; slot < shown; slot++)
-            {
-                var wound = wounds[slot];
+                var wound = wounds[i];
+                int slot = Mathf.Min(i, WoundSlots - 1);
+                float drop = Mathf.Max(0, i - (WoundSlots - 1)) * WoundStackStep * WoundCardHeight(width);
                 bool named = IsNamed(wound);
-                WoundChip(slot, left, top, width, height, WoundLabel(wound),
-                    named ? new Color(0.90f, 0.45f, 0.42f) : new Color(0.62f, 0.63f, 0.66f),
-                    named ? _describe.CardText(wound.CardId) : null);
-            }
-            if (overflows)
-            {
-                WoundChip(WoundSlots - 1, left, top, width, height,
-                    "+" + (wounds.Count - shown) + " more", new Color(0.90f, 0.45f, 0.42f),
-                    string.Join("\n", wounds.Skip(shown).Select(WoundLabel)));
+                var face = named ? _art.WoundCard(wound.CardId) : _art.WoundCardBack();
+                WoundCard(slot, left, top, width, height, drop, face, WoundLabel(wound),
+                    named ? _describe.CardText(wound.CardId) : null, i);
             }
         }
 
@@ -221,39 +246,48 @@ namespace StiflingDark.Unity
         private string WoundLabel(PlayerView.WoundSlot wound) =>
             IsNamed(wound) ? _describe.Card(wound.CardId) : wound.FaceUp ? "Wound" : "Face-down";
 
-        private void WoundChip(int slot, float left, float top, float width, float height,
-            string label, Color color, string note)
+        private void WoundCard(int slot, float left, float top, float width, float height,
+            float drop, Sprite face, string label, string note, int order)
         {
-            float slotWidth =
-                (WoundBandRight - WoundBandLeft - WoundBandGap * (WoundSlots - 1)) / WoundSlots;
-            float chipLeft = left + (WoundBandLeft + slot * (slotWidth + WoundBandGap)) * width;
-            float chipWidth = slotWidth * width;
-            float chipTop = top - WoundBandTop * height;
-            float chipHeight = (WoundBandBottom - WoundBandTop) * height;
+            float slotWidth = WoundSlotWidth(width);
+            float cardWidth = slotWidth * WoundCardSlotShare;
+            float cardHeight = WoundCardHeight(width);
+            float cardLeft = left + (WoundBandLeft + slot * (slotWidth / width + WoundBandGap)) * width +
+                             (slotWidth - cardWidth) / 2f;
+            float cardTop = top - WoundBandTop * height - drop;
+            var centre = new Vector3(cardLeft + cardWidth / 2f, cardTop - cardHeight / 2f, 0f);
 
-            var chip = NewSprite("Wound" + slot, UiSprites.RoundedRect,
-                new Color(0.03f, 0.03f, 0.04f, 0.88f), MarkerOrder);
-            var renderer = chip.GetComponent<SpriteRenderer>();
-            renderer.drawMode = SpriteDrawMode.Sliced;
-            renderer.size = new Vector2(chipWidth, chipHeight);
-            chip.transform.position =
-                new Vector3(chipLeft + chipWidth / 2f, chipTop - chipHeight / 2f, 0f);
-
-            var text = new GameObject("Label", typeof(TextMeshPro));
-            text.transform.SetParent(_root, false);
-            var tmp = text.GetComponent<TextMeshPro>();
-            tmp.font = UiKit.Font;
-            tmp.text = label;
-            tmp.fontSize = chipHeight * 0.5f;
-            tmp.alignment = TextAlignmentOptions.Center;
-            tmp.color = color;
-            tmp.GetComponent<MeshRenderer>().sortingOrder = TextOrder;
-            text.transform.position = chip.transform.position;
+            if (face != null)
+            {
+                var card = NewSprite("Wound" + slot, face, Color.white, MarkerOrder + order);
+                card.transform.position = centre;
+                float scale = cardWidth / Mathf.Max(0.0001f, face.bounds.size.x);
+                card.transform.localScale = new Vector3(scale, scale, 1f);
+            }
+            else
+            {
+                // No synced card art: a dark card with the name on it.
+                var card = NewSprite("Wound" + slot, UiSprites.RoundedRect,
+                    new Color(0.03f, 0.03f, 0.04f, 0.92f), MarkerOrder + order);
+                var renderer = card.GetComponent<SpriteRenderer>();
+                renderer.drawMode = SpriteDrawMode.Sliced;
+                renderer.size = new Vector2(cardWidth, cardHeight);
+                card.transform.position = centre;
+                var text = new GameObject("Label", typeof(TextMeshPro));
+                text.transform.SetParent(_root, false);
+                var tmp = text.GetComponent<TextMeshPro>();
+                tmp.font = UiKit.Font;
+                tmp.text = label;
+                tmp.fontSize = cardWidth * 0.14f;
+                tmp.alignment = TextAlignmentOptions.Center;
+                tmp.color = new Color(0.90f, 0.45f, 0.42f);
+                tmp.GetComponent<MeshRenderer>().sortingOrder = TextOrder + order;
+                text.transform.position = centre;
+            }
 
             if (!string.IsNullOrEmpty(note))
             {
-                _hoverNotes.Add((new Rect(chipLeft, chipTop - chipHeight, chipWidth, chipHeight),
-                    note));
+                _hoverNotes.Add((new Rect(cardLeft, cardTop - cardHeight, cardWidth, cardHeight), note));
             }
         }
 

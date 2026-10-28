@@ -18,10 +18,11 @@ public sealed partial class InvestigatorTeam
     /// last, inside the cover everybody else just laid down. Ties break toward the healthiest,
     /// who are the ones that should be walking into the unknown.
     /// </summary>
-    public string? NextToAct()
+    public string? NextToAct(Func<InvestigatorState, bool>? eligible = null)
     {
         var pending = S.Investigators
             .Where(i => !i.TurnTakenThisRound && !i.Escaped && (!i.Dead || i.SpiritId != null))
+            .Where(i => eligible == null || eligible(i))
             .ToList();
         if (pending.Count == 0)
         {

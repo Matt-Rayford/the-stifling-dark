@@ -1,4 +1,5 @@
 using StiflingDark.Engine.Core;
+using StiflingDark.Engine.Data;
 
 namespace StiflingDark.Engine.Tests
 {
@@ -126,6 +127,28 @@ namespace StiflingDark.Engine.Tests
         }
 
         // ---------- Stalk range ----------
+
+        [Fact]
+        public void Stalk_reaches_everyone_in_sight_including_the_one_the_centre_line_misses()
+        {
+            var game = NewButcherGame("rend", new List<string> { "disturbed-presence", "escalating-terror" });
+            FinishInvestigatorTurns(game);
+            var adv = game.State.Adversary;
+            // A nearby pair the strict centre line calls blocked, which the printed rule does not.
+            var (from, seen) = AdversaryLineOfSightTests.PairsTwoApart(game).First(p =>
+                !game.CentreLineOfSightClear(p.a, p.b) && game.AdversaryHasLineOfSight(p.a, p.b));
+            adv.Space = from;
+            var neighbour = Inv(game, "aira");
+            neighbour.Space = seen;
+            var other = Inv(game, "lucy-belle");
+            other.Space = game.Graph.DistancesFrom(adv.Space, 8, game.State.Overlay).Keys
+                .First(id => id != from && id != seen && game.AdversaryHasLineOfSight(adv.Space, id));
+
+            game.ButcherStalk(new List<string> { "aira", "lucy-belle" });
+
+            Assert.True(adv.SpineChill.ContainsKey("aira"));
+            Assert.True(adv.SpineChill.ContainsKey("lucy-belle"));
+        }
 
         [Fact]
         public void Stalk_requires_the_target_within_8_spaces()
